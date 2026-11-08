@@ -31,6 +31,16 @@ App de tareas para iPhone y ordenador: eventos, entrenos, casa, estudio… Se in
 
 Abre la dirección en **Safari** → botón Compartir → **Añadir a pantalla de inicio**. Ábrela siempre desde el icono: así sale a pantalla completa, sin barras de navegador ni zoom.
 
+## Funciones
+
+- **Escritura rápida**: “mañana a las 8 correr #entreno”, “los lunes y jueves gym”, “examen el 3 de diciembre !” (la `!` es prioridad alta). Lo entiende `parse.js`.
+- **Deslizar**: a la derecha completa, a la izquierda borra (con Deshacer).
+- **Repetir**: cada día, días concretos (L M X J V S D), cada semana o cada mes.
+- **Pasos** dentro de cada tarea y **buscador** (lupa arriba).
+- **Categorías** editables en ⋯ → Categorías (nombre, color, orden, borrar).
+- **Cuenta**: nombre, correo y contraseña en ⋯ → Cuenta.
+- **Siri**: ⋯ → Siri y Atajos genera una clave personal y explica cómo crear el atajo “Añade tarea”. La clave solo permite añadir tareas, no leerlas.
+
 ## Pasar tus tareas antiguas
 
 En el ordenador, abre la app, crea tu cuenta y ve a **⋯ → Importar copia** → elige `mis-tareas-importar.json`.

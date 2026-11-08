@@ -22,9 +22,11 @@
   /* Layout: app de una columna. Cabecera arriba, lista con scroll propio, barra de pestañas abajo y botón + flotante. */
   :root {
     --bg: #f3f4f1; --surface: #ffffff; --sunken: #e9ebe6; --text: #1b1e1c; --muted: #66706a;
-    --border: #dde1db; --accent: #2747c9; --accent-ink: #ffffff; --accent-soft: #e4e9fb; --danger: #c92a4b;
+    --border: #dde1db; --accent: #2747c9; --accent-ink: #ffffff; --accent-soft: #e4e9fb; --danger: #c92a4b; --ok: #2b8a3e;
     --bar: rgb(243 244 241 / .86); --scrim: rgb(0 0 0 / .32);
-    --evento: #7048e8; --entreno: #d9480f; --casa: #2b8a3e; --estudio: #1971c2; --trabajo: #5c6670; --personal: #c2255c;
+    /* Paleta de categorías */
+    --k-violeta: #7048e8; --k-naranja: #d9480f; --k-verde: #2b8a3e; --k-azul: #1971c2; --k-gris: #5c6670;
+    --k-rosa: #c2255c; --k-rojo: #e03131; --k-amarillo: #e8a400; --k-turquesa: #0c8599; --k-marron: #8d5a3b;
     --f-display: "Bricolage Grotesque", -apple-system, "Segoe UI", system-ui, sans-serif;
     --f-body: "Atkinson Hyperlegible", -apple-system, system-ui, "Segoe UI", sans-serif;
     --safe-t: env(safe-area-inset-top, 0px); --safe-b: env(safe-area-inset-bottom, 0px);
@@ -35,9 +37,10 @@
   @media (prefers-color-scheme: dark) {
     :root {
       --bg: #121413; --surface: #1c1f1d; --sunken: #262a27; --text: #e9ece9; --muted: #98a29c;
-      --border: #2f3431; --accent: #8ea2ff; --accent-ink: #10143a; --accent-soft: #232b52; --danger: #ff7a93;
+      --border: #2f3431; --accent: #8ea2ff; --accent-ink: #10143a; --accent-soft: #232b52; --danger: #ff7a93; --ok: #63d47a;
       --bar: rgb(18 20 19 / .86); --scrim: rgb(0 0 0 / .55);
-      --evento: #a58bff; --entreno: #ff9a5c; --casa: #63d47a; --estudio: #5cb3ff; --trabajo: #aab4bd; --personal: #ff85b0;
+      --k-violeta: #a58bff; --k-naranja: #ff9a5c; --k-verde: #63d47a; --k-azul: #5cb3ff; --k-gris: #aab4bd;
+      --k-rosa: #ff85b0; --k-rojo: #ff8787; --k-amarillo: #ffd43b; --k-turquesa: #3bc9db; --k-marron: #d4a373;
       color-scheme: dark;
     }
   }
@@ -58,7 +61,7 @@
   [hidden] { display: none !important; }
 
   .app { position: fixed; inset: 0; display: flex; flex-direction: column; }
-  .scroller { flex: 1; overflow-y: auto; overscroll-behavior: contain; -webkit-overflow-scrolling: touch;
+  .scroller { flex: 1; overflow-y: auto; overflow-x: hidden; overscroll-behavior: contain; -webkit-overflow-scrolling: touch;
     padding: calc(var(--safe-t) + 8px) max(16px, var(--safe-r)) calc(var(--tabbar) + var(--safe-b) + 96px) max(16px, var(--safe-l)); }
   .inner { max-width: 680px; margin: 0 auto; }
 
@@ -68,23 +71,40 @@
   .sub .d::first-letter { text-transform: uppercase; }
   .sync { display: inline-flex; align-items: center; gap: 5px; font-size: 12px; }
   .sync i { width: 7px; height: 7px; border-radius: 50%; background: var(--muted); }
-  .sync.ok i { background: var(--casa); }
+  .sync.ok i { background: var(--ok); }
   .sync.warn i { background: var(--danger); }
+  .hbtns { display: flex; gap: 8px; }
   .iconbtn { width: 40px; height: 40px; border-radius: 50%; border: 0; background: var(--sunken); display: grid; place-items: center; flex: none; }
   .iconbtn svg { width: 20px; height: 20px; }
+  .iconbtn[aria-pressed="true"] { background: var(--accent); color: var(--accent-ink); }
+
+  .search { margin: 0 0 10px; position: relative; }
+  .search input { padding-left: 40px; }
+  .search svg { position: absolute; left: 12px; top: 13px; width: 20px; height: 20px; color: var(--muted); pointer-events: none; }
 
   .filters { display: flex; gap: 6px; overflow-x: auto; scrollbar-width: none; margin: 0 calc(-1 * max(16px, var(--safe-l))) 4px; padding: 2px max(16px, var(--safe-l)) 6px; }
   .filters::-webkit-scrollbar { display: none; }
   .chip { font-size: 14px; padding: 7px 12px; border-radius: 999px; border: 1px solid var(--border); background: var(--surface); display: inline-flex; align-items: center; gap: 6px; white-space: nowrap; flex: none; }
   .chip[aria-pressed="true"] { background: var(--accent-soft); border-color: var(--accent); font-weight: 700; }
+  .chip.edit { border-style: dashed; color: var(--muted); }
   .dot { width: 9px; height: 9px; border-radius: 50%; flex: none; }
 
   h2.group { font: 600 15px/1.2 var(--f-display); color: var(--muted); margin: 18px 2px 8px; display: flex; justify-content: space-between; }
   h2.group.late { color: var(--danger); }
   ul.list { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px; }
-  li.task { background: var(--surface); border: 1px solid var(--border); border-radius: 14px; padding: 11px 6px 11px 10px;
-    display: grid; grid-template-columns: auto 1fr auto; gap: 10px; align-items: start; }
-  li.task.done { opacity: .6; }
+
+  /* Tarjeta de tarea con deslizamiento */
+  li.task { position: relative; border-radius: 14px; overflow: hidden; touch-action: pan-y; }
+  .swipe-bg { position: absolute; inset: 0; display: flex; align-items: center; justify-content: space-between; padding: 0 20px; font-weight: 700; color: #fff; }
+  .swipe-bg .l, .swipe-bg .r { display: flex; align-items: center; gap: 8px; opacity: 0; transition: opacity .1s; }
+  .swipe-bg svg { width: 22px; height: 22px; }
+  li.task.sw-right .swipe-bg { background: var(--ok); }
+  li.task.sw-left .swipe-bg { background: var(--danger); }
+  li.task.sw-right .swipe-bg .l, li.task.sw-left .swipe-bg .r { opacity: 1; }
+  .row { position: relative; background: var(--surface); border: 1px solid var(--border); border-radius: 14px; padding: 11px 6px 11px 10px;
+    display: grid; grid-template-columns: auto 1fr auto; gap: 10px; align-items: start; will-change: transform; }
+  li.task.snap .row { transition: transform .2s cubic-bezier(.2,.8,.2,1); }
+  li.task.done .row { opacity: .6; }
   li.task.done .t { text-decoration: line-through; }
   .check { width: 28px; height: 28px; border-radius: 50%; border: 2px solid var(--c); background: transparent; display: grid; place-items: center; padding: 0; }
   .check svg { width: 14px; height: 14px; opacity: 0; }
@@ -96,12 +116,22 @@
   .meta .catn { display: inline-flex; align-items: center; gap: 5px; }
   .meta .late { color: var(--danger); font-weight: 700; }
   .prio { font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: .05em; color: var(--danger); }
+  .subpill { border: 1px solid var(--border); background: var(--sunken); border-radius: 999px; padding: 1px 8px; font-size: 12px; font-weight: 700; color: var(--muted); }
+  .subpill.all { color: var(--ok); }
   .notes { font-size: 14px; color: var(--muted); margin-top: 4px; white-space: pre-wrap; word-break: break-word; }
+  ul.subs { list-style: none; margin: 8px 0 0; padding: 0; display: grid; gap: 2px; }
+  ul.subs button { width: 100%; border: 0; background: transparent; display: flex; gap: 10px; align-items: center; text-align: left; padding: 6px 0; font-size: 15px; }
+  ul.subs .box { width: 20px; height: 20px; border-radius: 6px; border: 2px solid var(--c); flex: none; display: grid; place-items: center; }
+  ul.subs .box svg { width: 12px; height: 12px; opacity: 0; }
+  ul.subs .on .box { background: var(--c); }
+  ul.subs .on .box svg { opacity: 1; }
+  ul.subs .on span:last-child { text-decoration: line-through; color: var(--muted); }
   .more { border: 0; background: transparent; color: var(--muted); width: 36px; height: 36px; border-radius: 10px; display: grid; place-items: center; }
   .more svg { width: 18px; height: 18px; }
   .empty { text-align: center; color: var(--muted); padding: 48px 12px; display: grid; gap: 6px; }
   .empty strong { font: 600 19px var(--f-display); color: var(--text); }
   .stats { color: var(--muted); font-size: 13px; margin: 16px 2px 0; text-align: center; font-variant-numeric: tabular-nums; }
+  .tip { color: var(--muted); font-size: 12px; text-align: center; margin: 4px 0 0; }
   .clear { display: block; margin: 14px auto 0; }
 
   /* Barra de pestañas */
@@ -132,6 +162,7 @@
   .sheet .grab { width: 38px; height: 5px; border-radius: 3px; background: var(--border); margin: 0 auto 10px; }
   .sheet .inner { display: grid; gap: 14px; }
   .sheet h3 { font: 700 20px var(--f-display); margin: 0; }
+  .sheet h4 { font: 600 16px var(--f-display); margin: 6px 0 0; }
   .sheet-head { display: flex; justify-content: space-between; align-items: center; gap: 10px; }
   .label { font-size: 12px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; color: var(--muted); }
   .field { display: grid; gap: 7px; }
@@ -140,19 +171,41 @@
   .inp { background: var(--sunken); border: 1px solid transparent; border-radius: 12px; padding: 11px 12px; width: 100%; min-width: 0; -webkit-appearance: none; appearance: none; min-height: 46px; }
   .inp.title { font-size: 18px; font-weight: 700; }
   textarea.inp { resize: none; min-height: 70px; }
+  .detected { display: flex; gap: 6px; flex-wrap: wrap; margin-top: -6px; }
+  .detected span { font-size: 13px; background: var(--accent-soft); color: var(--accent); border-radius: 8px; padding: 3px 8px; font-weight: 700; }
+  .days { display: grid; grid-template-columns: repeat(7, 1fr); gap: 6px; }
+  .days .chip { justify-content: center; padding: 8px 0; }
+  .sublist { display: grid; gap: 6px; }
+  .subrow { display: grid; grid-template-columns: auto 1fr auto; gap: 8px; align-items: center; }
+  .subrow .box { width: 26px; height: 26px; border-radius: 7px; border: 2px solid var(--border); background: transparent; display: grid; place-items: center; padding: 0; }
+  .subrow .box svg { width: 14px; height: 14px; opacity: 0; }
+  .subrow .box[aria-pressed="true"] { background: var(--accent); border-color: var(--accent); }
+  .subrow .box[aria-pressed="true"] svg { opacity: 1; }
+  .subrow .inp { min-height: 40px; padding: 8px 10px; }
+  .x { border: 0; background: transparent; color: var(--muted); width: 36px; height: 36px; border-radius: 10px; font-size: 16px; }
   .btn { border: 1px solid var(--border); background: var(--surface); border-radius: 12px; padding: 12px 16px; font-weight: 700; min-height: 46px; }
   .btn.primary { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); }
   .btn.danger { color: var(--danger); }
   .btn.ghost { background: transparent; border-color: transparent; color: var(--muted); }
+  .btn.small { min-height: 36px; padding: 6px 12px; font-size: 14px; }
   .btn.block { width: 100%; }
-  .row { display: flex; gap: 8px; }
-  .row > * { flex: 1; }
   .menu { display: grid; gap: 4px; }
   .menu button { text-align: left; border: 0; background: var(--sunken); border-radius: 12px; padding: 14px; font-weight: 700; display: flex; gap: 12px; align-items: center; }
+  .menu button .go { margin-left: auto; color: var(--muted); }
   .menu button.danger { color: var(--danger); }
   .menu svg { width: 20px; height: 20px; flex: none; }
-  .hint { font-size: 13px; color: var(--muted); margin: 0; }
+  .hint { font-size: 14px; color: var(--muted); margin: 0; }
   .err { font-size: 14px; color: var(--danger); margin: 0; }
+  .okmsg { font-size: 14px; color: var(--ok); margin: 0; }
+  .box-card { background: var(--sunken); border-radius: 14px; padding: 14px; display: grid; gap: 10px; }
+  .catrow { display: grid; grid-template-columns: auto 1fr auto auto auto; gap: 6px; align-items: center; }
+  .swatch { width: 34px; height: 34px; border-radius: 50%; border: 3px solid var(--surface); box-shadow: 0 0 0 1px var(--border); }
+  .catrow .inp { min-height: 42px; padding: 9px 10px; }
+  .catrow .x.confirm { width: auto; padding: 0 8px; color: var(--danger); font-weight: 700; font-size: 13px; }
+  ol.steps { margin: 0; padding-left: 22px; display: grid; gap: 8px; color: var(--text); font-size: 15px; }
+  ol.steps b { font-weight: 700; }
+  .code { font: 13px/1.4 ui-monospace, Menlo, monospace; background: var(--sunken); border-radius: 10px; padding: 10px; word-break: break-all; -webkit-user-select: all; user-select: all; }
+  .copyrow { display: grid; gap: 6px; }
 
   /* Login */
   .login { position: fixed; inset: 0; z-index: 30; background: var(--bg); overflow-y: auto;
@@ -166,7 +219,7 @@
     background: var(--text); color: var(--bg); padding: 10px 10px 10px 16px; border-radius: 14px; display: flex; gap: 12px; align-items: center;
     max-width: calc(100% - 32px); box-shadow: 0 6px 20px rgb(0 0 0 / .2); }
   .toast button { border: 0; background: transparent; color: var(--bg); font-weight: 700; padding: 6px 8px; text-decoration: underline; }
-  @media (prefers-reduced-motion: reduce) { .sheet, .scrim { transition: none; } }
+  @media (prefers-reduced-motion: reduce) { .sheet, .scrim, li.task.snap .row { transition: none; } }
   @media (min-width: 760px) { .sheet { left: 50%; right: auto; width: 560px; transform: translate(-50%, 100%); } .sheet.show { transform: translate(-50%, 0); } }
 </style>
 </head>
@@ -179,13 +232,23 @@
           <h1 id="viewTitle">Hoy</h1>
           <div class="sub"><span class="d" id="todayLabel"></span><span class="sync" id="sync"><i></i><span id="syncText">Cargando…</span></span></div>
         </div>
-        <button class="iconbtn" id="menuBtn" aria-label="Ajustes">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="5" cy="12" r="1.3"/><circle cx="12" cy="12" r="1.3"/><circle cx="19" cy="12" r="1.3"/></svg>
-        </button>
+        <div class="hbtns">
+          <button class="iconbtn" id="searchBtn" aria-label="Buscar" aria-pressed="false">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><path d="M20 20l-3.5-3.5"/></svg>
+          </button>
+          <button class="iconbtn" id="menuBtn" aria-label="Ajustes">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="5" cy="12" r="1.3"/><circle cx="12" cy="12" r="1.3"/><circle cx="19" cy="12" r="1.3"/></svg>
+          </button>
+        </div>
       </header>
+      <div class="search" id="searchBar" hidden>
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><path d="M20 20l-3.5-3.5"/></svg>
+        <input class="inp" type="search" id="searchInput" placeholder="Buscar en todas las tareas" aria-label="Buscar" enterkeyhint="search">
+      </div>
       <div class="filters" id="filters"></div>
       <div id="list"></div>
       <p class="stats" id="stats"></p>
+      <p class="tip" id="tip">Desliza una tarea a la derecha para completarla y a la izquierda para borrarla.</p>
       <button class="btn ghost clear" id="clearDone" type="button" hidden>Borrar las hechas</button>
     </div>
   </div>
@@ -209,7 +272,8 @@
   <div class="grab"></div>
   <div class="inner">
     <div class="sheet-head"><h3 id="sheetTitle">Nueva tarea</h3><button type="button" class="btn ghost" data-close>Cancelar</button></div>
-    <input class="inp title" type="text" id="title" placeholder="¿Qué tienes que hacer?" aria-label="Tarea" enterkeyhint="done">
+    <input class="inp title" type="text" id="title" placeholder="p. ej. mañana a las 8 correr #entreno" aria-label="Tarea" enterkeyhint="done">
+    <div class="detected" id="detected" hidden></div>
     <div class="field"><span class="label">Categoría</span><div class="chips" id="catChips"></div></div>
     <div class="field">
       <span class="label">Cuándo</span>
@@ -227,7 +291,13 @@
       <label class="field"><span class="label">Prioridad</span>
         <select class="inp" id="prio"><option value="normal">Normal</option><option value="alta">Alta</option><option value="baja">Baja</option></select></label>
       <label class="field"><span class="label">Repetir</span>
-        <select class="inp" id="repeat"><option value="">No</option><option value="diario">Cada día</option><option value="semanal">Cada semana</option><option value="mensual">Cada mes</option></select></label>
+        <select class="inp" id="repeat"><option value="">No</option><option value="diario">Cada día</option><option value="dias">Días concretos</option><option value="semanal">Cada semana</option><option value="mensual">Cada mes</option></select></label>
+    </div>
+    <div class="days" id="daysRow" hidden></div>
+    <div class="field">
+      <span class="label">Pasos</span>
+      <div class="sublist" id="subList"></div>
+      <input class="inp" type="text" id="subNew" placeholder="Añadir un paso y pulsar intro" aria-label="Nuevo paso" enterkeyhint="enter">
     </div>
     <textarea class="inp" id="notes" placeholder="Notas" aria-label="Notas"></textarea>
     <button class="btn primary block" type="submit" id="submitBtn">Añadir</button>
@@ -239,15 +309,92 @@
 <div class="sheet" id="menuSheet" hidden>
   <div class="grab"></div>
   <div class="inner">
-    <div class="sheet-head"><h3>Ajustes</h3><button type="button" class="btn ghost" data-close>Cerrar</button></div>
+    <div class="sheet-head"><h3 id="hello">Ajustes</h3><button type="button" class="btn ghost" data-close>Cerrar</button></div>
     <p class="hint" id="accountInfo"></p>
     <div class="menu">
+      <button type="button" id="openAccount" data-cloud><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8" r="4"/><path d="M4 21a8 8 0 0 1 16 0"/></svg>Cuenta<span class="go">›</span></button>
+      <button type="button" id="openCats"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7h4l2-3h6l2 3h4v13H3z"/><circle cx="12" cy="13" r="3"/></svg>Categorías<span class="go">›</span></button>
+      <button type="button" id="openSiri" data-cloud><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5 11a7 7 0 0 0 14 0M12 18v3"/></svg>Siri y Atajos<span class="go">›</span></button>
       <button type="button" id="exportBtn"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v12M7 10l5 5 5-5M5 21h14"/></svg>Guardar copia de seguridad</button>
       <button type="button" id="importBtn"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 21V9M7 14l5-5 5 5M5 3h14"/></svg>Importar copia</button>
       <button type="button" class="danger" id="logoutBtn" hidden><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 4h3a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2h-3M10 17l-5-5 5-5M5 12h11"/></svg>Cerrar sesión</button>
     </div>
     <p class="hint" id="importInfo"></p>
     <input type="file" id="importFile" accept="application/json,.json" hidden>
+  </div>
+</div>
+
+<!-- Hoja: cuenta -->
+<div class="sheet" id="accountSheet" hidden>
+  <div class="grab"></div>
+  <div class="inner">
+    <div class="sheet-head"><h3>Cuenta</h3><button type="button" class="btn ghost" data-back>Atrás</button></div>
+
+    <form class="box-card" id="nameForm">
+      <h4>Tu nombre</h4>
+      <input class="inp" type="text" id="nameInput" placeholder="Cómo quieres que te salude" autocomplete="given-name">
+      <p class="okmsg" id="nameMsg" hidden></p>
+      <button class="btn primary" type="submit">Guardar nombre</button>
+    </form>
+
+    <form class="box-card" id="emailForm">
+      <h4>Cambiar correo</h4>
+      <p class="hint">Ahora: <span id="currentEmail"></span></p>
+      <input class="inp" type="email" id="newEmail" placeholder="Correo nuevo" autocomplete="email" required>
+      <input class="inp" type="password" id="emailPass" placeholder="Tu contraseña actual" autocomplete="current-password" required>
+      <p class="err" id="emailMsg" hidden></p>
+      <button class="btn primary" type="submit">Cambiar correo</button>
+    </form>
+
+    <form class="box-card" id="passForm">
+      <h4>Cambiar contraseña</h4>
+      <input class="inp" type="password" id="oldPass" placeholder="Contraseña actual" autocomplete="current-password" required>
+      <input class="inp" type="password" id="newPass" placeholder="Contraseña nueva (mínimo 6)" autocomplete="new-password" minlength="6" required>
+      <p class="err" id="passMsg" hidden></p>
+      <button class="btn primary" type="submit">Cambiar contraseña</button>
+    </form>
+  </div>
+</div>
+
+<!-- Hoja: categorías -->
+<div class="sheet" id="catSheet" hidden>
+  <div class="grab"></div>
+  <div class="inner">
+    <div class="sheet-head"><h3>Categorías</h3><button type="button" class="btn ghost" data-back>Atrás</button></div>
+    <p class="hint">Toca el círculo para cambiar el color. Los cambios se guardan solos.</p>
+    <div class="sublist" id="catList"></div>
+    <form class="row2" id="catAdd" style="display:grid;grid-template-columns:1fr auto;gap:8px">
+      <input class="inp" type="text" id="catNew" placeholder="Nueva categoría" aria-label="Nueva categoría" maxlength="30">
+      <button class="btn primary" type="submit">Añadir</button>
+    </form>
+  </div>
+</div>
+
+<!-- Hoja: Siri -->
+<div class="sheet" id="siriSheet" hidden>
+  <div class="grab"></div>
+  <div class="inner">
+    <div class="sheet-head"><h3>Siri y Atajos</h3><button type="button" class="btn ghost" data-back>Atrás</button></div>
+    <p class="hint">Di <b>“Oye Siri, añade tarea”</b>, dicta lo que sea (“mañana a las 8 correr #entreno”) y se guarda sin abrir la app. Se configura una sola vez en la app Atajos del iPhone.</p>
+    <div id="siriOff">
+      <button class="btn primary block" type="button" id="siriOn">Activar Siri</button>
+    </div>
+    <div id="siriSetup" hidden style="display:grid;gap:14px">
+      <ol class="steps">
+        <li>Abre la app <b>Atajos</b> → pestaña <b>Atajos</b> → botón <b>+</b>.</li>
+        <li>Pulsa el nombre de arriba y llámalo <b>Añade tarea</b> (es lo que dirás a Siri).</li>
+        <li>Añade la acción <b>Dictar texto</b> (idioma: Español).</li>
+        <li>Añade la acción <b>Texto</b> y pega dentro el <b>texto 2</b>. Luego borra la palabra <b>DICTADO</b> y en su lugar toca <b>Texto dictado</b> en la barra de variables.</li>
+        <li>Añade la acción <b>Obtener contenido de URL</b>. En URL pega el <b>texto 1</b>. Toca la flecha ▸ y pon: Método <b>POST</b>, Encabezado <b>Content-Type</b> = <b>application/json</b>, Cuerpo de la solicitud <b>Archivo</b> → elige <b>Texto</b>.</li>
+        <li>(Opcional) Añade <b>Mostrar notificación</b> con “Tarea añadida”.</li>
+        <li>Pruébalo: “Oye Siri, añade tarea”.</li>
+      </ol>
+      <div class="copyrow"><span class="label">Texto 1 · URL</span><div class="code" id="siriUrl"></div><button class="btn small" type="button" data-copy="siriUrl">Copiar URL</button></div>
+      <div class="copyrow"><span class="label">Texto 2 · Cuerpo</span><div class="code" id="siriBody"></div><button class="btn small" type="button" data-copy="siriBody">Copiar texto</button></div>
+      <p class="okmsg" id="copyMsg" hidden></p>
+      <p class="hint">Este texto lleva tu clave de Siri: solo sirve para <b>añadir</b> tareas, no para verlas. Si la pierdes o la compartes sin querer, cámbiala aquí y actualiza el atajo.</p>
+      <button class="btn danger" type="button" id="siriRotate">Cambiar clave</button>
+    </div>
   </div>
 </div>
 

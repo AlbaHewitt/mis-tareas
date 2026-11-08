@@ -1,9 +1,20 @@
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
-    // Cada persona solo puede leer y escribir sus propias tareas.
-    match /users/{userId}/tasks/{taskId} {
+    // Cada persona solo puede leer y escribir sus propios datos (tareas, categorías, ajustes).
+    match /users/{userId}/{document=**} {
       allow read, write: if request.auth != null && request.auth.uid == userId;
+    }
+    // Siri (Atajos) puede AÑADIR tareas sin iniciar sesión si trae la clave personal correcta.
+    // No puede leer, cambiar ni borrar nada.
+    match /users/{userId}/tasks/{taskId} {
+      allow create: if request.auth == null
+        && request.resource.data.keys().hasOnly(['title', 'siriKey'])
+        && request.resource.data.title is string
+        && request.resource.data.title.size() > 0
+        && request.resource.data.title.size() < 500
+        && exists(/databases/$(database)/documents/users/$(userId)/settings/siri)
+        && request.resource.data.siriKey == get(/databases/$(database)/documents/users/$(userId)/settings/siri).data.key;
     }
   }
 }
