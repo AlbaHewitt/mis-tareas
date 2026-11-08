@@ -26,6 +26,9 @@ export function parseQuick(text, cats = [], now = new Date()) {
     return m;
   };
 
+  // Etiquetas: @cálculo @urgente (puede haber varias)
+  const tagRe = /(?:^|\s)@([\p{L}\p{N}_-]+)/u;
+  for (let tm; (tm = tagRe.exec(src));) { (out.tags ||= []).push(tm[1].toLowerCase()); src = src.slice(0, tm.index) + ' ' + src.slice(tm.index + tm[0].length); }
   // Categoría: #casa, #Estudio…
   let m = take(/(?:^|\s)#([\p{L}\p{N}_-]+)/u);
   if (m) {

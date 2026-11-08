@@ -386,6 +386,62 @@
   .sb .col b { position: absolute; left: 0; right: 0; border-top: 2px dashed var(--text); opacity: .4; }
   .sb .bt { font-size: 9px; font-weight: 400; writing-mode: vertical-rl; transform: rotate(180deg); height: 2.8em; }
   .sb.today span:first-of-type { color: var(--accent); }
+  /* Línea del día */
+  .tl { position: relative; margin-top: 6px; }
+  .tlh { position: absolute; left: 0; right: 0; border-top: 1px solid var(--border); }
+  .tlh span { position: absolute; top: -8px; left: 0; font-size: 11px; color: var(--muted); background: var(--bg); padding-right: 4px; font-variant-numeric: tabular-nums; }
+  .tlnow { position: absolute; left: 2.8em; right: 0; border-top: 2px solid var(--danger); z-index: 2; }
+  .tlnow::before { content: ""; position: absolute; left: -5px; top: -6px; width: 10px; height: 10px; border-radius: 50%; background: var(--danger); }
+  .tli { position: absolute; border: 0; border-left: 4px solid var(--c); border-radius: 8px; background: color-mix(in srgb, var(--c) 16%, var(--surface)); text-align: left; padding: 3px 8px; overflow: hidden; display: grid; align-content: start; gap: 0; z-index: 1; }
+  .tli b { font-size: 13px; line-height: 1.25; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .tli span { font-size: 11px; color: var(--muted); white-space: nowrap; }
+  .tli.done { opacity: .5; } .tli.done b { text-decoration: line-through; }
+  .tli.ghost { background: transparent; border: 1px dashed var(--c); border-left: 4px solid var(--c); }
+  /* Calendario del mes */
+  .mcal { display: grid; grid-template-columns: repeat(7, 1fr); gap: 4px; }
+  .mcal b { text-align: center; font-size: 11px; color: var(--muted); }
+  .mcell { border: 0; background: var(--surface); border-radius: 10px; aspect-ratio: 1; display: grid; grid-template-rows: auto 1fr; justify-items: center; padding: 4px 2px; position: relative; font-variant-numeric: tabular-nums; }
+  .mcell.today span:first-child { background: var(--accent); color: var(--accent-ink); border-radius: 99px; padding: 0 6px; font-weight: 700; }
+  .mcell.sel { box-shadow: 0 0 0 2px var(--accent); }
+  .mcell.late span:first-child { color: var(--danger); font-weight: 700; }
+  .mdots { display: flex; gap: 2px; align-self: end; }
+  .mdots i { width: 6px; height: 6px; border-radius: 50%; }
+  .mcell em { position: absolute; top: 2px; right: 4px; font-size: 9px; font-style: normal; color: var(--muted); }
+  /* Matriz */
+  .matrix { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+  .mq { background: var(--surface); border: 1px solid var(--border); border-radius: 14px; padding: 10px; display: grid; gap: 6px; align-content: start; min-width: 0; }
+  .mq h3 { font: 700 15px var(--f-display); margin: 0; display: flex; justify-content: space-between; }
+  .mq h3 span { color: var(--muted); font-weight: 600; }
+  .mq > p { margin: -4px 0 2px; font-size: 11px; color: var(--muted); }
+  .mq.q1 { border-top: 4px solid var(--danger); } .mq.q2 { border-top: 4px solid var(--accent); } .mq.q3 { border-top: 4px solid var(--k-amarillo); } .mq.q4 { border-top: 4px solid var(--k-gris); }
+  .mqi { display: grid; gap: 4px; }
+  .mqi > button:first-child { border: 0; background: var(--sunken); border-radius: 8px; padding: 6px 8px; text-align: left; font-size: 13px; display: flex; gap: 6px; align-items: center; flex-wrap: wrap; min-width: 0; overflow-wrap: anywhere; }
+  .mqi em { font-style: normal; font-size: 11px; color: var(--muted); }
+  .mqi .chip { justify-self: start; padding: 3px 8px; font-size: 12px; }
+  .planrow { border: 0; background: var(--sunken); border-radius: 12px; padding: 10px 12px; display: grid; grid-template-columns: auto 1fr auto; gap: 10px; align-items: center; text-align: left; }
+  .planrow .box { width: 24px; height: 24px; border-radius: 7px; border: 2px solid var(--c); display: grid; place-items: center; }
+  .planrow .box svg { width: 13px; height: 13px; opacity: 0; }
+  .planrow.on .box { background: var(--c); } .planrow.on .box svg { opacity: 1; }
+  .planrow b { display: block; overflow-wrap: anywhere; } .planrow small { color: var(--muted); font-size: 12px; }
+  .planrow .est { font-size: 13px; color: var(--muted); font-variant-numeric: tabular-nums; }
+  .tplant { font-size: 64px; line-height: 1; transition: transform .4s; }
+  .timer.paused .tplant { filter: grayscale(.6); }
+  .garden { display: flex; flex-wrap: wrap; gap: 4px; font-size: 26px; line-height: 1.1; }
+  .mood .moodrow { display: grid; grid-template-columns: repeat(5, 1fr); gap: 6px; }
+  .moodrow button { border: 1px solid var(--border); background: var(--surface); border-radius: 12px; min-height: 48px; font-size: 24px; }
+  .moodrow.energy button { font-size: 12px; color: var(--k-verde); letter-spacing: -1px; }
+  .moodrow button.on { background: var(--accent-soft); border-color: var(--accent); }
+  .moodbars { display: grid; grid-template-columns: repeat(14, minmax(0, 1fr)); gap: 3px; align-items: end; }
+  .mb { display: grid; gap: 2px; justify-items: center; font-size: 10px; color: var(--muted); font-weight: 700; }
+  .mb .e { font-size: 15px; }
+  .mb .col { position: relative; width: 100%; height: 50px; background: var(--sunken); border-radius: 5px; overflow: hidden; }
+  .mb .col i { position: absolute; left: 0; right: 0; bottom: 0; background: var(--k-verde); border-radius: 5px 5px 0 0; }
+  .mb.today span:last-child { color: var(--accent); }
+  .badges { display: grid; grid-template-columns: repeat(auto-fill, minmax(96px, 1fr)); gap: 6px; }
+  .badge { background: var(--sunken); border-radius: 12px; padding: 8px 6px; display: grid; justify-items: center; gap: 2px; text-align: center; opacity: .45; filter: grayscale(1); }
+  .badge.on { opacity: 1; filter: none; background: color-mix(in srgb, var(--k-amarillo) 18%, var(--sunken)); }
+  .badge span { font-size: 24px; } .badge b { font-size: 12px; line-height: 1.2; } .badge small { font-size: 10px; color: var(--muted); line-height: 1.2; }
+  .tagchip { font-size: 12px; color: var(--accent); font-weight: 700; }
   .quick { display: grid; grid-template-columns: 1fr auto; gap: 8px; margin: 2px 0 6px; }
   .quick .inp { background: var(--surface); border: 1px solid var(--border); }
   .quick .btn { min-width: 46px; font-size: 20px; padding: 0 14px; }
@@ -500,7 +556,9 @@
         <label class="pickbtn" id="dateBtn"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="5" width="18" height="16" rx="3"/><path d="M3 10h18M8 3v4M16 3v4"/></svg><span id="dateText">Hoy</span><input type="date" id="date" aria-label="Fecha"></label>
         <button type="button" class="chip" id="noDateBtn" aria-pressed="false">Sin fecha</button>
       </div>
+      <div class="chips"><button type="button" class="chip" id="tonightBtn" aria-pressed="false" hidden>🌙 Esta noche</button><button type="button" class="chip" id="somedayBtn" aria-pressed="false" hidden>💭 Algún día</button></div>
     </div>
+    <label class="field"><span class="label">Etiquetas</span><input class="inp" type="text" id="tags" placeholder="p. ej. cálculo, urgente (o escribe @cálculo en el título)" aria-label="Etiquetas" autocomplete="off"></label>
     <div class="grid2" id="timeRow">
       <label class="pickbtn tbtn"><span class="label">Hora de inicio</span><span id="timeText">—</span><input type="time" id="time" aria-label="Hora de inicio"></label>
       <label class="pickbtn tbtn"><span class="label">Hora de fin</span><span id="endText">—</span><input type="time" id="endTime" aria-label="Hora de fin"></label>
@@ -573,6 +631,7 @@
   <div class="tinner">
     <p class="label" id="tmPhase">Concentración</p>
     <h2 id="tmTask"></h2>
+    <div class="tplant" id="tmPlant" aria-hidden="true">🌰</div>
     <div class="tclock" id="tmClock">25:00</div>
     <div class="chips" id="tmModes" style="justify-content:center">
       <button type="button" class="chip" data-tm="25/5">25 / 5</button>
@@ -600,6 +659,7 @@
       <button type="button" id="openAccount" data-cloud><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8" r="4"/><path d="M4 21a8 8 0 0 1 16 0"/></svg>Cuenta<span class="go">›</span></button>
       <button type="button" id="openCats"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7h4l2-3h6l2 3h4v13H3z"/><circle cx="12" cy="13" r="3"/></svg>Categorías<span class="go">›</span></button>
       <button type="button" id="openGoal"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3l2.7 5.6 6.1.9-4.4 4.3 1 6.1L12 17l-5.4 2.9 1-6.1-4.4-4.3 6.1-.9z"/></svg>Puntos y objetivo<span class="go">›</span></button>
+      <button type="button" id="openFilters"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 5h16l-6 8v6l-4-2v-4z"/></svg>Filtros<span class="go">›</span></button>
       <button type="button" id="openTpl"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="3" width="16" height="18" rx="2"/><path d="M8 8h8M8 12h8M8 16h5"/></svg>Plantillas<span class="go">›</span></button>
       <button type="button" id="openLook"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 3a9 9 0 0 0 0 18z" fill="currentColor"/></svg>Apariencia<span class="go">›</span></button>
       <button type="button" id="openRewards"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="8" width="18" height="13" rx="2"/><path d="M12 8v13M3 12h18M12 8c-2-4-6-4-6-1.5S9 8 12 8zm0 0c2-4 6-4 6-1.5S15 8 12 8z"/></svg>Recompensas<span class="go">›</span></button>
@@ -738,6 +798,33 @@
       <div class="chips" id="lookTheme"><button type="button" class="chip" data-v="auto">Automático</button><button type="button" class="chip" data-v="light">Claro</button><button type="button" class="chip" data-v="dark">Oscuro</button></div></div>
     <div class="field"><span class="label">Color principal</span><div class="chips" id="lookAccent"></div></div>
     <p class="hint">Se guarda en este dispositivo.</p>
+  </div>
+</div>
+
+<!-- Hoja: planificar mi día -->
+<div class="sheet" id="planSheet" hidden>
+  <div class="grab"></div>
+  <div class="inner" id="planBody"></div>
+</div>
+
+<!-- Hoja: filtros -->
+<div class="sheet" id="filterSheet" hidden>
+  <div class="grab"></div>
+  <div class="inner">
+    <div class="sheet-head"><h3>Filtros</h3><button type="button" class="btn ghost" data-back>Atrás</button></div>
+    <p class="hint">Un filtro guarda una búsqueda que usas a menudo. Sale en la barra de categorías con ⚑. En el buscador también puedes escribir <b>@etiqueta</b>.</p>
+    <div class="sublist" id="filterList"></div>
+    <form class="box-card" id="filterForm">
+      <h4>Nuevo filtro</h4>
+      <input class="inp" type="text" id="fName" placeholder="Nombre, p. ej. Estudio urgente" maxlength="40" aria-label="Nombre del filtro">
+      <input class="inp" type="text" id="fTags" placeholder="Etiquetas (separadas por comas)" aria-label="Etiquetas">
+      <div class="grid2">
+        <label class="field"><span class="label">Categoría</span><select class="inp" id="fCat"></select></label>
+        <label class="field"><span class="label">Cuándo</span><select class="inp" id="fWhen"><option value="todo">Cualquier día</option><option value="hoy">Hoy y atrasadas</option><option value="semana">Próximos 7 días</option><option value="sinfecha">Sin fecha</option></select></label>
+      </div>
+      <label class="field"><span class="label">Prioridad</span><select class="inp" id="fPrio"><option value="">Cualquiera</option><option value="alta">Solo alta</option></select></label>
+      <button class="btn primary" type="submit">Guardar filtro</button>
+    </form>
   </div>
 </div>
 

@@ -57,6 +57,13 @@ Abre la dirección en **Safari** → botón Compartir → **Añadir a pantalla d
 - **Plantillas**: al editar una tarea, “Guardar como plantilla” (con sus partes en días relativos); al crear una tarea, se elige arriba. Se gestionan en ⋯ → Plantillas.
 - **Estadísticas de sueño**: en la rutina de sueño, las últimas 2 semanas (media dormida, hora media de acostarse, % de noches cumplidas y barras).
 - **Copia de seguridad**: ⋯ → Guardar copia guarda todo (tareas, hábitos, categorías, recompensas, plantillas). Si pasan 7 días sin copia, Hoy lo recuerda. En el iPhone se puede guardar en Archivos o en Google Drive desde el menú Compartir.
+- **Agenda**: Día (línea de tiempo con tareas, clases y rutinas, y tus huecos libres), Semana, Mes (calendario con puntos de colores), Próximas y Matriz (urgente/importante).
+- **Planificar mi día**: por la mañana eliges qué harás hoy y ves si cabe en tus horas libres; lo que no elijas pasa a mañana.
+- **Etiquetas y filtros**: escribe @etiqueta en el título o en el campo Etiquetas; busca @etiqueta; guarda filtros en ⋯ → Filtros.
+- **Algún día y Esta noche**: ideas sin prisa en Sin fecha → Algún día; las tareas de hoy marcadas “Esta noche” salen aparte.
+- **Niveles y logros**: subes de nivel con tus puntos y desbloqueas logros (en Progreso).
+- **Ánimo y energía**: cada día en Hábitos; en Progreso ves cómo cambia con el sueño, el entreno y lo que cumples.
+- **Estimado vs real** y **jardín de concentración** (cada sesión del temporizador planta algo) en Progreso.
 - **Siri**: ⋯ → Siri y Atajos genera una clave personal y explica cómo crear el atajo “Añade tarea”. La clave solo permite añadir tareas, no leerlas.
 
 ## Pasar tus tareas antiguas
