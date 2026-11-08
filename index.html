@@ -272,6 +272,32 @@
   .catbar .bar i { background: var(--c); }
   .catbar span:last-child { text-align: right; font-variant-numeric: tabular-nums; color: var(--muted); }
 
+  /* Formulario: fecha y horas como botones */
+  .daterow { display: grid; grid-template-columns: 1fr auto; gap: 8px; align-items: stretch; }
+  .daterow .chip { padding: 0 14px; }
+  .pickbtn { position: relative; display: flex; align-items: center; gap: 10px; background: var(--sunken); border-radius: 12px; min-height: 46px; padding: 8px 12px; font-weight: 700; overflow: hidden; cursor: pointer; }
+  .pickbtn svg { width: 20px; height: 20px; color: var(--accent); flex: none; }
+  .pickbtn input { position: absolute; inset: 0; width: 100%; height: 100%; opacity: 0; border: 0; padding: 0; margin: 0; cursor: pointer; font-size: 16px; }
+  .pickbtn.tbtn { display: grid; gap: 2px; align-content: center; }
+  .pickbtn.tbtn .label { font-size: 11px; }
+  .pickbtn.off { opacity: .45; }
+  .pickbtn.static { cursor: default; font-weight: 400; }
+  #repeatOpts { gap: 12px; }
+  .partadd { display: grid; grid-template-columns: 1fr auto; gap: 8px; }
+  .partrow { display: grid; grid-template-columns: auto 1fr auto auto; gap: 6px; align-items: center; }
+  .partrow .box { width: 26px; height: 26px; border-radius: 7px; border: 2px solid var(--border); background: transparent; display: grid; place-items: center; padding: 0; }
+  .partrow .box svg { width: 14px; height: 14px; opacity: 0; }
+  .partrow .box[aria-pressed="true"] { background: var(--accent); border-color: var(--accent); }
+  .partrow .box[aria-pressed="true"] svg { opacity: 1; }
+  .partrow .inp { min-height: 40px; padding: 8px 10px; }
+  .partrow .pickbtn { min-height: 40px; padding: 6px 10px; font-size: 13px; white-space: nowrap; }
+  details summary { cursor: pointer; font-weight: 700; }
+  details[open] summary { margin-bottom: 6px; }
+  .prog { display: inline-flex; align-items: center; gap: 6px; font-weight: 700; color: var(--text); }
+  .prog .pbar { width: 54px; height: 6px; border-radius: 99px; background: var(--sunken); overflow: hidden; display: inline-block; }
+  .prog .pbar i { display: block; height: 100%; background: var(--c); }
+  .showdone { display: block; margin: 14px auto 0; }
+
   .ptsbtn { border: 0; background: color-mix(in srgb, var(--k-amarillo) 22%, transparent); color: var(--text); font-weight: 700; font-size: 13px; border-radius: 99px; padding: 2px 9px; font-variant-numeric: tabular-nums; }
 
   /* Hábitos */
@@ -296,6 +322,11 @@
   .qb.ok.on { background: var(--ok); border-color: var(--ok); color: var(--surface); }
   .qb.bad.on { background: var(--danger); border-color: var(--danger); color: var(--surface); }
   .hcheck:active, .qb:active { transform: scale(.92); }
+  .hab.sleep { grid-template-columns: 1fr; }
+  .sleeplog { display: grid; grid-template-columns: 1fr 1fr auto; gap: 8px; align-items: stretch; margin-top: 6px; }
+  .sleeplog .pickbtn { min-height: 44px; }
+  .sleepres { font-size: 13px; font-weight: 700; }
+  .sleepres.ok { color: var(--ok); } .sleepres.bad { color: var(--danger); }
 
   /* Barras de la semana */
   .weekbars { display: grid; grid-template-columns: repeat(7, 1fr); gap: 6px; align-items: end; }
@@ -362,6 +393,7 @@
       <div id="list"></div>
       <p class="stats" id="stats"></p>
       <p class="tip" id="tip">Desliza una tarea a la derecha para completarla y a la izquierda para borrarla.</p>
+      <button class="btn showdone" id="showDoneBtn" type="button" hidden>Ver las hechas</button>
       <button class="btn ghost clear" id="clearDone" type="button" hidden>Borrar las hechas</button>
     </div>
   </div>
@@ -390,36 +422,60 @@
     <div class="detected" id="detected" hidden></div>
     <div class="field"><span class="label">Categoría</span><div class="chips" id="catChips"></div></div>
     <div class="field">
-      <span class="label">Cuándo</span>
-      <div class="chips" id="whenChips">
-        <button type="button" class="chip" data-when="today">Hoy</button>
-        <button type="button" class="chip" data-when="tomorrow">Mañana</button>
-        <button type="button" class="chip" data-when="none">Sin fecha</button>
-      </div>
-      <div class="grid2">
-        <input class="inp" type="date" id="date" aria-label="Fecha">
-        <input class="inp" type="time" id="time" aria-label="Hora">
+      <span class="label" id="dateLabel">Fecha</span>
+      <div class="daterow">
+        <label class="pickbtn" id="dateBtn"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="5" width="18" height="16" rx="3"/><path d="M3 10h18M8 3v4M16 3v4"/></svg><span id="dateText">Hoy</span><input type="date" id="date" aria-label="Fecha"></label>
+        <button type="button" class="chip" id="noDateBtn" aria-pressed="false">Sin fecha</button>
       </div>
     </div>
+    <div class="grid2" id="timeRow">
+      <label class="pickbtn tbtn"><span class="label">Hora de inicio</span><span id="timeText">—</span><input type="time" id="time" aria-label="Hora de inicio"></label>
+      <label class="pickbtn tbtn"><span class="label">Hora de fin</span><span id="endText">—</span><input type="time" id="endTime" aria-label="Hora de fin"></label>
+    </div>
+    <button type="button" class="btn ghost small" id="clearTimes" hidden>Quitar las horas</button>
     <div class="grid2">
       <label class="field"><span class="label">Prioridad</span>
         <select class="inp" id="prio"><option value="normal">Normal</option><option value="alta">Alta</option><option value="baja">Baja</option></select></label>
       <label class="field"><span class="label">Repetir</span>
-        <select class="inp" id="repeat"><option value="">No</option><option value="diario">Cada día</option><option value="dias">Días concretos</option><option value="semanal">Cada semana</option><option value="mensual">Cada mes</option></select></label>
+        <select class="inp" id="repeat"><option value="">No se repite</option><option value="diario">Cada día</option><option value="dias">Días de la semana</option><option value="semanal">Cada semana</option><option value="mensual">Un día de cada mes</option></select></label>
     </div>
-    <div class="days" id="daysRow" hidden></div>
+    <div class="box-card" id="repeatOpts" hidden>
+      <div class="days" id="daysRow" hidden></div>
+      <label class="field" id="monthDayField" hidden><span class="label">Qué día del mes</span>
+        <select class="inp" id="monthDay"></select></label>
+      <div class="grid2">
+        <div class="field"><span class="label">Empieza</span><div class="pickbtn static" id="startText">Hoy</div></div>
+        <div class="field"><span class="label">Termina</span>
+          <label class="pickbtn" id="untilBtn"><span id="untilText">Nunca</span><input type="date" id="until" aria-label="Fecha en que termina la repetición"></label></div>
+      </div>
+      <button type="button" class="btn ghost small" id="clearUntil" hidden>Que no termine nunca</button>
+      <p class="hint">La fecha de inicio es la fecha de la tarea de arriba.</p>
+    </div>
+    <label class="field" id="minutesField"><span class="label">Minutos que te llevará</span>
+      <input class="inp" type="number" id="minutes" inputmode="numeric" min="5" max="480" step="5" placeholder="—"></label>
     <div class="grid2">
       <label class="field"><span class="label">Aviso en calendario</span>
         <select class="inp" id="remind"><option value="">Sin aviso</option><option value="0">A la hora</option><option value="10">10 min antes</option><option value="30">30 min antes</option><option value="60">1 hora antes</option><option value="1440">1 día antes</option></select></label>
-      <label class="field"><span class="label">Minutos</span>
-        <input class="inp" type="number" id="minutes" inputmode="numeric" min="5" max="480" step="5" placeholder="—"></label>
+      <label class="field"><span class="label">Puntos ⭐</span>
+        <input class="inp" type="number" id="points" inputmode="numeric" min="0" max="1000" placeholder="auto"></label>
     </div>
-    <label class="field"><span class="label">Rato de casa</span>
-      <select class="inp" id="rota"><option value="">No está en la rotación</option><option value="final">En la rotación · vuelve al final</option><option value="frecuente">En la rotación · frecuente (vuelve a mitad)</option><option value="una">En la rotación · una sola vez</option></select></label>
-    <div class="field">
-      <span class="label">Pasos</span>
-      <div class="sublist" id="subList"></div>
-      <input class="inp" type="text" id="subNew" placeholder="Añadir un paso y pulsar intro" aria-label="Nuevo paso" enterkeyhint="enter">
+    <p class="hint" id="pointsHint"></p>
+    <div class="field" id="partsField">
+      <span class="label">Partes <span id="partsCount"></span></span>
+      <p class="hint">Divide la tarea en partes: cada una sale como una tarea normal el día que le toca, y aquí ves cuántas llevas.</p>
+      <div class="sublist" id="partList"></div>
+      <div class="partadd"><input class="inp" type="text" id="partNew" placeholder="Nueva parte" aria-label="Nueva parte" enterkeyhint="enter"><button type="button" class="btn" id="partAdd">Añadir</button></div>
+      <details class="box-card" id="splitBox">
+        <summary>Repartir en varias partes</summary>
+        <div class="grid2">
+          <label class="field"><span class="label">Cuántas</span><input class="inp" type="number" id="splitN" inputmode="numeric" min="2" max="60" value="5"></label>
+          <div class="field"><span class="label">Desde</span><label class="pickbtn"><span id="splitFromText">Hoy</span><input type="date" id="splitFrom" aria-label="Desde"></label></div>
+        </div>
+        <span class="label">Qué días</span>
+        <div class="days" id="splitDays"></div>
+        <label class="field"><span class="label">Nombre de cada parte</span><input class="inp" type="text" id="splitName" placeholder="p. ej. Tema"></label>
+        <button type="button" class="btn primary" id="splitGo">Crear partes</button>
+      </details>
     </div>
     <textarea class="inp" id="notes" placeholder="Notas" aria-label="Notas"></textarea>
     <button class="btn primary block" type="submit" id="submitBtn">Añadir</button>
@@ -445,7 +501,6 @@
       <button type="button" id="openAccount" data-cloud><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8" r="4"/><path d="M4 21a8 8 0 0 1 16 0"/></svg>Cuenta<span class="go">›</span></button>
       <button type="button" id="openCats"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7h4l2-3h6l2 3h4v13H3z"/><circle cx="12" cy="13" r="3"/></svg>Categorías<span class="go">›</span></button>
       <button type="button" id="openGoal"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3l2.7 5.6 6.1.9-4.4 4.3 1 6.1L12 17l-5.4 2.9 1-6.1-4.4-4.3 6.1-.9z"/></svg>Puntos y objetivo<span class="go">›</span></button>
-      <button type="button" id="openRato"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 11l9-7 9 7v9a1 1 0 0 1-1 1h-5v-6h-6v6H4a1 1 0 0 1-1-1z"/></svg>Rato de casa<span class="go">›</span></button>
       <button type="button" id="openSiri" data-cloud><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5 11a7 7 0 0 0 14 0M12 18v3"/></svg>Siri y Atajos<span class="go">›</span></button>
       <button type="button" id="exportBtn"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v12M7 10l5 5 5-5M5 21h14"/></svg>Guardar copia de seguridad</button>
       <button type="button" id="importBtn"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 21V9M7 14l5-5 5 5M5 3h14"/></svg>Importar copia</button>
@@ -510,7 +565,19 @@
     <div class="chips" id="hSuggest"></div>
     <input class="inp title" type="text" id="hName" placeholder="p. ej. Leer 20 minutos" aria-label="Nombre del hábito" maxlength="80">
     <div class="field"><span class="label">Tipo</span>
-      <div class="chips" id="hKind"><button type="button" class="chip" data-v="build">✓ Quiero hacerlo</button><button type="button" class="chip" data-v="quit">🚫 Quiero dejarlo</button></div></div>
+      <div class="chips" id="hKind"><button type="button" class="chip" data-v="build">✓ Quiero hacerlo</button><button type="button" class="chip" data-v="quit">🚫 Quiero dejarlo</button><button type="button" class="chip" data-v="sleep">🌙 Rutina de sueño</button></div></div>
+    <div class="box-card" id="hSleepFields" hidden>
+      <div class="grid2">
+        <label class="pickbtn tbtn"><span class="label">Luz apagada</span><span id="hBedText">23:30</span><input type="time" id="hBed" value="23:30" aria-label="Hora de acostarse"></label>
+        <label class="field"><span class="label">Horas de sueño</span><input class="inp" type="number" id="hHours" inputmode="decimal" min="4" max="12" step="0.25" value="7.5"></label>
+      </div>
+      <div class="grid2">
+        <label class="pickbtn tbtn"><span class="label">Despertar L–V</span><span id="hWakeWkText">07:15</span><input type="time" id="hWakeWk" value="07:15" aria-label="Despertar entre semana"></label>
+        <label class="pickbtn tbtn"><span class="label">Despertar S–D (máx.)</span><span id="hWakeWeText">08:15</span><input type="time" id="hWakeWe" value="08:15" aria-label="Despertar el fin de semana"></label>
+      </div>
+      <label class="field"><span class="label">Margen (minutos)</span><input class="inp" type="number" id="hTol" inputmode="numeric" min="0" max="60" step="5" value="15"></label>
+      <p class="hint">Cada mañana apuntas a qué hora te acostaste y te levantaste. Se cumple si te acostaste a tu hora, te levantaste a tu hora y dormiste las horas que tocan (con el margen).</p>
+    </div>
     <div class="field" id="hFreqField"><span class="label">Cada cuánto</span>
       <div class="chips" id="hFreq"><button type="button" class="chip" data-v="daily">Todos los días</button><button type="button" class="chip" data-v="weekly">Unas veces por semana</button></div></div>
     <label class="field" id="hTargetField"><span class="label">Veces por semana</span>
@@ -539,25 +606,6 @@
       <p class="okmsg" id="goalMsg" hidden></p>
       <button class="btn primary" type="submit">Guardar objetivo</button>
     </form>
-  </div>
-</div>
-
-<!-- Hoja: rato de casa -->
-<div class="sheet" id="ratoSheet" hidden>
-  <div class="grab"></div>
-  <div class="inner">
-    <div class="sheet-head"><h3>Rato de casa</h3><button type="button" class="btn ghost" data-back>Atrás</button></div>
-    <p class="hint">Cada día, en <b>Hoy</b>, te propone las tareas de la rotación que caben en tu rato. Al hacer una, vuelve a la cola (al final, a mitad si es frecuente, o desaparece si era de una vez). Para meter una tarea en la rotación, edítala y elige “Rato de casa”.</p>
-    <div class="field">
-      <span class="label">Minutos de orden cada día</span>
-      <div class="budgets" id="budgets"></div>
-      <p class="hint">Pon menos los días de más estudio o entreno, o 0 para tener el día libre.</p>
-    </div>
-    <div class="box-card" id="migrateBox" hidden>
-      <h4>Pasar tus tareas de Rotación de la casa</h4>
-      <p class="hint" id="migrateText"></p>
-      <button class="btn primary" type="button" id="migrateBtn">Pasarlas a la rotación</button>
-    </div>
   </div>
 </div>
 

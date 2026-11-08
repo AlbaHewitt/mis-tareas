@@ -35,15 +35,14 @@ Abre la dirección en **Safari** → botón Compartir → **Añadir a pantalla d
 
 - **Escritura rápida**: “mañana a las 8 correr #entreno”, “los lunes y jueves gym”, “examen el 3 de diciembre !” (la `!` es prioridad alta). Lo entiende `parse.js`.
 - **Deslizar**: a la derecha completa, a la izquierda borra (con Deshacer).
-- **Repetir**: cada día, días concretos (L M X J V S D), cada semana o cada mes.
-- **Pasos** dentro de cada tarea y **buscador** (lupa arriba).
+- **Repetir**: cada día, días de la semana, cada semana o un día concreto de cada mes, con fecha de inicio y de fin.
+- **Partes**: divide una tarea en partes (p. ej. 20 temas repartidos de lunes a viernes); cada parte sale en su día y la tarea grande muestra 3/20 · 15 %. **Buscador** con la lupa.
 - **Categorías** editables en ⋯ → Categorías (nombre, color, orden, borrar).
 - **Cuenta**: nombre, correo y contraseña en ⋯ → Cuenta.
 - **Calendario**: al editar una tarea con fecha, “Calendario iPhone” (archivo .ics con aviso) o “Google Calendar”.
-- **Rato de casa**: tareas en rotación con minutos; cada día en Hoy salen las que caben en tu rato (⋯ → Rato de casa para los minutos por día).
 - **Agenda**: semana a semana (con las repeticiones) o todo lo próximo.
-- **Hábitos**: para hacer (cada día o X veces por semana) y para dejar, con rachas.
-- **Puntos**: 1 punto por minuto de cada tarea o hábito cumplido; objetivo diario en ⋯ → Puntos.
+- **Hábitos**: para hacer (cada día o X veces por semana), para dejar, y rutina de sueño (hora de acostarse, de levantarse y horas dormidas), con rachas.
+- **Puntos**: cada tarea da su duración (hora de inicio a fin) o sus minutos, o los puntos que le pongas a mano; objetivo diario en ⋯ → Puntos.
 - **Progreso**: resumen de la semana, gráfico del mes, el año en cuadraditos (una fila por mes) y cuadraditos por apartado.
 - **Siri**: ⋯ → Siri y Atajos genera una clave personal y explica cómo crear el atajo “Añade tarea”. La clave solo permite añadir tareas, no leerlas.
 

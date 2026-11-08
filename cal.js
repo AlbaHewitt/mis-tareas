@@ -11,17 +11,24 @@ function parts(t) {
   }
   const [hh, mm] = t.time.split(':').map(Number);
   const s = new Date(y, m - 1, d, hh, mm);
-  const e = new Date(s.getTime() + (Number(t.minutes) > 0 ? Number(t.minutes) : 60) * 60000);
+  let e;
+  if (t.endTime) {
+    const [eh, em] = t.endTime.split(':').map(Number);
+    e = new Date(y, m - 1, d, eh, em);
+    if (e <= s) e = new Date(e.getTime() + 864e5); // termina al día siguiente
+  } else e = new Date(s.getTime() + 60 * 60000);
   const f = x => `${x.getFullYear()}${pad(x.getMonth() + 1)}${pad(x.getDate())}T${pad(x.getHours())}${pad(x.getMinutes())}00`;
   return { allDay: false, start: f(s), end: f(e) };
 }
 
 export function rrule(t) {
-  if (t.repeat === 'diario') return 'FREQ=DAILY';
-  if (t.repeat === 'semanal') return 'FREQ=WEEKLY';
-  if (t.repeat === 'mensual') return 'FREQ=MONTHLY';
-  if (t.repeat === 'dias' && t.days?.length) return 'FREQ=WEEKLY;BYDAY=' + t.days.map(d => BYDAY[d]).join(',');
-  return '';
+  let r = '';
+  if (t.repeat === 'diario') r = 'FREQ=DAILY';
+  else if (t.repeat === 'semanal') r = 'FREQ=WEEKLY';
+  else if (t.repeat === 'mensual') r = 'FREQ=MONTHLY' + (t.monthDay ? `;BYMONTHDAY=${t.monthDay}` : '');
+  else if (t.repeat === 'dias' && t.days?.length) r = 'FREQ=WEEKLY;BYDAY=' + t.days.map(d => BYDAY[d]).join(',');
+  if (r && t.until) r += `;UNTIL=${t.until.replace(/-/g, '')}T235959`;
+  return r;
 }
 
 function details(t) {

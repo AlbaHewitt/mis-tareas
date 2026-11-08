@@ -46,8 +46,16 @@ export function parseQuick(text, cats = [], now = new Date()) {
   else if (take(/\b(?:cada mes|mensualmente|todos los meses)\b/)) out.repeat = 'mensual';
   else if (take(/\b(?:entre semana|de lunes a viernes)\b/)) { out.repeat = 'dias'; out.days = [1, 2, 3, 4, 5]; }
 
+  // Franja horaria: "de 10 a 12", "de 5 a 7 de la tarde", "10:00-12:00"
+  const hm = (h, mi, part) => { h = +h; mi = +(mi || 0); if ((part === 'tarde' || part === 'noche') && h < 12) h += 12; return h <= 23 && mi <= 59 ? `${pad(h)}:${pad(mi)}` : null; };
+  if ((m = take(/\b(?:de|desde las?)\s+(\d{1,2})(?:[:.h](\d{2}))?\s+(?:a|hasta)\s+(?:las?\s+)?(\d{1,2})(?:[:.h](\d{2}))?(?:\s*(?:h|horas)\b)?(?:\s+(?:de la|por la)\s+(manana|tarde|noche))?\b/))
+    || (m = take(/\b(\d{1,2})[:.](\d{2})\s*[-–]\s*(\d{1,2})[:.](\d{2})\b/))) {
+    const a = hm(m[1], m[2], m[5]), b = hm(m[3], m[4], m[5]);
+    if (a && b) { out.time = a; out.endTime = b; }
+  }
   // Hora
-  if ((m = take(/\b(?:a las?|sobre las?|hacia las?)\s+(\d{1,2})(?:[:.h](\d{2}))?(?:\s*(?:h|horas)\b)?(?:\s+(?:de la|por la)\s+(manana|tarde|noche|madrugada))?\b/))) {
+  if (out.time) { /* ya hay franja */ }
+  else if ((m = take(/\b(?:a las?|sobre las?|hacia las?)\s+(\d{1,2})(?:[:.h](\d{2}))?(?:\s*(?:h|horas)\b)?(?:\s+(?:de la|por la)\s+(manana|tarde|noche|madrugada))?\b/))) {
     let h = +m[1]; const mi = +(m[2] || 0);
     if ((m[3] === 'tarde' || m[3] === 'noche') && h < 12) h += 12;
     if (h <= 23 && mi <= 59) out.time = `${pad(h)}:${pad(mi)}`;
