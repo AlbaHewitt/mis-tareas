@@ -1,0 +1,17 @@
+{
+  "name": "Mis Tareas",
+  "short_name": "Tareas",
+  "description": "Tareas, eventos, entrenos, casa y estudio en un solo sitio.",
+  "lang": "es",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#f3f4f1",
+  "theme_color": "#2747c9",
+  "icons": [
+    { "src": "icons/icon-192.png", "sizes": "192x192", "type": "image/png" },
+    { "src": "icons/icon-512.png", "sizes": "512x512", "type": "image/png" },
+    { "src": "icons/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ]
+}

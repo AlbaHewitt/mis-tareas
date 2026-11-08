@@ -1,0 +1,273 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+<title>Mis Tareas</title>
+<meta name="description" content="Tareas, eventos, entrenos, casa y estudio en un solo sitio.">
+<meta name="theme-color" content="#f3f4f1" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#121413" media="(prefers-color-scheme: dark)">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="apple-mobile-web-app-title" content="Tareas">
+<meta name="format-detection" content="telephone=no">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="apple-touch-icon" href="icons/icon-180.png">
+<link rel="icon" type="image/png" href="icons/icon-192.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,600;12..96,700&family=Atkinson+Hyperlegible:wght@400;700&display=swap">
+<style>
+  /* Layout: app de una columna. Cabecera arriba, lista con scroll propio, barra de pestañas abajo y botón + flotante. */
+  :root {
+    --bg: #f3f4f1; --surface: #ffffff; --sunken: #e9ebe6; --text: #1b1e1c; --muted: #66706a;
+    --border: #dde1db; --accent: #2747c9; --accent-ink: #ffffff; --accent-soft: #e4e9fb; --danger: #c92a4b;
+    --bar: rgb(243 244 241 / .86); --scrim: rgb(0 0 0 / .32);
+    --evento: #7048e8; --entreno: #d9480f; --casa: #2b8a3e; --estudio: #1971c2; --trabajo: #5c6670; --personal: #c2255c;
+    --f-display: "Bricolage Grotesque", -apple-system, "Segoe UI", system-ui, sans-serif;
+    --f-body: "Atkinson Hyperlegible", -apple-system, system-ui, "Segoe UI", sans-serif;
+    --safe-t: env(safe-area-inset-top, 0px); --safe-b: env(safe-area-inset-bottom, 0px);
+    --safe-l: env(safe-area-inset-left, 0px); --safe-r: env(safe-area-inset-right, 0px);
+    --tabbar: 58px;
+    color-scheme: light;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #121413; --surface: #1c1f1d; --sunken: #262a27; --text: #e9ece9; --muted: #98a29c;
+      --border: #2f3431; --accent: #8ea2ff; --accent-ink: #10143a; --accent-soft: #232b52; --danger: #ff7a93;
+      --bar: rgb(18 20 19 / .86); --scrim: rgb(0 0 0 / .55);
+      --evento: #a58bff; --entreno: #ff9a5c; --casa: #63d47a; --estudio: #5cb3ff; --trabajo: #aab4bd; --personal: #ff85b0;
+      color-scheme: dark;
+    }
+  }
+
+  /* --- Que se comporte como una app, no como una web --- */
+  * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+  html, body { height: 100%; margin: 0; overscroll-behavior: none; overflow: hidden; }
+  body {
+    background: var(--bg); color: var(--text); font: 16px/1.45 var(--f-body);
+    -webkit-user-select: none; user-select: none; -webkit-touch-callout: none;
+    touch-action: manipulation; -webkit-text-size-adjust: 100%;
+  }
+  input, textarea, select { -webkit-user-select: text; user-select: text; font-size: 16px; } /* 16px evita el zoom de iOS */
+  input, select, textarea, button { font-family: inherit; color: inherit; }
+  button { cursor: pointer; touch-action: manipulation; }
+  img, svg { -webkit-user-drag: none; }
+  :focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+  [hidden] { display: none !important; }
+
+  .app { position: fixed; inset: 0; display: flex; flex-direction: column; }
+  .scroller { flex: 1; overflow-y: auto; overscroll-behavior: contain; -webkit-overflow-scrolling: touch;
+    padding: calc(var(--safe-t) + 8px) max(16px, var(--safe-r)) calc(var(--tabbar) + var(--safe-b) + 96px) max(16px, var(--safe-l)); }
+  .inner { max-width: 680px; margin: 0 auto; }
+
+  header.top { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; padding: 10px 0 12px; }
+  h1 { font: 700 34px/1.05 var(--f-display); margin: 0; letter-spacing: -0.02em; }
+  .sub { color: var(--muted); font-size: 14px; display: flex; gap: 10px; align-items: center; flex-wrap: wrap; margin-top: 4px; }
+  .sub .d::first-letter { text-transform: uppercase; }
+  .sync { display: inline-flex; align-items: center; gap: 5px; font-size: 12px; }
+  .sync i { width: 7px; height: 7px; border-radius: 50%; background: var(--muted); }
+  .sync.ok i { background: var(--casa); }
+  .sync.warn i { background: var(--danger); }
+  .iconbtn { width: 40px; height: 40px; border-radius: 50%; border: 0; background: var(--sunken); display: grid; place-items: center; flex: none; }
+  .iconbtn svg { width: 20px; height: 20px; }
+
+  .filters { display: flex; gap: 6px; overflow-x: auto; scrollbar-width: none; margin: 0 calc(-1 * max(16px, var(--safe-l))) 4px; padding: 2px max(16px, var(--safe-l)) 6px; }
+  .filters::-webkit-scrollbar { display: none; }
+  .chip { font-size: 14px; padding: 7px 12px; border-radius: 999px; border: 1px solid var(--border); background: var(--surface); display: inline-flex; align-items: center; gap: 6px; white-space: nowrap; flex: none; }
+  .chip[aria-pressed="true"] { background: var(--accent-soft); border-color: var(--accent); font-weight: 700; }
+  .dot { width: 9px; height: 9px; border-radius: 50%; flex: none; }
+
+  h2.group { font: 600 15px/1.2 var(--f-display); color: var(--muted); margin: 18px 2px 8px; display: flex; justify-content: space-between; }
+  h2.group.late { color: var(--danger); }
+  ul.list { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px; }
+  li.task { background: var(--surface); border: 1px solid var(--border); border-radius: 14px; padding: 11px 6px 11px 10px;
+    display: grid; grid-template-columns: auto 1fr auto; gap: 10px; align-items: start; }
+  li.task.done { opacity: .6; }
+  li.task.done .t { text-decoration: line-through; }
+  .check { width: 28px; height: 28px; border-radius: 50%; border: 2px solid var(--c); background: transparent; display: grid; place-items: center; padding: 0; }
+  .check svg { width: 14px; height: 14px; opacity: 0; }
+  li.task.done .check { background: var(--c); }
+  li.task.done .check svg { opacity: 1; }
+  .body { min-width: 0; padding-top: 2px; }
+  .t { font-weight: 700; word-break: break-word; }
+  .meta { font-size: 13px; color: var(--muted); display: flex; gap: 4px 10px; flex-wrap: wrap; margin-top: 2px; align-items: center; }
+  .meta .catn { display: inline-flex; align-items: center; gap: 5px; }
+  .meta .late { color: var(--danger); font-weight: 700; }
+  .prio { font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: .05em; color: var(--danger); }
+  .notes { font-size: 14px; color: var(--muted); margin-top: 4px; white-space: pre-wrap; word-break: break-word; }
+  .more { border: 0; background: transparent; color: var(--muted); width: 36px; height: 36px; border-radius: 10px; display: grid; place-items: center; }
+  .more svg { width: 18px; height: 18px; }
+  .empty { text-align: center; color: var(--muted); padding: 48px 12px; display: grid; gap: 6px; }
+  .empty strong { font: 600 19px var(--f-display); color: var(--text); }
+  .stats { color: var(--muted); font-size: 13px; margin: 16px 2px 0; text-align: center; font-variant-numeric: tabular-nums; }
+  .clear { display: block; margin: 14px auto 0; }
+
+  /* Barra de pestañas */
+  nav.tabbar { position: fixed; left: 0; right: 0; bottom: 0; z-index: 10;
+    padding: 6px max(8px, var(--safe-r)) calc(6px + var(--safe-b)) max(8px, var(--safe-l));
+    background: var(--bar); -webkit-backdrop-filter: blur(18px) saturate(1.6); backdrop-filter: blur(18px) saturate(1.6);
+    border-top: 1px solid var(--border); display: flex; justify-content: center; }
+  nav.tabbar .tabs { display: grid; grid-template-columns: repeat(4, 1fr); width: 100%; max-width: 520px; }
+  nav.tabbar button { border: 0; background: transparent; display: grid; justify-items: center; gap: 2px; padding: 4px 0; color: var(--muted); font-size: 11px; font-weight: 700; position: relative; }
+  nav.tabbar svg { width: 24px; height: 24px; }
+  nav.tabbar button[aria-selected="true"] { color: var(--accent); }
+  nav.tabbar .badge { position: absolute; top: 0; left: calc(50% + 8px); min-width: 18px; height: 18px; padding: 0 5px; border-radius: 9px; background: var(--danger); color: #fff; font-size: 11px; line-height: 18px; }
+
+  .fab { position: fixed; z-index: 11; right: max(18px, calc(var(--safe-r) + 12px)); bottom: calc(var(--tabbar) + var(--safe-b) + 16px);
+    width: 58px; height: 58px; border-radius: 50%; border: 0; background: var(--accent); color: var(--accent-ink);
+    box-shadow: 0 6px 18px rgb(39 71 201 / .35); display: grid; place-items: center; }
+  .fab svg { width: 26px; height: 26px; }
+  .fab:active, .check:active, .chip:active, nav.tabbar button:active { transform: scale(.94); }
+
+  /* Hojas inferiores */
+  .scrim { position: fixed; inset: 0; background: var(--scrim); z-index: 20; opacity: 0; transition: opacity .2s; }
+  .scrim.show { opacity: 1; }
+  .sheet { position: fixed; left: 0; right: 0; bottom: 0; z-index: 21; background: var(--surface);
+    border-radius: 20px 20px 0 0; max-height: calc(100% - var(--safe-t) - 24px); overflow-y: auto; overscroll-behavior: contain;
+    padding: 8px max(16px, var(--safe-r)) calc(16px + var(--safe-b)) max(16px, var(--safe-l));
+    transform: translateY(100%); transition: transform .25s cubic-bezier(.2,.8,.2,1); }
+  .sheet.show { transform: none; }
+  .sheet .grab { width: 38px; height: 5px; border-radius: 3px; background: var(--border); margin: 0 auto 10px; }
+  .sheet .inner { display: grid; gap: 14px; }
+  .sheet h3 { font: 700 20px var(--f-display); margin: 0; }
+  .sheet-head { display: flex; justify-content: space-between; align-items: center; gap: 10px; }
+  .label { font-size: 12px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; color: var(--muted); }
+  .field { display: grid; gap: 7px; }
+  .chips { display: flex; gap: 6px; flex-wrap: wrap; }
+  .grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+  .inp { background: var(--sunken); border: 1px solid transparent; border-radius: 12px; padding: 11px 12px; width: 100%; min-width: 0; -webkit-appearance: none; appearance: none; min-height: 46px; }
+  .inp.title { font-size: 18px; font-weight: 700; }
+  textarea.inp { resize: none; min-height: 70px; }
+  .btn { border: 1px solid var(--border); background: var(--surface); border-radius: 12px; padding: 12px 16px; font-weight: 700; min-height: 46px; }
+  .btn.primary { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); }
+  .btn.danger { color: var(--danger); }
+  .btn.ghost { background: transparent; border-color: transparent; color: var(--muted); }
+  .btn.block { width: 100%; }
+  .row { display: flex; gap: 8px; }
+  .row > * { flex: 1; }
+  .menu { display: grid; gap: 4px; }
+  .menu button { text-align: left; border: 0; background: var(--sunken); border-radius: 12px; padding: 14px; font-weight: 700; display: flex; gap: 12px; align-items: center; }
+  .menu button.danger { color: var(--danger); }
+  .menu svg { width: 20px; height: 20px; flex: none; }
+  .hint { font-size: 13px; color: var(--muted); margin: 0; }
+  .err { font-size: 14px; color: var(--danger); margin: 0; }
+
+  /* Login */
+  .login { position: fixed; inset: 0; z-index: 30; background: var(--bg); overflow-y: auto;
+    padding: calc(var(--safe-t) + 48px) max(24px, var(--safe-r)) calc(var(--safe-b) + 24px) max(24px, var(--safe-l)); }
+  .login .inner { max-width: 380px; display: grid; gap: 14px; }
+  .login .logo { width: 72px; height: 72px; border-radius: 18px; }
+  .login h1 { font-size: 32px; }
+
+  .toast { position: fixed; left: 50%; transform: translateX(-50%); z-index: 40;
+    bottom: calc(var(--tabbar) + var(--safe-b) + 88px);
+    background: var(--text); color: var(--bg); padding: 10px 10px 10px 16px; border-radius: 14px; display: flex; gap: 12px; align-items: center;
+    max-width: calc(100% - 32px); box-shadow: 0 6px 20px rgb(0 0 0 / .2); }
+  .toast button { border: 0; background: transparent; color: var(--bg); font-weight: 700; padding: 6px 8px; text-decoration: underline; }
+  @media (prefers-reduced-motion: reduce) { .sheet, .scrim { transition: none; } }
+  @media (min-width: 760px) { .sheet { left: 50%; right: auto; width: 560px; transform: translate(-50%, 100%); } .sheet.show { transform: translate(-50%, 0); } }
+</style>
+</head>
+<body>
+<div class="app">
+  <div class="scroller" id="scroller">
+    <div class="inner">
+      <header class="top">
+        <div>
+          <h1 id="viewTitle">Hoy</h1>
+          <div class="sub"><span class="d" id="todayLabel"></span><span class="sync" id="sync"><i></i><span id="syncText">Cargando…</span></span></div>
+        </div>
+        <button class="iconbtn" id="menuBtn" aria-label="Ajustes">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="5" cy="12" r="1.3"/><circle cx="12" cy="12" r="1.3"/><circle cx="19" cy="12" r="1.3"/></svg>
+        </button>
+      </header>
+      <div class="filters" id="filters"></div>
+      <div id="list"></div>
+      <p class="stats" id="stats"></p>
+      <button class="btn ghost clear" id="clearDone" type="button" hidden>Borrar las hechas</button>
+    </div>
+  </div>
+
+  <button class="fab" id="fab" aria-label="Nueva tarea">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg>
+  </button>
+
+  <nav class="tabbar"><div class="tabs" id="tabs" role="tablist">
+    <button role="tab" data-view="hoy"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/></svg>Hoy<span class="badge" hidden></span></button>
+    <button role="tab" data-view="proximas"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="5" width="18" height="16" rx="3"/><path d="M3 10h18M8 3v4M16 3v4"/></svg>Próximas<span class="badge" hidden></span></button>
+    <button role="tab" data-view="sinfecha"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 6h16M4 12h16M4 18h10"/></svg>Sin fecha<span class="badge" hidden></span></button>
+    <button role="tab" data-view="hechas"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M8 12.5l3 3 5-6"/></svg>Hechas<span class="badge" hidden></span></button>
+  </div></nav>
+</div>
+
+<div class="scrim" id="scrim" hidden></div>
+
+<!-- Hoja: nueva / editar tarea -->
+<form class="sheet" id="taskSheet" autocomplete="off" hidden>
+  <div class="grab"></div>
+  <div class="inner">
+    <div class="sheet-head"><h3 id="sheetTitle">Nueva tarea</h3><button type="button" class="btn ghost" data-close>Cancelar</button></div>
+    <input class="inp title" type="text" id="title" placeholder="¿Qué tienes que hacer?" aria-label="Tarea" enterkeyhint="done">
+    <div class="field"><span class="label">Categoría</span><div class="chips" id="catChips"></div></div>
+    <div class="field">
+      <span class="label">Cuándo</span>
+      <div class="chips" id="whenChips">
+        <button type="button" class="chip" data-when="today">Hoy</button>
+        <button type="button" class="chip" data-when="tomorrow">Mañana</button>
+        <button type="button" class="chip" data-when="none">Sin fecha</button>
+      </div>
+      <div class="grid2">
+        <input class="inp" type="date" id="date" aria-label="Fecha">
+        <input class="inp" type="time" id="time" aria-label="Hora">
+      </div>
+    </div>
+    <div class="grid2">
+      <label class="field"><span class="label">Prioridad</span>
+        <select class="inp" id="prio"><option value="normal">Normal</option><option value="alta">Alta</option><option value="baja">Baja</option></select></label>
+      <label class="field"><span class="label">Repetir</span>
+        <select class="inp" id="repeat"><option value="">No</option><option value="diario">Cada día</option><option value="semanal">Cada semana</option><option value="mensual">Cada mes</option></select></label>
+    </div>
+    <textarea class="inp" id="notes" placeholder="Notas" aria-label="Notas"></textarea>
+    <button class="btn primary block" type="submit" id="submitBtn">Añadir</button>
+    <button class="btn danger block" type="button" id="deleteBtn" hidden>Borrar tarea</button>
+  </div>
+</form>
+
+<!-- Hoja: ajustes -->
+<div class="sheet" id="menuSheet" hidden>
+  <div class="grab"></div>
+  <div class="inner">
+    <div class="sheet-head"><h3>Ajustes</h3><button type="button" class="btn ghost" data-close>Cerrar</button></div>
+    <p class="hint" id="accountInfo"></p>
+    <div class="menu">
+      <button type="button" id="exportBtn"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v12M7 10l5 5 5-5M5 21h14"/></svg>Guardar copia de seguridad</button>
+      <button type="button" id="importBtn"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 21V9M7 14l5-5 5 5M5 3h14"/></svg>Importar copia</button>
+      <button type="button" class="danger" id="logoutBtn" hidden><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 4h3a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2h-3M10 17l-5-5 5-5M5 12h11"/></svg>Cerrar sesión</button>
+    </div>
+    <p class="hint" id="importInfo"></p>
+    <input type="file" id="importFile" accept="application/json,.json" hidden>
+  </div>
+</div>
+
+<!-- Pantalla de acceso -->
+<div class="login" id="login" hidden>
+  <form class="inner" id="loginForm" autocomplete="on">
+    <img class="logo" src="icons/icon-192.png" alt="">
+    <h1>Mis Tareas</h1>
+    <p class="hint">Entra con tu cuenta para tener tus tareas en el móvil y en el ordenador.</p>
+    <input class="inp" type="email" id="email" placeholder="Correo" autocomplete="email" required>
+    <input class="inp" type="password" id="password" placeholder="Contraseña (mínimo 6)" autocomplete="current-password" required minlength="6">
+    <p class="err" id="loginErr" hidden></p>
+    <button class="btn primary block" type="submit" id="loginBtn">Entrar</button>
+    <button class="btn block" type="button" id="signupBtn">Crear cuenta</button>
+    <button class="btn ghost block" type="button" id="resetBtn">He olvidado la contraseña</button>
+  </form>
+</div>
+
+<div class="toast" id="toast" hidden><span id="toastText"></span><button type="button" id="toastUndo">Deshacer</button></div>
+
+<script type="module" src="app.js"></script>
+</body>
+</html>
