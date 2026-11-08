@@ -20,7 +20,9 @@ const $ = s => document.querySelector(s);
 let tasks = [];
 let cats = DEFAULT_CATS;
 let habits = [];
-let stats = { goal: 100, days: {} };
+let stats = { goal: 100, days: {}, focus: {} };
+let rewards = { list: [], redeemed: [] };
+let templates = [];
 let loaded = false;
 let view = 'hoy';
 let agendaMode = 'semana';
@@ -36,6 +38,29 @@ let editingId = null, formCat = 'personal', formDays = [], formParts = [], formN
 document.addEventListener('gesturestart', e => e.preventDefault());
 document.addEventListener('dblclick', e => e.preventDefault(), { passive: false });
 document.addEventListener('contextmenu', e => { if (!e.target.closest('input, textarea, .code')) e.preventDefault(); });
+
+// ---------- Apariencia (por dispositivo) ----------
+const ACCENTS = {
+  azul: { l: ['#2747c9', '#e4e9fb', '#ffffff'], d: ['#8ea2ff', '#232b52', '#10143a'] },
+  violeta: { l: ['#6741d9', '#ece5ff', '#ffffff'], d: ['#b197fc', '#2d2550', '#170f33'] },
+  verde: { l: ['#2b8a3e', '#e3f4e7', '#ffffff'], d: ['#69db7c', '#1f3a26', '#0b1f10'] },
+  turquesa: { l: ['#0b7285', '#dff3f6', '#ffffff'], d: ['#66d9e8', '#173a40', '#062126'] },
+  rosa: { l: ['#c2255c', '#fde6ee', '#ffffff'], d: ['#faa2c1', '#4a2232', '#2b0a17'] },
+  naranja: { l: ['#c4510a', '#fff0e3', '#ffffff'], d: ['#ffa94d', '#44301c', '#2a1503'] },
+};
+let look = { theme: 'auto', accent: 'azul' };
+try { look = { ...look, ...JSON.parse(localStorage.getItem('mis-tareas-look')) }; } catch {}
+const darkMQ = matchMedia('(prefers-color-scheme: dark)');
+function applyLook() {
+  const root = document.documentElement;
+  if (look.theme === 'auto') delete root.dataset.theme; else root.dataset.theme = look.theme;
+  const dark = look.theme === 'dark' || (look.theme === 'auto' && darkMQ.matches);
+  const [a, soft, ink] = (ACCENTS[look.accent] || ACCENTS.azul)[dark ? 'd' : 'l'];
+  root.style.setProperty('--accent', a); root.style.setProperty('--accent-soft', soft); root.style.setProperty('--accent-ink', ink);
+  document.querySelectorAll('meta[name="theme-color"]').forEach(m => m.setAttribute('content', dark ? '#121413' : '#f3f4f1'));
+}
+applyLook();
+darkMQ.addEventListener?.('change', applyLook);
 
 // ---------- Utilidades ----------
 const pad = n => String(n).padStart(2, '0');
@@ -112,16 +137,17 @@ function clean(t) {
     notes: String(t.notes || ''), done: !!t.done, doneAt: t.doneAt || null, created: t.created || Date.now(), spawned: !!t.spawned,
     remind: num(t.remind), minutes: Number(t.minutes) > 0 ? Math.min(480, Math.round(Number(t.minutes))) : null,
     points: num(t.points) === null ? null : Math.max(0, Math.min(1000, Math.round(num(t.points)))),
-    parentId: t.parentId || '',
+    parentId: t.parentId || '', inbox: !!t.inbox && !t.date,
     streak: Number(t.streak) || 0, best: Number(t.best) || 0,
     history: Array.isArray(t.history) ? t.history.filter(d => typeof d === 'string').slice(-120) : [],
-    pts: Number(t.pts) || 0, ptsDay: t.ptsDay || '',
+    pts: Number(t.pts) || 0, ptsDay: t.ptsDay || '', focus: Number(t.focus) || 0,
+    focusLog: t.focusLog && typeof t.focusLog === 'object' ? Object.fromEntries(Object.entries(t.focusLog).filter(([k, v]) => /^\d{4}-\d{2}-\d{2}$/.test(k) && Number(v) > 0).sort().slice(-120)) : {},
   };
 }
 function cleanHabit(h) {
   const log = {};
   Object.entries(h.log || {}).sort().slice(-400).forEach(([k, v]) => { if (/^\d{4}-\d{2}-\d{2}$/.test(k) && [1, -1].includes(Number(v))) log[k] = Number(v); });
-  const kind = ['quit', 'sleep'].includes(h.kind) ? h.kind : 'build';
+  const kind = ['quit', 'sleep', 'routine'].includes(h.kind) ? h.kind : 'build';
   const hm = (v, d) => /^\d{2}:\d{2}$/.test(v || '') ? v : d;
   const out = {
     name: String(h.name || '').slice(0, 80), kind,
@@ -136,11 +162,23 @@ function cleanHabit(h) {
     Object.assign(out, { bed: hm(h.bed, '23:30'), wakeWk: hm(h.wakeWk, '07:15'), wakeWe: hm(h.wakeWe, '08:15'),
       hours: Math.min(12, Math.max(4, Number(h.hours) || 7.5)), tol: Math.min(60, Math.max(0, Number(h.tol ?? 15))), nights });
   }
+  if (kind === 'routine') {
+    const steps = (Array.isArray(h.steps) ? h.steps : []).filter(s => s && s.text && /^\d{2}:\d{2}$/.test(s.time || ''))
+      .map(s => ({ id: String(s.id || Math.random().toString(36).slice(2, 9)), time: s.time, text: String(s.text).slice(0, 120) })).sort((a, b) => a.time.localeCompare(b.time)).slice(0, 30);
+    const ids = new Set(steps.map(s => s.id)), stepsDone = {};
+    Object.entries(h.stepsDone || {}).sort().slice(-120).forEach(([k, v]) => { if (/^\d{4}-\d{2}-\d{2}$/.test(k) && Array.isArray(v)) stepsDone[k] = v.filter(x => ids.has(x)); });
+    Object.assign(out, { steps, stepsDone, days: Array.isArray(h.days) ? h.days.filter(d => d >= 0 && d <= 6) : [] });
+  }
   return out;
 }
 
 // ---------- Almacenamiento ----------
-const LKEY = 'mis-tareas-v1', LCATS = 'mis-tareas-cats', LHAB = 'mis-tareas-habitos', LSTATS = 'mis-tareas-puntos';
+const LKEY = 'mis-tareas-v1', LCATS = 'mis-tareas-cats', LHAB = 'mis-tareas-habitos', LSTATS = 'mis-tareas-puntos', LREW = 'mis-tareas-premios', LTPL = 'mis-tareas-plantillas';
+const normTemplates = l => (Array.isArray(l) ? l : []).filter(x => x && x.name && x.task).slice(0, 50);
+const normRewards = r => ({
+  list: Array.isArray(r?.list) ? r.list.filter(x => x && x.name).map(x => ({ id: String(x.id), name: String(x.name).slice(0, 60), cost: Math.max(1, Math.round(Number(x.cost)) || 1) })) : [],
+  redeemed: Array.isArray(r?.redeemed) ? r.redeemed.filter(x => x && x.name).slice(-200).map(x => ({ id: String(x.id), name: String(x.name), cost: Number(x.cost) || 0, at: Number(x.at) || 0 })) : [],
+});
 const local = (k, v) => { try { localStorage.setItem(k, JSON.stringify(v)); } catch {} };
 const store = {
   fb: null, uid: null, user: null, authLib: null,
@@ -162,12 +200,19 @@ const store = {
     if (!this.fb) return local(LHAB, habits);
     return this.fb.setDoc(this.ref('habits', h.id), { log: { [day]: val === null ? this.fb.deleteField() : val } }, { merge: true });
   },
+  async setRoutineDay(h, day, ids, val) {
+    if (!this.fb) return local(LHAB, habits);
+    return this.fb.setDoc(this.ref('habits', h.id), { stepsDone: { [day]: ids }, log: { [day]: val === null ? this.fb.deleteField() : val } }, { merge: true });
+  },
   async setSleep(h, day, val, night) {
     if (!this.fb) return local(LHAB, habits);
     const del = this.fb.deleteField();
     return this.fb.setDoc(this.ref('habits', h.id), { log: { [day]: val === null ? del : val }, nights: { [day]: val === null ? del : night } }, { merge: true });
   },
   async addPoints(n, day) { if (!this.fb) return local(LSTATS, stats); return this.fb.setDoc(this.ref('settings', 'stats'), { days: { [day]: this.fb.increment(n) } }, { merge: true }); },
+  async saveTemplates() { if (!this.fb) return local(LTPL, templates); return this.fb.setDoc(this.ref('settings', 'templates'), { list: structuredClone(templates) }); },
+  async saveRewards() { if (!this.fb) return local(LREW, rewards); return this.fb.setDoc(this.ref('settings', 'rewards'), structuredClone(rewards)); },
+  async addFocus(min, day) { if (!this.fb) return local(LSTATS, stats); return this.fb.setDoc(this.ref('settings', 'stats'), { focus: { [day]: this.fb.increment(min) } }, { merge: true }); },
   async saveGoal(goal) { if (!this.fb) return local(LSTATS, stats); return this.fb.setDoc(this.ref('settings', 'stats'), { goal }, { merge: true }); },
 };
 function setSync(kind, text) { $('#sync').className = 'sync ' + kind; $('#syncText').textContent = text; }
@@ -186,7 +231,9 @@ async function initStore() {
     const get = (k, d) => { try { return JSON.parse(localStorage.getItem(k)) ?? d; } catch { return d; } };
     tasks = get(LKEY, []); cats = get(LCATS, DEFAULT_CATS);
     habits = get(LHAB, []).map(h => ({ id: h.id, ...cleanHabit(h) }));
-    stats = { goal: 100, days: {}, ...get(LSTATS, {}) };
+    stats = { goal: 100, days: {}, focus: {}, ...get(LSTATS, {}) };
+    rewards = normRewards(get(LREW, {}));
+    templates = normTemplates(get(LTPL, []));
     loaded = true;
     setSync('warn', 'Solo en este dispositivo');
     $('#accountInfo').textContent = 'La sincronización no está configurada. Las tareas se guardan solo en este dispositivo.';
@@ -210,7 +257,7 @@ async function initStore() {
   auth.onAuthStateChanged(a, user => {
     unsubs.forEach(u => u()); unsubs = [];
     if (!user) {
-      store.fb = null; store.user = null; tasks = []; cats = DEFAULT_CATS; habits = []; stats = { goal: 100, days: {} }; loaded = false;
+      store.fb = null; store.user = null; tasks = []; cats = DEFAULT_CATS; habits = []; stats = { goal: 100, days: {}, focus: {} }; rewards = { list: [], redeemed: [] }; loaded = false;
       $('#login').hidden = false; $('#logoutBtn').hidden = true;
       render(); return;
     }
@@ -237,8 +284,16 @@ async function initStore() {
     }, () => {}));
     unsubs.push(fs.onSnapshot(store.ref('settings', 'stats'), snap => {
       const d = snap.exists() ? snap.data() : {};
-      stats = { goal: Number(d.goal) > 0 ? Number(d.goal) : 100, days: d.days && typeof d.days === 'object' ? d.days : {} };
-      render();
+      stats = { goal: Number(d.goal) > 0 ? Number(d.goal) : 100, days: d.days && typeof d.days === 'object' ? d.days : {}, focus: d.focus && typeof d.focus === 'object' ? d.focus : {} };
+      render(); if (!$('#rewardSheet').hidden) renderRewards();
+    }, () => {}));
+    unsubs.push(fs.onSnapshot(store.ref('settings', 'templates'), snap => {
+      templates = normTemplates(snap.exists() ? snap.data().list : []);
+      if (!$('#tplSheet').hidden) renderTplSheet();
+    }, () => {}));
+    unsubs.push(fs.onSnapshot(store.ref('settings', 'rewards'), snap => {
+      rewards = normRewards(snap.exists() ? snap.data() : {});
+      if (!$('#rewardSheet').hidden) renderRewards();
     }, () => {}));
     unsubs.push(fs.onSnapshot(store.ref('settings', 'siri'), snap => { siriKey = snap.exists() ? snap.data().key : null; renderSiri(); }, () => {}));
   });
@@ -541,8 +596,15 @@ function renderParts() {
     <button type="button" class="x" data-pact="del" aria-label="Quitar parte">✕</button></div>`).join('');
   $('#splitDays').innerHTML = dayChips(splitDays, 'data-sday');
   $('#splitFromText').textContent = $('#splitFrom').value ? longDate($('#splitFrom').value) : 'Hoy';
+  $('#splitToText').textContent = $('#splitTo').value ? longDate($('#splitTo').value) : 'Una por día';
   renderWhen();
 }
+$('#splitTo').addEventListener('change', renderParts);
+// Al abrir "Repartir", si la tarea tiene fecha (un examen), propone terminar el día antes
+$('#splitBox').addEventListener('toggle', () => {
+  if (!$('#splitBox').open || $('#splitTo').value || formNoDate || !$('#date').value || $('#date').value <= todayISO()) return;
+  $('#splitTo').value = addDays($('#date').value, -1); renderParts();
+});
 function addPart(title, date) { formParts.push({ id: (editingId || 'nuevo') + '-' + uid(), title, date: date || '', done: false, isNew: true }); }
 $('#partAdd').addEventListener('click', () => {
   const t = $('#partNew').value.trim(); if (!t) return;
@@ -567,18 +629,24 @@ $('#splitFrom').addEventListener('change', renderParts);
 $('#splitGo').addEventListener('click', () => {
   const n = Math.max(1, Math.min(60, Number($('#splitN').value) || 0));
   const base = $('#splitName').value.trim() || $('#title').value.trim() || 'Parte';
-  let d = $('#splitFrom').value || todayISO(), made = 0, guard = 0;
+  const from = $('#splitFrom').value || todayISO(), to = $('#splitTo').value;
+  const ok = d => !splitDays.length || splitDays.includes(parseISO(d).getDay());
   const start = formParts.length;
-  while (made < n && guard++ < 500) {
-    if (!splitDays.length || splitDays.includes(parseISO(d).getDay())) { made++; addPart(`${base} ${start + made}`, d); }
-    d = addDays(d, 1);
+  if (to && to >= from) {
+    // Reparte las n partes de forma pareja entre los días disponibles hasta la fecha límite
+    const avail = []; for (let d = from, g = 0; d <= to && g < 800; d = addDays(d, 1), g++) if (ok(d)) avail.push(d);
+    if (!avail.length) { $('#splitHint').textContent = 'No hay ningún día elegido entre esas fechas.'; return; }
+    for (let i = 0; i < n; i++) addPart(`${base} ${start + i + 1}`, avail[Math.floor(i * avail.length / n)]);
+  } else {
+    let d = from, made = 0, guard = 0;
+    while (made < n && guard++ < 500) { if (ok(d)) { made++; addPart(`${base} ${start + made}`, d); } d = addDays(d, 1); }
   }
   $('#splitBox').open = false; renderParts();
 });
 
 function openForm(id) {
   const t = id ? tasks.find(x => x.id === id) : null;
-  editingId = t ? t.id : null;
+  editingId = t ? t.id : null; tplParts = null;
   $('#title').value = t ? t.title : '';
   formCat = t ? (t.cat ?? '') : (catFilter || cats[cats.length - 1]?.id || '');
   if (!t && !cats.some(c => c.id === formCat)) formCat = cats[0]?.id || '';
@@ -599,11 +667,15 @@ function openForm(id) {
   $('#notes').value = t ? (t.notes || '') : '';
   formParts = t ? children(t.id).sort((a, b) => (a.date || '9999').localeCompare(b.date || '9999') || (a.created || 0) - (b.created || 0)).map(c => ({ id: c.id, title: c.title, date: c.date || '', done: !!c.done })) : [];
   $('#partsField').hidden = !!(t && t.parentId);
-  $('#splitFrom').value = ''; $('#splitName').value = ''; $('#splitBox').open = false; $('#partNew').value = '';
+  $('#splitFrom').value = ''; $('#splitTo').value = ''; $('#splitName').value = ''; $('#splitBox').open = false; $('#partNew').value = '';
   $('#sheetTitle').textContent = t ? (t.parentId ? 'Editar parte' : 'Editar tarea') : 'Nueva tarea';
   $('#submitBtn').textContent = t ? 'Guardar' : 'Añadir';
   $('#deleteBtn').hidden = !t;
   $('#calRow').hidden = !(t && t.date);
+  $('#timerBtn').hidden = !t || t.done || children(t.id).length > 0;
+  $('#tplSave').hidden = !t || !!t.parentId;
+  $('#tplChips').hidden = !!t || !templates.length;
+  $('#tplChips').innerHTML = templates.map(p => `<button type="button" class="chip" data-tpl="${p.id}">📋 ${esc(p.name)}</button>`).join('');
   renderCatChips(); renderParts(); renderDetected();
   openSheet('#taskSheet');
   if (!t) setTimeout(() => $('#title').focus(), 60);
@@ -621,7 +693,7 @@ $('#taskSheet').addEventListener('submit', e => {
     monthDay: $('#repeat').value === 'mensual' ? Number($('#monthDay').value) : null, until: $('#repeat').value ? $('#until').value : '',
     minutes: formNoDate && Number($('#minutes').value) > 0 ? Number($('#minutes').value) : null,
     points: $('#points').value === '' ? null : Number($('#points').value),
-    remind: $('#remind').value === '' ? null : Number($('#remind').value), notes: $('#notes').value.trim(),
+    remind: $('#remind').value === '' ? null : Number($('#remind').value), notes: $('#notes').value.trim(), inbox: false,
   };
   if (!editingId) {
     const p = parseQuick(title, cats);
@@ -659,6 +731,56 @@ function saveParts(parent) {
 }
 $('#deleteBtn').addEventListener('click', () => { const id = editingId; closeSheets(); remove(id); });
 
+// ---------- Plantillas ----------
+// Guarda la tarea tal y como está en el formulario; las partes, con su día relativo a la fecha de la tarea
+$('#tplSave').addEventListener('click', () => {
+  const base = formNoDate ? '' : $('#date').value;
+  const name = $('#title').value.trim() || 'Plantilla';
+  const tpl = {
+    id: 'tp' + uid(), name,
+    task: { title: name, cat: formCat, noDate: formNoDate, time: $('#time').value, endTime: $('#endTime').value, prio: $('#prio').value,
+      repeat: $('#repeat').value, days: formDays, monthDay: $('#repeat').value === 'mensual' ? Number($('#monthDay').value) : null,
+      minutes: $('#minutes').value, points: $('#points').value, remind: $('#remind').value, notes: $('#notes').value.trim() },
+    parts: formParts.map(p => ({ title: p.title, offset: p.date && base ? Math.round((parseISO(p.date) - parseISO(base)) / 864e5) : null })),
+  };
+  templates = [...templates.filter(x => x.name !== name), tpl];
+  store.saveTemplates().catch(writeFailed);
+  showToast(`📋 Plantilla “${name}” guardada${tpl.parts.length ? ` con ${tpl.parts.length} partes` : ''}`);
+});
+$('#tplChips').addEventListener('click', e => {
+  const b = e.target.closest('[data-tpl]'); if (!b) return;
+  const p = templates.find(x => x.id === b.dataset.tpl); if (!p) return;
+  const t = p.task;
+  $('#title').value = t.title; formCat = t.cat ?? formCat; formNoDate = !!t.noDate;
+  if (!$('#date').value) $('#date').value = todayISO();
+  $('#time').value = t.time || ''; $('#endTime').value = t.endTime || ''; $('#prio').value = t.prio || 'normal';
+  $('#repeat').value = t.repeat || ''; formDays = [...(t.days || [])]; renderMonthDay(); if (t.monthDay) $('#monthDay').value = String(t.monthDay);
+  $('#minutes').value = t.minutes || ''; $('#points').value = t.points ?? ''; $('#remind').value = t.remind ?? ''; $('#notes').value = t.notes || '';
+  tplParts = p.parts;
+  placeTplParts();
+  renderCatChips(); renderParts(); renderDetected();
+  document.querySelectorAll('#tplChips .chip').forEach(c => c.setAttribute('aria-pressed', c === b));
+});
+// Las partes de la plantilla se recolocan si cambias la fecha
+let tplParts = null;
+function placeTplParts() {
+  if (!tplParts) return;
+  const base = formNoDate ? '' : $('#date').value;
+  formParts = tplParts.map(p => ({ id: 'nuevo-' + uid(), title: p.title, date: p.offset !== null && p.offset !== undefined && base ? addDays(base, p.offset) : '', done: false, isNew: true }));
+}
+$('#date').addEventListener('change', () => { if (tplParts && !editingId) { placeTplParts(); renderParts(); } });
+function renderTplSheet() {
+  $('#tplList').innerHTML = templates.length ? templates.map(p => `<div class="rwrow"><div><div class="n">📋 ${esc(p.name)}</div><div class="c">${esc(catOf(p.task.cat).name)}${p.parts.length ? ` · ${p.parts.length} partes` : ''}${p.task.repeat ? ' · se repite' : ''}</div></div><span></span><button type="button" class="x" data-tpldel="${p.id}" aria-label="Borrar plantilla">✕</button></div>`).join('')
+    : '<p class="hint">Todavía no tienes plantillas.</p>';
+}
+$('#openTpl').addEventListener('click', () => { renderTplSheet(); openSheet('#tplSheet'); });
+$('#tplList').addEventListener('click', e => {
+  const b = e.target.closest('[data-tpldel]'); if (!b) return;
+  const gone = templates.find(x => x.id === b.dataset.tpldel);
+  templates = templates.filter(x => x !== gone); store.saveTemplates().catch(writeFailed); renderTplSheet();
+  showToast(`Plantilla borrada: ${gone.name}`, () => { templates.push(gone); store.saveTemplates().catch(writeFailed); renderTplSheet(); });
+});
+
 // ---------- Calendario ----------
 $('#calIOS').addEventListener('click', async () => {
   const t = tasks.find(x => x.id === editingId); if (!t || !t.date) return;
@@ -669,6 +791,97 @@ $('#calIOS').addEventListener('click', async () => {
   setTimeout(() => URL.revokeObjectURL(a.href), 2000);
 });
 $('#calGoogle').addEventListener('click', () => { const t = tasks.find(x => x.id === editingId); if (t && t.date) window.open(googleURL(t), '_blank', 'noopener'); });
+
+// ---------- Temporizador de estudio ----------
+// El estado se guarda en el dispositivo, así sigue contando aunque cierres la app un rato
+const TKEY = 'mis-tareas-timer';
+let tm = null, tmTick = null, tmAudio = null, tmLock = null;
+const tmSave = () => { try { tm ? localStorage.setItem(TKEY, JSON.stringify(tm)) : localStorage.removeItem(TKEY); } catch {} };
+const tmElapsed = () => tm ? Date.now() - tm.start - tm.paused - (tm.pausedAt ? Date.now() - tm.pausedAt : 0) : 0;
+const mmss = ms => { const s = Math.max(0, Math.round(ms / 1000)); return `${pad(Math.floor(s / 60))}:${pad(s % 60)}`; };
+function beep() {
+  try { const o = tmAudio.createOscillator(), g = tmAudio.createGain(); o.frequency.value = 880; g.gain.value = .15; o.connect(g); g.connect(tmAudio.destination); o.start(); o.stop(tmAudio.currentTime + .4); } catch {}
+  navigator.vibrate?.([200, 100, 200]);
+}
+function creditFocus(min) {
+  if (!tm || min <= 0) return;
+  const t = tasks.find(x => x.id === tm.taskId), d = todayISO();
+  tm.total = (tm.total || 0) + min;
+  if (t) { t.focus = (t.focus || 0) + min; t.focusLog = { ...(t.focusLog || {}), [d]: (t.focusLog?.[d] || 0) + min }; store.put(t).catch(writeFailed); }
+  stats.focus[d] = (stats.focus[d] || 0) + min; store.addFocus(min, d).catch(writeFailed);
+  addPoints(min);
+}
+function openTimer(id) {
+  const t = tasks.find(x => x.id === id); if (!t) return;
+  closeSheets(true);
+  if (!tm || tm.taskId !== id) { if (tm) stopTimer(false); tm = { taskId: id, title: t.title, mode: '25/5', phase: 'idle', round: 1, start: 0, paused: 0, pausedAt: null, total: 0 }; }
+  showTimer();
+}
+function showTimer() {
+  $('#timer').hidden = false; drawTimer();
+  clearInterval(tmTick); tmTick = setInterval(drawTimer, 500);
+}
+function lens() { const [f, b] = tm.mode === 'free' ? [0, 0] : tm.mode.split('/').map(Number); return { f: f * 60000, b: (tm.round % 4 === 0 && f === 25 ? 15 : b) * 60000 }; }
+function drawTimer() {
+  if (!tm) return;
+  const L = lens(), el = tmElapsed();
+  // Cambios de fase (también los que pasaron con la app cerrada)
+  let guard = 0;
+  // (espera a que estén cargadas las tareas y los puntos para no perder los minutos)
+  while (loaded && (store.fb || !configured) && tm.mode !== 'free' && !tm.pausedAt && tm.phase !== 'idle' && guard++ < 50) {
+    const len = tm.phase === 'focus' ? L.f : lens().b, e = tmElapsed();
+    if (e < len) break;
+    if (tm.phase === 'focus') { creditFocus(Math.round(len / 60000)); tm.phase = 'break'; }
+    else { tm.phase = 'focus'; tm.round++; }
+    tm.start = Date.now() - (e - len); tm.paused = 0; tmSave(); beep();
+  }
+  const running = tm.phase !== 'idle';
+  const len = tm.phase === 'break' ? lens().b : L.f;
+  $('#timer').classList.toggle('break', tm.phase === 'break');
+  $('#timer').classList.toggle('paused', !!tm.pausedAt);
+  $('#tmTask').textContent = tm.title;
+  $('#tmPhase').textContent = !running ? 'Elige cómo quieres concentrarte' : tm.phase === 'break' ? `Descanso${tm.round % 4 === 0 && tm.mode === '25/5' ? ' largo' : ''}` : tm.mode === 'free' ? 'Concentración libre' : `Concentración · ronda ${tm.round}`;
+  $('#tmClock').textContent = !running ? (tm.mode === 'free' ? '00:00' : mmss(L.f)) : tm.mode === 'free' ? mmss(el) : mmss(len - tmElapsed());
+  const cur = tm.phase === 'focus' ? Math.floor(tmElapsed() / 60000) : 0;
+  const tot = (tm.total || 0) + (tm.mode === 'free' ? Math.floor(el / 60000) : cur);
+  const t = tasks.find(x => x.id === tm.taskId);
+  $('#tmTotal').textContent = running ? `Hoy en esta tarea: ${fmtDur(tot) || '0 min'} · total ${fmtDur((t?.focus || 0) + (tm.mode === 'free' ? Math.floor(el / 60000) : cur)) || '0 min'}` : (t?.focus ? `Llevas ${fmtDur(t.focus)} en esta tarea. Cada minuto concentrada suma 1 ⭐.` : 'Cada minuto concentrada suma 1 ⭐.');
+  document.querySelectorAll('#tmModes [data-tm]').forEach(b => b.setAttribute('aria-pressed', b.dataset.tm === tm.mode));
+  $('#tmModes').hidden = running; $('#tmStart').hidden = running; $('#tmRun').hidden = !running; $('#tmDone').hidden = !running;
+  $('#tmPause').textContent = tm.pausedAt ? 'Seguir' : 'Pausa';
+  $('#tmClose').textContent = running ? 'Seguir en segundo plano' : 'Cerrar';
+}
+async function wake(on) {
+  try { if (on && !tmLock && navigator.wakeLock) tmLock = await navigator.wakeLock.request('screen'); else if (!on && tmLock) { await tmLock.release(); tmLock = null; } } catch { tmLock = null; }
+}
+function stopTimer(complete) {
+  if (!tm) return;
+  if (tm.phase === 'focus') creditFocus(Math.floor(tmElapsed() / 60000));
+  const total = tm.total || 0, id = tm.taskId, title = tm.title;
+  tm = null; tmSave(); clearInterval(tmTick); wake(false);
+  $('#timer').hidden = true;
+  if (complete) { const t = tasks.find(x => x.id === id); if (t && !t.done) toggle(id); }
+  else if (total) showToast(`⏱ ${fmtDur(total)} en ${title} · +${total} ⭐`);
+  render();
+}
+$('#tmModes').addEventListener('click', e => { const b = e.target.closest('[data-tm]'); if (b && tm) { tm.mode = b.dataset.tm; drawTimer(); } });
+$('#tmStart').addEventListener('click', () => {
+  try { tmAudio ||= new (window.AudioContext || window.webkitAudioContext)(); tmAudio.resume?.(); } catch {}
+  tm.phase = 'focus'; tm.start = Date.now(); tm.paused = 0; tm.pausedAt = null; tmSave(); wake(true); drawTimer();
+});
+$('#tmPause').addEventListener('click', () => {
+  if (tm.pausedAt) { tm.paused += Date.now() - tm.pausedAt; tm.pausedAt = null; wake(true); } else { tm.pausedAt = Date.now(); wake(false); }
+  tmSave(); drawTimer();
+});
+$('#tmStop').addEventListener('click', () => stopTimer(false));
+$('#tmDone').addEventListener('click', () => stopTimer(true));
+$('#tmClose').addEventListener('click', () => { if (tm && tm.phase === 'idle') tm = null; tmSave(); clearInterval(tmTick); $('#timer').hidden = true; render(); });
+$('#timerBtn').addEventListener('click', () => openTimer(editingId));
+document.addEventListener('visibilitychange', () => { if (!document.hidden && tm && tm.phase !== 'idle' && !tm.pausedAt) wake(true); });
+// Si había un temporizador en marcha, vuelve a aparecer al abrir la app
+try { const saved = JSON.parse(localStorage.getItem(TKEY)); if (saved && saved.phase !== 'idle') { tm = saved; setTimeout(showTimer, 0); } } catch {}
+const timerBannerHTML = () => tm && tm.phase !== 'idle' && $('#timer').hidden
+  ? `<div class="banner"><span>⏱ ${esc(tm.title)} · ${tm.pausedAt ? 'en pausa' : tm.phase === 'break' ? 'descanso' : 'concentrándote'}</span><button class="btn primary small" data-act="timer" data-id="${tm.taskId}">Volver</button></div>` : '';
 
 // ---------- Completar, deshacer y borrar ----------
 // Marca una tarea como hecha o pendiente y suma/resta sus puntos
@@ -804,20 +1017,53 @@ $('#searchInput').addEventListener('input', () => { query = $('#searchInput').va
 const matches = (t, q) => fold([t.title, t.notes].join(' ')).includes(fold(q));
 
 // ---------- Copias ----------
-$('#exportBtn').addEventListener('click', async () => {
-  const name = `mis-tareas-${todayISO()}.json`;
-  const blob = new Blob([JSON.stringify(tasks.map(t => ({ id: t.id, ...clean(t) })), null, 2)], { type: 'application/json' });
+// Copia completa: tareas, hábitos, categorías, puntos, recompensas y plantillas.
+// En el iPhone se abre el menú Compartir: elige "Guardar en Archivos" o Google Drive.
+async function exportBackup() {
+  const name = `mis-tareas-copia-${todayISO()}.json`;
+  const data = { app: 'mis-tareas', version: 2, exported: new Date().toISOString(),
+    tasks: tasks.map(t => ({ id: t.id, ...clean(t) })), habits, cats, stats, rewards, templates };
+  const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
   const file = new File([blob], name, { type: 'application/json' });
-  if (navigator.canShare?.({ files: [file] })) { try { await navigator.share({ files: [file], title: 'Copia de Mis Tareas' }); return; } catch (e) { if (e.name === 'AbortError') return; } }
+  const done = () => { try { localStorage.setItem('last-backup', String(Date.now())); } catch {} render(); };
+  if (navigator.canShare?.({ files: [file] })) { try { await navigator.share({ files: [file], title: 'Copia de Mis Tareas' }); done(); return; } catch (e) { if (e.name === 'AbortError') return; } }
   const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = name; a.click();
-  setTimeout(() => URL.revokeObjectURL(a.href), 1000);
-});
+  setTimeout(() => URL.revokeObjectURL(a.href), 1000); done();
+}
+$('#exportBtn').addEventListener('click', exportBackup);
+// Recordatorio semanal de copia
+function backupBannerHTML() {
+  if (!tasks.length) return '';
+  let last = 0; try { last = Number(localStorage.getItem('last-backup')) || 0; } catch {}
+  if (!last) { try { localStorage.setItem('last-backup', String(Date.now())); } catch {} return ''; } // empieza a contar desde hoy
+  const days = Math.floor((Date.now() - last) / 864e5);
+  return days >= 7 ? `<div class="banner"><span>Hace ${days} días de tu última copia de seguridad</span><button class="btn primary small" data-act="backup">Guardar</button></div>` : '';
+}
 $('#importBtn').addEventListener('click', () => $('#importFile').click());
 $('#importFile').addEventListener('change', async e => {
   const f = e.target.files[0]; e.target.value = ''; if (!f) return;
   const info = $('#importInfo');
   try {
     const data = JSON.parse(await f.text());
+    // Copia completa de la app
+    if (data && data.app === 'mis-tareas' && Array.isArray(data.tasks)) {
+      const list = data.tasks.filter(x => x && x.title).map(x => ({ ...x, id: String(x.id || uid()).replace(/[^\w.~:@+-]/g, '_') }));
+      list.forEach(x => { const i = tasks.findIndex(t => t.id === x.id); if (i >= 0) tasks[i] = x; else tasks.push(x); });
+      await store.putMany(list);
+      (data.habits || []).forEach(h => { if (!h?.id) return; const c = { id: h.id, ...cleanHabit(h) }; const i = habits.findIndex(x => x.id === c.id); if (i >= 0) habits[i] = c; else habits.push(c); store.putHabit(c).catch(writeFailed); });
+      if (Array.isArray(data.cats) && data.cats.length) await store.saveCats(data.cats).catch(writeFailed);
+      if (data.rewards) { rewards = normRewards(data.rewards); store.saveRewards().catch(writeFailed); }
+      if (Array.isArray(data.templates)) { templates = normTemplates(data.templates); store.saveTemplates().catch(writeFailed); }
+      info.textContent = `Copia restaurada: ${list.length} tareas y ${(data.habits || []).length} hábitos. Los puntos no se tocan para no sumarlos dos veces.`;
+      render(); return;
+    }
+    // Un archivo de hábitos o rutinas: {"habits":[…]}
+    if (data && !Array.isArray(data) && Array.isArray(data.habits)) {
+      const base = Date.now(), list = data.habits.filter(h => h && h.name).map((h, i) => ({ id: String(h.id || 'h' + uid()).replace(/[^\w.~:@+-]/g, '_'), ...cleanHabit({ ...h, order: h.order || base + i }) }));
+      list.forEach(h => { const i = habits.findIndex(x => x.id === h.id); if (i >= 0) habits[i] = h; else habits.push(h); store.putHabit(h).catch(writeFailed); });
+      info.textContent = `Listo: ${list.length} ${list.length === 1 ? 'hábito importado' : 'hábitos o rutinas importados'}. Míralos en la pestaña Hábitos.`;
+      render(); return;
+    }
     if (!Array.isArray(data)) throw 0;
     const list = data.filter(x => x && x.title).map(x => ({ ...x, id: String(x.id || uid()).replace(/[^\w.~:@+-]/g, '_') }));
     list.forEach(x => migrated.delete(x.id));
@@ -834,8 +1080,15 @@ $('#importFile').addEventListener('change', async e => {
 const habitPoints = h => Number(h.minutes) > 0 ? Math.round(Number(h.minutes)) : 10;
 const habitOK = (h, d) => (h.log[d] || 0) === 1;
 const weekCount = (h, mon) => { let n = 0; for (let i = 0; i < 7; i++) if (habitOK(h, addDays(mon, i))) n++; return n; };
+// Una rutina solo cuenta los días de la semana que le tocan
+const applies = (h, d) => h.kind !== 'routine' || !h.days?.length || h.days.includes(parseISO(d).getDay());
 function habitStreak(h) {
   const today = todayISO();
+  if (h.kind === 'routine') {
+    let d = habitOK(h, today) || !applies(h, today) ? today : addDays(today, -1), n = 0, g = 0;
+    while (g++ < 1000) { if (!applies(h, d)) { d = addDays(d, -1); continue; } if (!habitOK(h, d)) break; n++; d = addDays(d, -1); }
+    return n;
+  }
   if (h.freq === 'weekly') {
     let w = mondayOf(today), n = 0;
     if (weekCount(h, w) < h.target) w = addDays(w, -7);
@@ -856,7 +1109,7 @@ function habitBest(h) {
 const wakeTarget = (h, day) => [0, 6].includes(parseISO(day).getDay()) ? h.wakeWe : h.wakeWk;
 // Hora de acostarse en minutos, contando las horas de madrugada como "después de medianoche"
 const bedMin = hm => { const m = toMin(hm); return m < 12 * 60 ? m + 1440 : m; };
-const fmtDur = m => `${Math.floor(m / 60)} h${m % 60 ? ` ${m % 60} min` : ''}`;
+const fmtDur = m => m < 60 ? `${m} min` : `${Math.floor(m / 60)} h${m % 60 ? ` ${m % 60} min` : ''}`;
 function judgeSleep(h, day, bed, wake) {
   const slept = (toMin(wake) + 1440 - bedMin(bed)) % 1440 || 1440;
   const bedOK = bedMin(bed) <= bedMin(h.bed) + h.tol;
@@ -895,10 +1148,101 @@ function sleepRowHTML(h) {
         <button class="btn primary" data-act="slsave" data-id="${h.id}">${n ? 'Cambiar' : 'Apuntar'}</button>
       </div>
       ${r ? `<div class="sleepres ${r.ok ? 'ok' : 'bad'}">${r.ok ? `✓ Cumplida · dormiste ${fmtDur(r.slept)}` : `✗ ${cap(r.fails.join(', '))}`} <button class="btn ghost small" data-act="slclear" data-id="${h.id}">Borrar</button></div>` : ''}
+      ${sleepStatsHTML(h)}
     </div></div>`;
 }
+let sleepStatsOpen = false;
+$('#list').addEventListener('toggle', e => { if (e.target.classList?.contains('sleepstats')) sleepStatsOpen = e.target.open; }, true);
+// Estadísticas de las últimas 14 noches: horas dormidas (barras) y hora de acostarse
+function sleepStatsHTML(h) {
+  const today = todayISO(), days = [...Array(14)].map((_, i) => addDays(today, i - 13));
+  const nights = days.map(d => { const n = h.nights[d]; return n ? { d, ...n, ...judgeSleep(h, d, n.bed, n.wake) } : { d }; });
+  const logged = nights.filter(n => n.bed);
+  if (!logged.length) return '';
+  const avgSlept = Math.round(logged.reduce((s, n) => s + n.slept, 0) / logged.length);
+  const avgBed = Math.round(logged.reduce((s, n) => s + bedMin(n.bed), 0) / logged.length) % 1440;
+  const okPct = Math.round(logged.filter(n => n.ok).length / logged.length * 100);
+  const maxH = Math.max(h.hours * 60 + 60, ...logged.map(n => n.slept));
+  const target = h.hours * 60 / maxH * 100;
+  return `<details class="sleepstats" ${sleepStatsOpen ? 'open' : ''}><summary>Estadísticas · últimas 2 semanas</summary>
+    <div class="kpis"><div class="kpi"><b>${fmtDur(avgSlept)}</b><span>de media</span></div><div class="kpi"><b>${pad(Math.floor(avgBed / 60))}:${pad(avgBed % 60)}</b><span>te acuestas</span></div><div class="kpi"><b>${okPct}%</b><span>noches cumplidas</span></div></div>
+    <div class="sbars">${nights.map(n => `<div class="sb ${n.d === today ? 'today' : ''}" title="${n.bed ? `${n.bed}–${n.wake} · ${fmtDur(n.slept)}` : 'Sin apuntar'}">
+      <div class="col"><i class="${n.bed ? (n.ok ? 'ok' : 'bad') : ''}" style="height:${n.bed ? n.slept / maxH * 100 : 0}%"></i><b style="bottom:${target}%"></b></div>
+      <span>${DAY_LETTER[parseISO(n.d).getDay()]}</span><span class="bt">${n.bed || ''}</span></div>`).join('')}</div>
+    <p class="hint">Barras: horas dormidas (verde si cumpliste, rojo si no); la línea marca tus ${fmtDur(h.hours * 60)}. Debajo, a qué hora te acostaste.</p>
+  </details>`;
+}
+// --- Rutinas: pasos con hora que se marcan cada día ---
+// Cada paso vale los minutos hasta el siguiente (máx. 60); el último, 10
+const stepPoints = (h, i) => { const s = h.steps[i], n = h.steps[i + 1]; return n ? Math.max(1, Math.min(60, toMin(n.time) - toMin(s.time))) : 10; };
+const stepsToday = h => h.stepsDone[todayISO()] || [];
+function toggleStep(hid, sid) {
+  const h = habits.find(x => x.id === hid); if (!h) return;
+  const d = todayISO(), done = new Set(stepsToday(h)), i = h.steps.findIndex(s => s.id === sid); if (i < 0) return;
+  const was = done.has(sid);
+  was ? done.delete(sid) : done.add(sid);
+  addPoints(was ? -stepPoints(h, i) : stepPoints(h, i));
+  const ids = h.steps.map(s => s.id).filter(x => done.has(x)), all = ids.length === h.steps.length;
+  const prevAll = h.log[d] === 1;
+  h.stepsDone[d] = ids; if (all) h.log[d] = 1; else delete h.log[d];
+  store.setRoutineDay(h, d, ids, all ? 1 : null).catch(writeFailed);
+  if (!was) {
+    navigator.vibrate?.(10);
+    const s = habitStreak(h);
+    showToast(all && !prevAll ? `¡${h.name} completa! · ${ids.length}/${h.steps.length}${s >= 2 ? ` · 🔥 ${s} días` : ''}` : `+${stepPoints(h, i)} ⭐ · ${h.steps[i].text} · ${ids.length}/${h.steps.length}`, () => toggleStep(hid, sid));
+  }
+  render();
+}
+function routineRowHTML(h) {
+  const today = todayISO(), done = new Set(stepsToday(h)), s = habitStreak(h), b = habitBest(h), now = toMin(nowHM());
+  const on = applies(h, today);
+  const daysTxt = h.days?.length && h.days.length < 7 ? DAY_ORDER.filter(d => h.days.includes(d)).map(d => DAY_LETTER[d]).join(' ') : 'Todos los días';
+  return `<div class="hab routine" style="--c:var(--accent)">
+    <div class="hb"><div class="n" data-act="hedit" data-id="${h.id}">🕘 ${esc(h.name)} <span class="m">· ${done.size}/${h.steps.length}</span></div>
+      <div class="m">${daysTxt} · ${h.steps[0]?.time || ''}–${h.steps[h.steps.length - 1]?.time || ''} · ${s ? `🔥 ${s} ${s === 1 ? 'día' : 'días'}` : 'Sin racha todavía'}${b > s ? ` · récord ${b}` : ''}</div>
+      ${on ? `<ul class="steps-list">${h.steps.map((st, i) => {
+        const next = h.steps[i + 1], cur = toMin(st.time) <= now && (!next || now < toMin(next.time));
+        return `<li><button class="${done.has(st.id) ? 'on' : ''} ${cur ? 'cur' : ''}" data-act="rstep" data-id="${h.id}" data-step="${st.id}"><span class="box">${TICK('var(--surface)')}</span><span class="tm">${st.time}</span><span>${esc(st.text)}</span></button></li>`;
+      }).join('')}</ul>` : '<p class="hint">Hoy no toca.</p>'}
+    </div></div>`;
+}
+// --- Ahora toca: lo que está pasando según las horas, y lo siguiente ---
+function nowItems() {
+  const today = todayISO(), items = [];
+  tasks.filter(t => !t.done && t.date === today && t.time).forEach(t => {
+    const s = toMin(t.time); let e = t.endTime ? toMin(t.endTime) : s + 60; if (e <= s) e += 1440;
+    items.push({ s, e, title: t.title, sub: `${t.time}${t.endTime ? '–' + t.endTime : ''} · ${catOf(t.cat).name}`, act: `<button class="check" style="--c:${colorVar(catOf(t.cat).color)}" data-act="nowdone" data-id="${t.id}" aria-label="Hecha: ${esc(t.title)}">${TICK('var(--surface)')}</button>`, timer: t.id });
+  });
+  habits.filter(h => h.kind === 'routine' && applies(h, today)).forEach(h => {
+    const done = new Set(stepsToday(h));
+    h.steps.forEach((st, i) => {
+      if (done.has(st.id)) return;
+      const n = h.steps[i + 1], s = toMin(st.time), e = n ? toMin(n.time) : s + 30;
+      items.push({ s, e, title: st.text, sub: `${st.time}${n ? '–' + n.time : ''} · ${h.name}`, act: `<button class="check" style="--c:var(--accent)" data-act="rstep" data-id="${h.id}" data-step="${st.id}" aria-label="Hecho: ${esc(st.text)}">${TICK('var(--surface)')}</button>` });
+    });
+  });
+  return items.sort((a, b) => a.s - b.s);
+}
+function nowHTML() {
+  const now = toMin(nowHM()), items = nowItems();
+  const cur = items.filter(i => i.s <= now && now < i.e), next = items.find(i => i.s > now);
+  if (!cur.length && !next) return '';
+  const row = (i, isNext) => `<div class="nowrow ${isNext ? 'next' : ''}"><div><div class="t">${esc(i.title)}</div><div class="m">${esc(i.sub)}</div></div>
+    <div class="acts">${i.timer && !isNext ? `<button class="iconbtn" data-act="timer" data-id="${i.timer}" aria-label="Empezar temporizador">⏱</button>` : ''}${isNext ? '' : i.act}</div></div>`;
+  const inMin = next ? next.s - now : 0;
+  return `<section class="now"><span class="lbl">Ahora · ${nowHM()}</span>
+    ${cur.length ? cur.slice(0, 3).map(i => row(i, false)).join('') : '<div class="nowrow"><div class="m">Nada programado ahora mismo</div></div>'}
+    ${next ? `<span class="lbl next">Luego · ${inMin < 60 ? `en ${inMin} min` : `a las ${pad(Math.floor(next.s / 60) % 24)}:${pad(next.s % 60)}`}</span>${row(next, true)}` : ''}</section>`;
+}
+// Mientras miras Hoy, se actualiza cada minuto
+setInterval(() => {
+  if (view === 'hoy' && !query && !document.querySelector('.sheet.show') && $('#timer').hidden && !document.activeElement?.matches?.('input, textarea')) {
+    const y = $('#scroller').scrollTop; render(); $('#scroller').scrollTop = y;
+  }
+}, 60000);
+const nowHM = () => { const d = new Date(); return `${pad(d.getHours())}:${pad(d.getMinutes())}`; };
 const SLEEP_DEFAULT = { name: 'Rutina de sueño', kind: 'sleep', minutes: 20, bed: '23:30', wakeWk: '07:15', wakeWe: '08:15', hours: 7.5, tol: 15 };
-const habitDoneToday = h => (h.kind === 'quit' || h.kind === 'sleep') ? h.log[todayISO()] !== undefined
+const habitDoneToday = h => h.kind === 'routine' ? (h.log[todayISO()] === 1 || !applies(h, todayISO())) : (h.kind === 'quit' || h.kind === 'sleep') ? h.log[todayISO()] !== undefined
   : h.freq === 'weekly' ? (habitOK(h, todayISO()) || weekCount(h, mondayOf(todayISO())) >= h.target) : habitOK(h, todayISO());
 const sortedHabits = () => [...habits].sort((a, b) => a.order - b.order);
 function setHabit(id, val) {
@@ -945,6 +1289,8 @@ function habitsViewHTML() {
       <button class="btn block" data-act="hnew" style="margin-top:8px">+ Nuevo hábito</button>`;
   }
   const sec = (title, list) => list.length ? `<h2 class="group"><span>${title}</span><span>${list.length}</span></h2><div class="habs">${list.map(habitRowHTML).join('')}</div>` : '';
+  const routines = all.filter(h => h.kind === 'routine');
+  if (routines.length) html += `<h2 class="group"><span>Rutinas</span><span>${routines.length}</span></h2><div class="habs">${routines.map(routineRowHTML).join('')}</div>`;
   const sleep = all.filter(h => h.kind === 'sleep');
   html += sleep.length ? `<h2 class="group"><span>Sueño</span></h2><div class="habs">${sleep.map(sleepRowHTML).join('')}</div>`
     : `<button class="btn block" data-act="hsleep" style="margin-top:10px">🌙 Añadir mi rutina de sueño (23:30 · 7:15)</button>`;
@@ -972,16 +1318,38 @@ function renderHabitChips() {
   $('#hFreqField').hidden = hKind !== 'build';
   $('#hTargetField').hidden = hKind !== 'build' || hFreq !== 'weekly';
   $('#hSleepFields').hidden = hKind !== 'sleep';
+  $('#hRoutineFields').hidden = hKind !== 'routine';
+  if (hKind === 'routine') renderSteps();
   $('#hMinLabel').textContent = hKind === 'quit' ? 'Puntos por cada día que lo evitas' : hKind === 'sleep' ? 'Puntos por cada noche cumplida' : 'Minutos (= puntos al cumplirlo)';
   ['hBed', 'hWakeWk', 'hWakeWe'].forEach(k => { $('#' + k + 'Text').textContent = $('#' + k).value || '—'; });
 }
 ['hBed', 'hWakeWk', 'hWakeWe'].forEach(k => $('#' + k).addEventListener('change', renderHabitChips));
+let hSteps = [], hRDays = [];
+function renderSteps() {
+  $('#hRDays').innerHTML = DAY_ORDER.map(d => `<button type="button" class="chip" data-rday="${d}" aria-pressed="${hRDays.includes(d)}">${DAY_LETTER[d]}</button>`).join('');
+  $('#hSteps').innerHTML = hSteps.map((s, i) => `<div class="steprow" data-i="${i}">
+    <label class="pickbtn"><span>${s.time || '—'}</span><input type="time" value="${s.time}" data-st="time" aria-label="Hora del paso"></label>
+    <input class="inp" type="text" value="${esc(s.text)}" data-st="text" placeholder="Qué haces" aria-label="Paso">
+    <button type="button" class="x" data-st="del" aria-label="Quitar paso">✕</button></div>`).join('');
+}
+$('#hRDays').addEventListener('click', e => { const b = e.target.closest('[data-rday]'); if (!b) return; const d = +b.dataset.rday; hRDays = hRDays.includes(d) ? hRDays.filter(x => x !== d) : [...hRDays, d]; renderSteps(); });
+$('#hStepAdd').addEventListener('click', () => {
+  const last = hSteps[hSteps.length - 1]?.time;
+  const t = last ? (() => { const m = Math.min(toMin(last) + 30, 1439); return `${pad(Math.floor(m / 60))}:${pad(m % 60)}`; })() : '08:00';
+  hSteps.push({ id: Math.random().toString(36).slice(2, 9), time: t, text: '' }); renderSteps();
+  $('#hSteps').lastElementChild?.querySelector('[data-st=text]')?.focus();
+});
+$('#hSteps').addEventListener('input', e => { const r = e.target.closest('.steprow'); if (r && e.target.dataset.st === 'text') hSteps[+r.dataset.i].text = e.target.value; });
+$('#hSteps').addEventListener('change', e => { const r = e.target.closest('.steprow'); if (r && e.target.dataset.st === 'time') { hSteps[+r.dataset.i].time = e.target.value; renderSteps(); } });
+$('#hSteps').addEventListener('click', e => { const b = e.target.closest('[data-st=del]'); if (b) { hSteps.splice(+b.closest('.steprow').dataset.i, 1); renderSteps(); } });
 function openHabit(id) {
   const h = id ? habits.find(x => x.id === id) : null;
   editingHabit = h ? h.id : null; hKind = h ? h.kind : 'build'; hFreq = h ? h.freq : 'daily';
   $('#hName').value = h ? h.name : ''; $('#hTarget').value = h ? h.target : 3; $('#hMin').value = h ? h.minutes : 10;
   const sl = h && h.kind === 'sleep' ? h : SLEEP_DEFAULT;
   $('#hBed').value = sl.bed; $('#hWakeWk').value = sl.wakeWk; $('#hWakeWe').value = sl.wakeWe; $('#hHours').value = sl.hours; $('#hTol').value = sl.tol;
+  hSteps = h && h.kind === 'routine' ? h.steps.map(s => ({ ...s })) : [];
+  hRDays = h && h.kind === 'routine' ? [...(h.days || [])] : [1, 2, 3, 4, 5, 6, 0];
   $('#habitTitle').textContent = h ? 'Editar hábito' : 'Nuevo hábito';
   $('#hSave').textContent = h ? 'Guardar' : 'Crear hábito';
   $('#hDelete').hidden = !h; $('#hDelete').textContent = 'Borrar hábito'; hDelArmed = false;
@@ -1000,6 +1368,11 @@ $('#habitSheet').addEventListener('submit', e => {
   e.preventDefault();
   const name = $('#hName').value.trim(); if (!name) { $('#hName').focus(); return; }
   const data = { name, kind: hKind, freq: hFreq, target: Number($('#hTarget').value) || 3, minutes: Number($('#hMin').value) || 10 };
+  if (hKind === 'routine') {
+    const steps = hSteps.filter(s => s.text.trim() && s.time).map(s => ({ ...s, text: s.text.trim() }));
+    if (!steps.length) { $('#hStepAdd').focus(); return; }
+    Object.assign(data, { steps, days: hRDays.length === 7 ? [] : hRDays });
+  }
   if (hKind === 'sleep') Object.assign(data, { bed: $('#hBed').value, wakeWk: $('#hWakeWk').value, wakeWe: $('#hWakeWe').value, hours: Number($('#hHours').value), tol: Number($('#hTol').value) });
   let h = editingHabit ? habits.find(x => x.id === editingHabit) : null;
   if (h) Object.assign(h, cleanHabit({ ...h, ...data }));
@@ -1025,6 +1398,12 @@ function buildProgress() {
   habits.forEach(h => {
     const key = 'h:' + h.id;
     if (h.freq === 'weekly') { Object.keys(h.log).forEach(d => { if (h.log[d] === 1 && d <= today) add(key, d, 1, 1); }); return; }
+    if (h.kind === 'routine') {
+      // Cada paso cuenta: hacer 6 de 8 pasos ese día = 75 %
+      let d = isoDate(new Date(h.order)), n = 0;
+      while (d <= today && n++ < 800) { if (applies(h, d) && h.steps.length) add(key, d, h.steps.length, (h.stepsDone[d] || []).length); d = addDays(d, 1); }
+      return;
+    }
     const start = isoDate(new Date(h.order)), first = Object.keys(h.log).sort()[0];
     let d = first && first < start ? first : start, n = 0;
     while (d <= today && n++ < 800) { add(key, d, 1, h.log[d] === 1 ? 1 : 0); d = addDays(d, 1); }
@@ -1041,9 +1420,10 @@ function summaryHTML() {
   const byCatCount = {}; doneWeek.forEach(t => { byCatCount[t.cat || ''] = (byCatCount[t.cat || ''] || 0) + 1; });
   const maxC = Math.max(1, ...Object.values(byCatCount));
   return `<section class="summary">
-    <div class="rato-head"><h2>Esta semana</h2><button class="btn ghost small" data-act="goal">Objetivo: ${stats.goal} ⭐/día</button></div>
+    <div class="rato-head"><h2>Esta semana</h2><span><button class="btn ghost small" data-act="rewards">🎁 ${balance()} ⭐</button><button class="btn ghost small" data-act="goal">Objetivo: ${stats.goal}/día</button></span></div>
     <div class="kpis"><div class="kpi"><b>${pointsOn(today)}</b><span>puntos hoy</span></div><div class="kpi"><b>${ptsWeek}</b><span>puntos semana</span></div><div class="kpi"><b>${doneWeek.length}</b><span>tareas hechas</span></div></div>
     <div class="weekbars">${week.map((d, i) => { const p = pointsOn(d); return `<div class="wb ${d === today ? 'today' : ''}"><span class="v">${p || ''}</span><div class="col"><i style="height:${p / maxP * 100}%"></i><b style="bottom:${stats.goal / maxP * 100}%"></b></div><span>${DAY_LETTER[DAY_ORDER[i]]}</span></div>`; }).join('')}</div>
+    ${(() => { const f = week.reduce((s, d) => s + (Number(stats.focus?.[d]) || 0), 0); return f ? `<p class="hint">⏱ ${fmtDur(f)} de concentración esta semana</p>` : ''; })()}
     ${Object.keys(byCatCount).length ? `<div class="catbars">${Object.entries(byCatCount).sort((a, b) => b[1] - a[1]).map(([id, n]) => { const c = catOf(id); return `<div class="catbar" style="--c:${colorVar(c.color)}"><span>${esc(c.name)}</span><div class="bar"><i style="width:${n / maxC * 100}%"></i></div><span>${n}</span></div>`; }).join('')}</div>` : ''}
   </section>`;
 }
@@ -1087,6 +1467,21 @@ function areasHTML(p) {
   html += sortedHabits().map(h => row(h.name, h.kind === 'quit' ? 'var(--k-turquesa)' : 'var(--k-verde)', p.area['h:' + h.id])).join('');
   return html ? `<section class="summary"><div class="rato-head"><h2>Por apartado</h2><span class="hint">este mes</span></div><div class="areas">${html}</div></section>` : '';
 }
+// Concentración por asignatura: las partes cuentan para su tarea grande (p. ej. "Examen Geometría")
+function focusHTML() {
+  const today = todayISO(), mon = mondayOf(today), m1 = today.slice(0, 8) + '01', groups = {};
+  tasks.forEach(t => Object.entries(t.focusLog || {}).forEach(([d, v]) => {
+    if (d < m1 && d < mon) return;
+    const parent = t.parentId ? tasks.find(p => p.id === t.parentId) : null, key = parent ? parent.id : t.id;
+    const g = (groups[key] ||= { name: (parent || t).title, cat: (parent || t).cat, week: 0, month: 0 });
+    if (d >= mon) g.week += v; if (d >= m1) g.month += v;
+  }));
+  const list = Object.values(groups).filter(g => g.week || g.month).sort((a, b) => b.month - a.month || b.week - a.week).slice(0, 10);
+  if (!list.length) return '';
+  const max = Math.max(...list.map(g => g.month), 1);
+  return `<section class="summary"><div class="rato-head"><h2>Concentración</h2><span class="hint">semana · mes</span></div>
+    <div class="focusrows">${list.map(g => `<div class="focusrow"><span>${esc(g.name)}</span><span>${fmtDur(g.week)} · ${fmtDur(g.month)}</span><div class="bar"><i style="width:${g.month / max * 100}%;background:${colorVar(catOf(g.cat).color)}"></i></div></div>`).join('')}</div></section>`;
+}
 function openGoal() { $('#goalInput').value = stats.goal; $('#goalMsg').hidden = true; openSheet('#goalSheet'); }
 $('#goalForm').addEventListener('submit', e => {
   e.preventDefault();
@@ -1095,6 +1490,54 @@ $('#goalForm').addEventListener('submit', e => {
   $('#goalMsg').textContent = 'Objetivo guardado.'; $('#goalMsg').hidden = false; render();
 });
 $('#openGoal').addEventListener('click', openGoal);
+
+function renderLook() {
+  document.querySelectorAll('#lookTheme [data-v]').forEach(b => b.setAttribute('aria-pressed', b.dataset.v === look.theme));
+  $('#lookAccent').innerHTML = Object.entries(ACCENTS).map(([k, v]) =>
+    `<button type="button" class="chip" data-v="${k}" aria-pressed="${look.accent === k}"><span class="dot" style="background:${v.l[0]};width:14px;height:14px"></span>${cap(k)}</button>`).join('');
+}
+const saveLook = () => { try { localStorage.setItem('mis-tareas-look', JSON.stringify(look)); } catch {} applyLook(); renderLook(); };
+$('#openLook').addEventListener('click', () => { renderLook(); openSheet('#lookSheet'); });
+$('#lookTheme').addEventListener('click', e => { const b = e.target.closest('[data-v]'); if (b) { look.theme = b.dataset.v; saveLook(); } });
+$('#lookAccent').addEventListener('click', e => { const b = e.target.closest('[data-v]'); if (b) { look.accent = b.dataset.v; saveLook(); } });
+
+// ---------- Recompensas: se pagan con los puntos ganados ----------
+const earned = () => Math.round(Object.values(stats.days).reduce((s, v) => s + (Number(v) || 0), 0));
+const spent = () => rewards.redeemed.reduce((s, r) => s + r.cost, 0);
+const balance = () => earned() - spent();
+let rwArmed = null;
+function renderRewards() {
+  const bal = balance();
+  $('#rwBalance').textContent = bal; $('#rwEarned').textContent = earned(); $('#rwSpent').textContent = spent();
+  $('#rwList').innerHTML = rewards.list.length ? rewards.list.map(r => {
+    const can = bal >= r.cost, armed = rwArmed === r.id;
+    return `<div class="rwrow"><div><div class="n">${esc(r.name)}</div><div class="c">${r.cost} ⭐${can ? '' : ` · te faltan ${r.cost - bal}`}</div></div>
+      <button type="button" class="btn ${armed ? 'primary' : ''} small" data-rw="buy" data-id="${r.id}" ${can ? '' : 'disabled'}>${armed ? '¿Seguro?' : 'Canjear'}</button>
+      <button type="button" class="x" data-rw="del" data-id="${r.id}" aria-label="Quitar ${esc(r.name)}">✕</button></div>`;
+  }).join('') : '<p class="hint">Añade premios que te apetezcan y ponles un precio en puntos. Cuando tengas suficientes, los canjeas.</p>';
+  const hist = [...rewards.redeemed].reverse().slice(0, 15);
+  $('#rwHistBox').hidden = !hist.length;
+  $('#rwHist').innerHTML = hist.map(r => `<div class="rwhist"><span>${esc(r.name)}</span><span>${new Date(r.at).toLocaleDateString('es-ES', { day: 'numeric', month: 'short' })} · −${r.cost} ⭐</span></div>`).join('');
+}
+$('#openRewards').addEventListener('click', () => { rwArmed = null; renderRewards(); openSheet('#rewardSheet'); });
+$('#rwAdd').addEventListener('submit', e => {
+  e.preventDefault();
+  const name = $('#rwName').value.trim(), cost = Math.round(Number($('#rwCost').value));
+  if (!name || !(cost > 0)) return;
+  rewards.list.push({ id: 'r' + uid(), name, cost }); rewards.list.sort((a, b) => a.cost - b.cost);
+  store.saveRewards().catch(writeFailed); $('#rwName').value = ''; $('#rwCost').value = ''; renderRewards();
+});
+$('#rwList').addEventListener('click', e => {
+  const b = e.target.closest('[data-rw]'); if (!b) return;
+  const r = rewards.list.find(x => x.id === b.dataset.id); if (!r) return;
+  if (b.dataset.rw === 'del') { rewards.list = rewards.list.filter(x => x.id !== r.id); store.saveRewards().catch(writeFailed); renderRewards(); return; }
+  if (balance() < r.cost) return;
+  if (rwArmed !== r.id) { rwArmed = r.id; renderRewards(); return; }
+  rwArmed = null;
+  const entry = { id: 'x' + uid(), name: r.name, cost: r.cost, at: Date.now() };
+  rewards.redeemed.push(entry); store.saveRewards().catch(writeFailed); renderRewards(); render();
+  showToast(`🎁 Canjeado: ${r.name} · −${r.cost} ⭐`, () => { rewards.redeemed = rewards.redeemed.filter(x => x.id !== entry.id); store.saveRewards().catch(writeFailed); renderRewards(); });
+});
 $('#ptsToday').addEventListener('click', openGoal);
 
 // ---------- Agenda ----------
@@ -1123,7 +1566,7 @@ function weekHTML(byCat) {
   }
   return { html, nDone };
 }
-const agendaSwitchHTML = () => `<div class="chips" style="margin:2px 0 8px"><button class="chip" data-act="amode" data-m="semana" aria-pressed="${agendaMode === 'semana'}">Semana</button><button class="chip" data-act="amode" data-m="lista" aria-pressed="${agendaMode === 'lista'}">Todo lo próximo</button></div>`;
+const agendaSwitchHTML = () => `<div class="chips" style="margin:2px 0 8px"><button class="chip" data-act="amode" data-m="semana" aria-pressed="${agendaMode === 'semana'}">Semana</button><button class="chip" data-act="amode" data-m="lista" aria-pressed="${agendaMode === 'lista'}">Todo lo próximo</button><button class="chip" data-act="review" style="margin-left:auto">Repaso de la semana</button></div>`;
 
 // ---------- Pintar ----------
 const prioRank = { alta: 0, normal: 1, baja: 2 };
@@ -1133,11 +1576,47 @@ function inView(x, v) {
   const t = todayISO();
   if (v === 'hoy') return !x.done && x.date && x.date <= t;
   if (v === 'proximas') return !x.done && x.date && x.date > t;
-  if (v === 'sinfecha') return !x.done && !x.date;
+  if (v === 'sinfecha') return !x.done && !x.date && !x.inbox;
   return x.done;
 }
+// ---------- Bandeja rápida: apuntar en dos segundos y organizarlo luego ----------
+function inboxHTML() {
+  const items = tasks.filter(t => t.inbox && !t.done).sort((a, b) => (a.created || 0) - (b.created || 0));
+  return `<form class="quick" id="quickForm"><input class="inp" type="text" id="quickInput" placeholder="Apuntar rápido…" aria-label="Apuntar rápido" enterkeyhint="done" autocomplete="off"><button class="btn primary" type="submit">+</button></form>
+    ${items.length ? `<section class="now"><span class="lbl">Bandeja · ${items.length}</span>${items.map(t => `<div class="nowrow"><div><div class="t" data-act="edit" data-id="${t.id}">${esc(t.title)}</div></div>
+      <div class="acts"><button class="chip" data-act="inbox" data-id="${t.id}" data-to="hoy">Hoy</button><button class="chip" data-act="inbox" data-id="${t.id}" data-to="manana">Mañana</button><button class="chip" data-act="inbox" data-id="${t.id}" data-to="none">Sin fecha</button></div></div>`).join('')}</section>` : ''}`;
+}
+function sortInbox(id, to) {
+  const t = tasks.find(x => x.id === id); if (!t) return;
+  const snaps = snapshot([t]);
+  t.inbox = false; t.date = targetDate(to);
+  store.put(t).catch(writeFailed);
+  showToast(`“${t.title}” → ${to === 'hoy' ? 'hoy' : to === 'manana' ? 'mañana' : 'sin fecha'}`, () => restore(snaps));
+  render();
+}
+document.addEventListener('submit', e => {
+  if (e.target.id !== 'quickForm') return;
+  e.preventDefault();
+  const title = $('#quickInput').value.trim(); if (!title) return;
+  const t = { id: uid(), title, cat: '', date: '', inbox: true, done: false, created: Date.now() };
+  tasks.push(t); store.put(t).catch(writeFailed);
+  $('#quickInput').value = ''; render(); $('#quickInput')?.focus();
+});
 const doneInView = (x, v) => x.done && (v === 'hoy' ? x.doneAt && isoDate(new Date(x.doneAt)) === todayISO() : v === 'sinfecha' ? !x.date : v === 'hechas');
 const currentStreak = t => (t.date && t.date < todayISO()) ? 0 : (t.streak || 0);
+// Plan de una tarea con partes: cuenta atrás hasta su fecha y si vas al día
+function planHTML(x, pr) {
+  const today = todayISO(), bits = [];
+  if (x.date && x.date >= today) {
+    const n = Math.round((parseISO(x.date) - parseISO(today)) / 864e5);
+    bits.push(n === 0 ? '📅 es hoy' : n === 1 ? '📅 mañana' : `📅 faltan ${n} días`);
+  }
+  const due = children(x.id).filter(c => c.date && c.date < today).length; // partes que ya tocaban
+  const behind = due - pr.done;
+  if (behind > 0) bits.push(`<b class="late">vas ${behind} por detrás</b>`);
+  else if (due && pr.done >= due) bits.push('al día');
+  return bits.length ? `<span>${bits.join(' · ')}</span>` : '';
+}
 function taskHTML(x) {
   const cat = catOf(x.cat), c = colorVar(cat.color), late = isLate(x);
   const showDate = x.date && (view === 'hechas' || late || query || (view === 'sinfecha') || (x.parentId && view !== 'semana' && view !== 'hoy'));
@@ -1151,8 +1630,10 @@ function taskHTML(x) {
     x.repeat ? `<span>↻ ${repeatLabel(x)}${x.until ? ' hasta ' + friendlyDate(x.until).toLowerCase() : ''}</span>` : '',
     x.repeat && !x.done && currentStreak(x) >= 2 ? `<span class="streak">🔥 ${currentStreak(x)}</span>` : '',
     pr.total ? `<span class="prog"><span class="pbar"><i style="width:${pct(pr)}%"></i></span>${pr.done}/${pr.total} · ${pct(pr)}%</span>` : '',
+    pr.total && !x.done ? planHTML(x, pr) : '',
     parent ? `<span class="prog">▦ ${esc(parent.title)} · ${ppr.done}/${ppr.total} (${pct(ppr)}%)</span>` : '',
     !x.date && x.minutes && !x.done ? `<span>${x.minutes} min</span>` : '',
+    x.focus ? `<span>⏱ ${fmtDur(x.focus)}</span>` : '',
     x.done && x.pts ? `<span>+${x.pts} ⭐</span>` : '',
     x.prio === 'alta' && !x.done ? `<span class="prio">Alta</span>` : '',
   ].join('');
@@ -1176,8 +1657,58 @@ const EMPTY = {
 const groupedHTML = list => {
   const t = todayISO(), groups = new Map();
   list.forEach(x => { const g = x.date < t ? 'Atrasadas' : friendlyDate(x.date); if (!groups.has(g)) groups.set(g, []); groups.get(g).push(x); });
-  return [...groups].map(([g, items]) => `<h2 class="group ${g === 'Atrasadas' ? 'late' : ''}"><span>${g}</span><span>${items.length}</span></h2><ul class="list">${items.map(taskHTML).join('')}</ul>`).join('');
+  return [...groups].map(([g, items]) => `<h2 class="group ${g === 'Atrasadas' ? 'late' : ''}"><span>${g}</span><span>${items.length}</span></h2>`
+    + (g === 'Atrasadas' ? `<div class="latebar"><button class="chip" data-act="mvlate" data-to="hoy">Todas a hoy</button><button class="chip" data-act="mvlate" data-to="manana">A mañana</button><button class="chip" data-act="mvlate" data-to="none">Sin fecha</button></div>` : '')
+    + `<ul class="list">${items.map(taskHTML).join('')}</ul>`).join('');
 };
+// ---------- Replanificar ----------
+const targetDate = to => to === 'hoy' ? todayISO() : to === 'manana' ? addDays(todayISO(), 1) : to === 'lunes' ? addDays(mondayOf(todayISO()), 7) : '';
+function moveTasks(list, to) {
+  if (!list.length) return;
+  const snaps = snapshot(list), d = targetDate(to);
+  list.forEach(t => { t.date = d; if (!d) { t.time = ''; t.endTime = ''; t.repeat = ''; } });
+  store.putMany(list).catch(writeFailed);
+  const where = to === 'hoy' ? 'a hoy' : to === 'manana' ? 'a mañana' : to === 'lunes' ? 'al lunes' : 'a sin fecha';
+  showToast(`${list.length === 1 ? `“${list[0].title}” movida` : `${list.length} tareas movidas`} ${where}`, () => restore(snaps));
+  render(); if (!$('#reviewSheet').hidden) renderReview();
+}
+const lateTasks = () => tasks.filter(isLate).sort(sortTasks);
+const byCatNow = x => catFilter === null || (x.cat || '') === catFilter;
+// Repaso de la semana: cómo ha ido, qué quedó pendiente y qué viene
+function renderReview() {
+  const today = todayISO(), mon = mondayOf(today), week = [...Array(7)].map((_, i) => addDays(mon, i));
+  const pts = week.reduce((s, d) => s + pointsOn(d), 0);
+  const done = tasks.filter(t => t.done && t.doneAt && isoDate(new Date(t.doneAt)) >= mon).length;
+  const p = buildProgress(); const past = week.filter(d => d <= today && p.tot[d]?.due);
+  const avg = past.length ? Math.round(past.reduce((s, d) => s + Math.min(1, p.tot[d].done / p.tot[d].due), 0) / past.length * 100) : 0;
+  const late = lateTasks();
+  const nextMon = addDays(mon, 7), next = [...Array(7)].map((_, i) => addDays(nextMon, i));
+  const ghosts = {};
+  tasks.filter(t => t.repeat && !t.done && t.date).forEach(t => { let d = t.date, n = 0; while (n++ < 400) { d = stepDate(t, d); if (d > next[6] || (t.until && d > t.until)) break; if (d >= nextMon) ghosts[d] = (ghosts[d] || 0) + 1; } });
+  const exams = tasks.filter(t => !t.done && t.date && t.date >= today && t.date <= next[6] && (t.prio === 'alta' || children(t.id).length));
+  $('#reviewBody').innerHTML = `<div class="sheet-head"><h3>Repaso de la semana</h3><button type="button" class="btn ghost" data-close-review>Cerrar</button></div>
+    <div class="kpis"><div class="kpi"><b>${pts}</b><span>puntos</span></div><div class="kpi"><b>${done}</b><span>tareas hechas</span></div><div class="kpi"><b>${avg}%</b><span>de lo que tocaba</span></div></div>
+    <h4>Pendiente (${late.length})</h4>
+    ${late.length ? `<div class="latebar"><button class="chip" data-rv="all" data-to="manana">Todas a mañana</button><button class="chip" data-rv="all" data-to="lunes">Todas al lunes</button></div>
+      <div class="sublist">${late.map(t => `<div class="revrow"><div class="n">${esc(t.title)}</div><div class="m">${esc(catOf(t.cat).name)} · era ${friendlyDate(t.date).toLowerCase()}</div>
+        <div class="chips">${[['hoy', 'Hoy'], ['manana', 'Mañana'], ['lunes', 'Lunes'], ['none', 'Sin fecha']].map(([v, l]) => `<button class="chip" data-rv="one" data-id="${t.id}" data-to="${v}">${l}</button>`).join('')}</div></div>`).join('')}</div>`
+      : '<p class="hint">Nada atrasado. ¡Bien!</p>'}
+    <h4>La semana que viene</h4>
+    <div class="nextweek">${next.map(d => { const n = tasks.filter(t => !t.done && t.date === d).length + (ghosts[d] || 0); return `<div><span>${DAY_LETTER[parseISO(d).getDay()]} ${parseISO(d).getDate()}</span><b>${n}</b></div>`; }).join('')}</div>
+    ${exams.length ? `<div class="sublist">${exams.map(t => `<div class="revrow"><div class="n">${esc(t.title)}</div><div class="m">${friendlyDate(t.date)}${children(t.id).length ? ` · ${progressOf(t.id).done}/${progressOf(t.id).total} partes` : ''}</div></div>`).join('')}</div>` : ''}`;
+  $('#reviewBody [data-close-review]').addEventListener('click', () => closeSheets());
+}
+$('#reviewBody').addEventListener('click', e => {
+  const b = e.target.closest('[data-rv]'); if (!b) return;
+  moveTasks(b.dataset.rv === 'all' ? lateTasks() : tasks.filter(t => t.id === b.dataset.id), b.dataset.to);
+});
+function openReview() { renderReview(); openSheet('#reviewSheet'); try { localStorage.setItem('review-' + mondayOf(todayISO()), '1'); } catch {} render(); }
+// Los domingos (y lunes si no se hizo) Hoy te recuerda hacer el repaso
+function reviewBannerHTML() {
+  const wd = new Date().getDay(); if (wd !== 0) return '';
+  let seen = false; try { seen = localStorage.getItem('review-' + mondayOf(todayISO())) === '1'; } catch {}
+  return seen ? '' : `<div class="banner"><span>Es domingo: repasa tu semana y planea la siguiente</span><button class="btn primary small" data-act="review">Repasar</button></div>`;
+}
 function render() {
   $('#todayLabel').textContent = new Date().toLocaleDateString('es-ES', { weekday: 'long', day: 'numeric', month: 'long' });
   $('#viewTitle').textContent = query ? 'Buscar' : VIEWS[view];
@@ -1212,8 +1743,10 @@ function render() {
     const list = tasks.filter(x => byCat(x) && inView(x, v) && v !== 'hechas').sort(sortTasks);
     const done = tasks.filter(x => byCat(x) && doneInView(x, v)).sort((a, b) => (b.doneAt || 0) - (a.doneAt || 0));
     count = list.length; doneCount = v === 'proximas' ? 0 : done.length;
-    if (v === 'hechas') html += summaryHTML() + (() => { const p = buildProgress(); return monthHTML(p) + yearHTML(p) + areasHTML(p); })();
+    if (v === 'hechas') html += summaryHTML() + focusHTML() + (() => { const p = buildProgress(); return monthHTML(p) + yearHTML(p) + areasHTML(p); })();
+    if (v === 'hoy') html += inboxHTML() + nowHTML();
     if (view === 'semana') html += agendaSwitchHTML();
+    if (v === 'hoy') html += timerBannerHTML() + reviewBannerHTML() + backupBannerHTML();
     if (v !== 'hechas') {
       if (!list.length) { const [h, p] = EMPTY[v]; html += `<div class="empty"><strong>${h}</strong><span>${p}</span></div>`; }
       else html += v === 'sinfecha' ? `<ul class="list">${list.map(taskHTML).join('')}</ul>` : groupedHTML(list);
@@ -1221,7 +1754,10 @@ function render() {
     if (showDone && done.length) html += `<h2 class="group"><span>${v === 'hoy' ? 'Hechas hoy' : 'Hechas'}</span><span>${done.length}</span></h2><ul class="list">${done.map(taskHTML).join('')}</ul>`;
     $('#clearDone').hidden = !(v === 'hechas' && showDone && done.length);
   }
+  // Si estabas escribiendo en la bandeja, no se pierde lo escrito al refrescar
+  const qi = document.activeElement?.id === 'quickInput' ? $('#quickInput').value : null;
   $('#list').innerHTML = html;
+  if (qi !== null && $('#quickInput')) { $('#quickInput').value = qi; $('#quickInput').focus(); }
   if (doneCount && !query && view !== 'habitos') {
     $('#showDoneBtn').hidden = false;
     $('#showDoneBtn').textContent = showDone ? 'Ocultar las hechas' : `Ver las hechas (${doneCount})`;
@@ -1249,10 +1785,18 @@ $('#list').addEventListener('click', e => {
   else if (act === 'hedit') openHabit(id);
   else if (act === 'hnew') openHabit(null);
   else if (act === 'hseed') seedHabits();
+  else if (act === 'rstep') toggleStep(id, el.dataset.step);
+  else if (act === 'inbox') sortInbox(id, el.dataset.to);
+  else if (act === 'backup') exportBackup();
+  else if (act === 'nowdone') toggle(id);
   else if (act === 'hsleep') { const h = { id: 'h' + uid(), ...cleanHabit({ ...SLEEP_DEFAULT, order: Date.now() }) }; habits.push(h); store.putHabit(h).catch(writeFailed); render(); }
   else if (act === 'slsave') { const box = el.closest('.sleeplog'); saveSleep(id, box.querySelector('[data-sl=bed]').value, box.querySelector('[data-sl=wake]').value); }
   else if (act === 'slclear') clearSleep(id);
   else if (act === 'goal') openGoal();
+  else if (act === 'mvlate') moveTasks(lateTasks().filter(byCatNow), el.dataset.to);
+  else if (act === 'review') openReview();
+  else if (act === 'rewards') { rwArmed = null; renderRewards(); openSheet('#rewardSheet'); }
+  else if (act === 'timer') openTimer(id);
   else if (act === 'yday') { selectedDay = selectedDay === el.dataset.d ? null : el.dataset.d; const y = $('#scroller').scrollTop; render(); $('#scroller').scrollTop = y; }
   else if (act === 'edit') openForm(id);
 });

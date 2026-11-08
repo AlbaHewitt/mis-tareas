@@ -34,8 +34,9 @@
     --tabbar: 58px;
     color-scheme: light;
   }
+  /* Modo oscuro: automático según el iPhone, o el que elijas en Ajustes → Apariencia */
   @media (prefers-color-scheme: dark) {
-    :root {
+    :root:not([data-theme="light"]) {
       --bg: #121413; --surface: #1c1f1d; --sunken: #262a27; --text: #e9ece9; --muted: #98a29c;
       --border: #2f3431; --accent: #8ea2ff; --accent-ink: #10143a; --accent-soft: #232b52; --danger: #ff7a93; --ok: #63d47a;
       --bar: rgb(18 20 19 / .86); --scrim: rgb(0 0 0 / .55);
@@ -43,6 +44,14 @@
       --k-rosa: #ff85b0; --k-rojo: #ff8787; --k-amarillo: #ffd43b; --k-turquesa: #3bc9db; --k-marron: #d4a373;
       color-scheme: dark;
     }
+  }
+  :root[data-theme="dark"] {
+    --bg: #121413; --surface: #1c1f1d; --sunken: #262a27; --text: #e9ece9; --muted: #98a29c;
+    --border: #2f3431; --accent: #8ea2ff; --accent-ink: #10143a; --accent-soft: #232b52; --danger: #ff7a93; --ok: #63d47a;
+    --bar: rgb(18 20 19 / .86); --scrim: rgb(0 0 0 / .55);
+    --k-violeta: #a58bff; --k-naranja: #ff9a5c; --k-verde: #63d47a; --k-azul: #5cb3ff; --k-gris: #aab4bd;
+    --k-rosa: #ff85b0; --k-rojo: #ff8787; --k-amarillo: #ffd43b; --k-turquesa: #3bc9db; --k-marron: #d4a373;
+    color-scheme: dark;
   }
 
   /* --- Que se comporte como una app, no como una web --- */
@@ -298,6 +307,27 @@
   .prog .pbar i { display: block; height: 100%; background: var(--c); }
   .showdone { display: block; margin: 14px auto 0; }
 
+  .timer { position: fixed; inset: 0; z-index: 35; background: var(--bg); display: grid; place-items: center; overflow-y: auto;
+    padding: calc(var(--safe-t) + 24px) max(24px, var(--safe-r)) calc(var(--safe-b) + 24px) max(24px, var(--safe-l)); }
+  .timer.break { background: color-mix(in srgb, var(--k-verde) 14%, var(--bg)); }
+  .tinner { width: 100%; max-width: 380px; display: grid; gap: 16px; text-align: center; }
+  .tinner h2 { font: 700 24px/1.2 var(--f-display); margin: 0; text-wrap: balance; }
+  .tclock { font: 700 84px/1 var(--f-display); font-variant-numeric: tabular-nums; letter-spacing: -0.03em; }
+  .timer.paused .tclock { opacity: .45; }
+  .latebar { display: flex; gap: 6px; flex-wrap: wrap; margin: -2px 0 8px; }
+  .banner { display: grid; grid-template-columns: 1fr auto; gap: 10px; align-items: center; background: var(--accent-soft); border-radius: 14px; padding: 12px 12px 12px 14px; margin: 4px 0 8px; font-weight: 700; }
+  .revrow { display: grid; gap: 6px; background: var(--sunken); border-radius: 12px; padding: 10px 12px; }
+  .revrow .n { font-weight: 700; }
+  .revrow .m { font-size: 13px; color: var(--muted); }
+  .nextweek { display: grid; grid-template-columns: repeat(7, 1fr); gap: 4px; }
+  .nextweek div { background: var(--sunken); border-radius: 10px; padding: 6px 2px; text-align: center; font-size: 12px; color: var(--muted); display: grid; gap: 2px; }
+  .nextweek b { font: 700 18px var(--f-display); color: var(--text); }
+  .rwrow { display: grid; grid-template-columns: 1fr auto auto; gap: 8px; align-items: center; background: var(--sunken); border-radius: 12px; padding: 8px 8px 8px 12px; }
+  .rwrow .n { font-weight: 700; overflow-wrap: anywhere; }
+  .rwrow .c { font-size: 13px; color: var(--muted); font-variant-numeric: tabular-nums; }
+  .rwrow .btn[disabled] { opacity: .45; }
+  .rwhist { display: flex; justify-content: space-between; gap: 10px; font-size: 14px; color: var(--muted); padding: 2px 4px; }
+
   .ptsbtn { border: 0; background: color-mix(in srgb, var(--k-amarillo) 22%, transparent); color: var(--text); font-weight: 700; font-size: 13px; border-radius: 99px; padding: 2px 9px; font-variant-numeric: tabular-nums; }
 
   /* Hábitos */
@@ -322,7 +352,49 @@
   .qb.ok.on { background: var(--ok); border-color: var(--ok); color: var(--surface); }
   .qb.bad.on { background: var(--danger); border-color: var(--danger); color: var(--surface); }
   .hcheck:active, .qb:active { transform: scale(.92); }
-  .hab.sleep { grid-template-columns: 1fr; }
+  .hab.sleep, .hab.routine { grid-template-columns: 1fr; }
+  ul.steps-list { list-style: none; margin: 6px 0 0; padding: 0; display: grid; gap: 2px; }
+  ul.steps-list button { width: 100%; border: 0; background: transparent; display: grid; grid-template-columns: auto 3em 1fr; gap: 10px; align-items: center; text-align: left; padding: 7px 6px; border-radius: 10px; font-size: 15px; }
+  ul.steps-list .box { width: 22px; height: 22px; border-radius: 6px; border: 2px solid var(--c); display: grid; place-items: center; }
+  ul.steps-list .box svg { width: 12px; height: 12px; opacity: 0; }
+  ul.steps-list .on .box { background: var(--c); }
+  ul.steps-list .on .box svg { opacity: 1; }
+  ul.steps-list .on span:last-child { text-decoration: line-through; color: var(--muted); }
+  ul.steps-list .tm { font-size: 13px; color: var(--muted); font-variant-numeric: tabular-nums; }
+  ul.steps-list .cur { background: var(--accent-soft); }
+  ul.steps-list .cur .tm { color: var(--accent); font-weight: 700; }
+  .steprow { display: grid; grid-template-columns: 5.5em 1fr auto; gap: 6px; align-items: center; }
+  .steprow .pickbtn { min-height: 40px; padding: 6px 10px; justify-content: center; }
+  .steprow .inp { min-height: 40px; padding: 8px 10px; }
+  /* Ahora toca */
+  .now { background: var(--surface); border: 1px solid var(--border); border-radius: 16px; padding: 12px 12px 12px 14px; display: grid; gap: 8px; margin: 6px 0 4px; }
+  .now .lbl { font-size: 12px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; color: var(--accent); }
+  .now .lbl.next { color: var(--muted); }
+  .nowrow { display: grid; grid-template-columns: 1fr auto; gap: 8px; align-items: center; }
+  .nowrow .t { font-weight: 700; font-size: 17px; }
+  .nowrow .m { font-size: 13px; color: var(--muted); }
+  .nowrow .acts { display: flex; gap: 6px; }
+  .nowrow.next .t { font-size: 15px; font-weight: 400; }
+  .sleepstats { margin-top: 8px; display: grid; gap: 10px; }
+  .sleepstats summary { font-size: 14px; color: var(--accent); }
+  .sleepstats .kpi b { font-size: 18px; }
+  .sbars { display: grid; grid-template-columns: repeat(14, minmax(0, 1fr)); gap: 3px; align-items: end; }
+  .sb { display: grid; gap: 2px; justify-items: center; font-size: 10px; color: var(--muted); font-weight: 700; }
+  .sb .col { position: relative; width: 100%; height: 80px; background: var(--sunken); border-radius: 5px; overflow: hidden; }
+  .sb .col i { position: absolute; left: 0; right: 0; bottom: 0; border-radius: 5px 5px 0 0; background: var(--muted); }
+  .sb .col i.ok { background: var(--ok); } .sb .col i.bad { background: var(--danger); }
+  .sb .col b { position: absolute; left: 0; right: 0; border-top: 2px dashed var(--text); opacity: .4; }
+  .sb .bt { font-size: 9px; font-weight: 400; writing-mode: vertical-rl; transform: rotate(180deg); height: 2.8em; }
+  .sb.today span:first-of-type { color: var(--accent); }
+  .quick { display: grid; grid-template-columns: 1fr auto; gap: 8px; margin: 2px 0 6px; }
+  .quick .inp { background: var(--surface); border: 1px solid var(--border); }
+  .quick .btn { min-width: 46px; font-size: 20px; padding: 0 14px; }
+  .now .chip { padding: 5px 10px; font-size: 13px; }
+  .focusrows { display: grid; gap: 8px; }
+  .focusrow { display: grid; grid-template-columns: 1fr auto; gap: 2px 10px; font-size: 14px; }
+  .focusrow .bar { grid-column: 1 / -1; }
+  .focusrow .bar i { background: var(--accent); }
+  .focusrow span:nth-child(2) { color: var(--muted); font-variant-numeric: tabular-nums; }
   .sleeplog { display: grid; grid-template-columns: 1fr 1fr auto; gap: 8px; align-items: stretch; margin-top: 6px; }
   .sleeplog .pickbtn { min-height: 44px; }
   .sleepres { font-size: 13px; font-weight: 700; }
@@ -418,6 +490,7 @@
   <div class="grab"></div>
   <div class="inner">
     <div class="sheet-head"><h3 id="sheetTitle">Nueva tarea</h3><button type="button" class="btn ghost" data-close>Cancelar</button></div>
+    <div class="chips" id="tplChips" hidden></div>
     <input class="inp title" type="text" id="title" placeholder="p. ej. mañana a las 8 correr #entreno" aria-label="Tarea" enterkeyhint="done">
     <div class="detected" id="detected" hidden></div>
     <div class="field"><span class="label">Categoría</span><div class="chips" id="catChips"></div></div>
@@ -467,10 +540,12 @@
       <div class="partadd"><input class="inp" type="text" id="partNew" placeholder="Nueva parte" aria-label="Nueva parte" enterkeyhint="enter"><button type="button" class="btn" id="partAdd">Añadir</button></div>
       <details class="box-card" id="splitBox">
         <summary>Repartir en varias partes</summary>
+        <label class="field"><span class="label">Cuántas partes</span><input class="inp" type="number" id="splitN" inputmode="numeric" min="2" max="60" value="5"></label>
         <div class="grid2">
-          <label class="field"><span class="label">Cuántas</span><input class="inp" type="number" id="splitN" inputmode="numeric" min="2" max="60" value="5"></label>
           <div class="field"><span class="label">Desde</span><label class="pickbtn"><span id="splitFromText">Hoy</span><input type="date" id="splitFrom" aria-label="Desde"></label></div>
+          <div class="field"><span class="label">Hasta</span><label class="pickbtn"><span id="splitToText">Una por día</span><input type="date" id="splitTo" aria-label="Hasta"></label></div>
         </div>
+        <p class="hint" id="splitHint">Sin “Hasta”, pone una parte en cada día elegido. Con “Hasta” (p. ej. el día antes del examen), las reparte entre esos días aunque toquen dos el mismo día.</p>
         <span class="label">Qué días</span>
         <div class="days" id="splitDays"></div>
         <label class="field"><span class="label">Nombre de cada parte</span><input class="inp" type="text" id="splitName" placeholder="p. ej. Tema"></label>
@@ -487,9 +562,33 @@
       </div>
       <p class="hint" id="calHint">Se añade con los cambios ya guardados. Si cambias la tarea, vuelve a añadirla.</p>
     </div>
+    <button class="btn block" type="button" id="timerBtn" hidden>⏱ Empezar a concentrarme en esta tarea</button>
+    <button class="btn block" type="button" id="tplSave" hidden>Guardar como plantilla</button>
     <button class="btn danger block" type="button" id="deleteBtn" hidden>Borrar tarea</button>
   </div>
 </form>
+
+<!-- Temporizador de estudio -->
+<div class="timer" id="timer" hidden>
+  <div class="tinner">
+    <p class="label" id="tmPhase">Concentración</p>
+    <h2 id="tmTask"></h2>
+    <div class="tclock" id="tmClock">25:00</div>
+    <div class="chips" id="tmModes" style="justify-content:center">
+      <button type="button" class="chip" data-tm="25/5">25 / 5</button>
+      <button type="button" class="chip" data-tm="50/10">50 / 10</button>
+      <button type="button" class="chip" data-tm="free">Libre</button>
+    </div>
+    <p class="hint" id="tmTotal"></p>
+    <button class="btn primary block" type="button" id="tmStart">Empezar</button>
+    <div class="grid2" id="tmRun" hidden>
+      <button class="btn" type="button" id="tmPause">Pausa</button>
+      <button class="btn" type="button" id="tmStop">Terminar</button>
+    </div>
+    <button class="btn block" type="button" id="tmDone" hidden>Terminar y marcar la tarea como hecha</button>
+    <button class="btn ghost block" type="button" id="tmClose">Cerrar</button>
+  </div>
+</div>
 
 <!-- Hoja: ajustes -->
 <div class="sheet" id="menuSheet" hidden>
@@ -501,6 +600,9 @@
       <button type="button" id="openAccount" data-cloud><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8" r="4"/><path d="M4 21a8 8 0 0 1 16 0"/></svg>Cuenta<span class="go">›</span></button>
       <button type="button" id="openCats"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7h4l2-3h6l2 3h4v13H3z"/><circle cx="12" cy="13" r="3"/></svg>Categorías<span class="go">›</span></button>
       <button type="button" id="openGoal"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3l2.7 5.6 6.1.9-4.4 4.3 1 6.1L12 17l-5.4 2.9 1-6.1-4.4-4.3 6.1-.9z"/></svg>Puntos y objetivo<span class="go">›</span></button>
+      <button type="button" id="openTpl"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="3" width="16" height="18" rx="2"/><path d="M8 8h8M8 12h8M8 16h5"/></svg>Plantillas<span class="go">›</span></button>
+      <button type="button" id="openLook"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 3a9 9 0 0 0 0 18z" fill="currentColor"/></svg>Apariencia<span class="go">›</span></button>
+      <button type="button" id="openRewards"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="8" width="18" height="13" rx="2"/><path d="M12 8v13M3 12h18M12 8c-2-4-6-4-6-1.5S9 8 12 8zm0 0c2-4 6-4 6-1.5S15 8 12 8z"/></svg>Recompensas<span class="go">›</span></button>
       <button type="button" id="openSiri" data-cloud><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5 11a7 7 0 0 0 14 0M12 18v3"/></svg>Siri y Atajos<span class="go">›</span></button>
       <button type="button" id="exportBtn"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v12M7 10l5 5 5-5M5 21h14"/></svg>Guardar copia de seguridad</button>
       <button type="button" id="importBtn"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 21V9M7 14l5-5 5 5M5 3h14"/></svg>Importar copia</button>
@@ -565,7 +667,15 @@
     <div class="chips" id="hSuggest"></div>
     <input class="inp title" type="text" id="hName" placeholder="p. ej. Leer 20 minutos" aria-label="Nombre del hábito" maxlength="80">
     <div class="field"><span class="label">Tipo</span>
-      <div class="chips" id="hKind"><button type="button" class="chip" data-v="build">✓ Quiero hacerlo</button><button type="button" class="chip" data-v="quit">🚫 Quiero dejarlo</button><button type="button" class="chip" data-v="sleep">🌙 Rutina de sueño</button></div></div>
+      <div class="chips" id="hKind"><button type="button" class="chip" data-v="build">✓ Quiero hacerlo</button><button type="button" class="chip" data-v="quit">🚫 Quiero dejarlo</button><button type="button" class="chip" data-v="sleep">🌙 Rutina de sueño</button><button type="button" class="chip" data-v="routine">🕘 Rutina con horario</button></div></div>
+    <div class="box-card" id="hRoutineFields" hidden>
+      <span class="label">Qué días</span>
+      <div class="days" id="hRDays"></div>
+      <span class="label">Pasos</span>
+      <div class="sublist" id="hSteps"></div>
+      <button type="button" class="btn" id="hStepAdd">+ Añadir paso</button>
+      <p class="hint">Cada paso vale los minutos hasta el siguiente (máximo 60 ⭐); el último, 10.</p>
+    </div>
     <div class="box-card" id="hSleepFields" hidden>
       <div class="grid2">
         <label class="pickbtn tbtn"><span class="label">Luz apagada</span><span id="hBedText">23:30</span><input type="time" id="hBed" value="23:30" aria-label="Hora de acostarse"></label>
@@ -606,6 +716,54 @@
       <p class="okmsg" id="goalMsg" hidden></p>
       <button class="btn primary" type="submit">Guardar objetivo</button>
     </form>
+  </div>
+</div>
+
+<!-- Hoja: plantillas -->
+<div class="sheet" id="tplSheet" hidden>
+  <div class="grab"></div>
+  <div class="inner">
+    <div class="sheet-head"><h3>Plantillas</h3><button type="button" class="btn ghost" data-back>Atrás</button></div>
+    <p class="hint">Para crear una, abre una tarea (con sus partes, horas, puntos…) y pulsa “Guardar como plantilla”. Al crear una tarea nueva, toca la plantilla arriba del todo y se rellena sola; las partes se colocan según la fecha que elijas.</p>
+    <div class="sublist" id="tplList"></div>
+  </div>
+</div>
+
+<!-- Hoja: apariencia -->
+<div class="sheet" id="lookSheet" hidden>
+  <div class="grab"></div>
+  <div class="inner">
+    <div class="sheet-head"><h3>Apariencia</h3><button type="button" class="btn ghost" data-back>Atrás</button></div>
+    <div class="field"><span class="label">Modo</span>
+      <div class="chips" id="lookTheme"><button type="button" class="chip" data-v="auto">Automático</button><button type="button" class="chip" data-v="light">Claro</button><button type="button" class="chip" data-v="dark">Oscuro</button></div></div>
+    <div class="field"><span class="label">Color principal</span><div class="chips" id="lookAccent"></div></div>
+    <p class="hint">Se guarda en este dispositivo.</p>
+  </div>
+</div>
+
+<!-- Hoja: repaso de la semana -->
+<div class="sheet" id="reviewSheet" hidden>
+  <div class="grab"></div>
+  <div class="inner" id="reviewBody"></div>
+</div>
+
+<!-- Hoja: recompensas -->
+<div class="sheet" id="rewardSheet" hidden>
+  <div class="grab"></div>
+  <div class="inner">
+    <div class="sheet-head"><h3>Recompensas</h3><button type="button" class="btn ghost" data-close>Cerrar</button></div>
+    <div class="kpis" style="grid-template-columns:repeat(3,1fr)">
+      <div class="kpi"><b id="rwBalance">0</b><span>⭐ para gastar</span></div>
+      <div class="kpi"><b id="rwEarned">0</b><span>ganados</span></div>
+      <div class="kpi"><b id="rwSpent">0</b><span>gastados</span></div>
+    </div>
+    <div class="sublist" id="rwList"></div>
+    <form id="rwAdd" class="box-card">
+      <h4>Nueva recompensa</h4>
+      <input class="inp" type="text" id="rwName" placeholder="p. ej. Un capítulo de serie" maxlength="60" aria-label="Recompensa">
+      <div class="partadd"><input class="inp" type="number" id="rwCost" inputmode="numeric" min="1" max="100000" placeholder="Cuesta (⭐)" aria-label="Puntos que cuesta"><button class="btn primary" type="submit">Añadir</button></div>
+    </form>
+    <div class="field" id="rwHistBox" hidden><span class="label">Canjeadas</span><div class="sublist" id="rwHist"></div></div>
   </div>
 </div>
 
