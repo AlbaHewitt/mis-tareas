@@ -1,8 +1,8 @@
 // Guarda la app para que abra al instante y sin conexión.
 // Sube VERSION cada vez que publiques cambios.
-const VERSION = 'v8';
+const VERSION = 'v9';
 const CACHE = 'mis-tareas-' + VERSION;
-const SHELL = ['./', 'index.html', 'app.js', 'parse.js', 'cal.js', 'config.js', 'manifest.webmanifest', 'icons/icon-180.png', 'icons/icon-192.png', 'icons/icon-512.png'];
+const SHELL = ['./', 'index.html', 'app.js', 'logic.js', 'parse.js', 'cal.js', 'config.js', 'manifest.webmanifest', 'icons/icon-180.png', 'icons/icon-192.png', 'icons/icon-512.png'];
 
 self.addEventListener('install', e => {
   e.waitUntil(caches.open(CACHE).then(c => c.addAll(SHELL)).then(() => self.skipWaiting()));

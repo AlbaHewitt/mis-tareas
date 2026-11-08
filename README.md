@@ -64,6 +64,15 @@ Abre la dirección en **Safari** → botón Compartir → **Añadir a pantalla d
 - **Niveles y logros**: subes de nivel con tus puntos y desbloqueas logros (en Progreso).
 - **Ánimo y energía**: cada día en Hábitos; en Progreso ves cómo cambia con el sueño, el entreno y lo que cumples.
 - **Estimado vs real** y **jardín de concentración** (cada sesión del temporizador planta algo) en Progreso.
+- **Google Calendar**: ⋯ → Google Calendar trae tus eventos (sin los de color Grafito) y lleva tus tareas con hora a un calendario “Mis Tareas”, con aviso.
+- **Siri “¿Qué tengo hoy?”**: segundo atajo en ⋯ → Siri y Atajos; lee el resumen del día.
+- **Ayuda y secciones**: guía, interruptores para ocultar secciones y registro de errores.
+- **Cuenta**: verificar el correo y vincular Google para entrar con él.
+
+## Para desarrollar
+
+- logic.js tiene la lógica pura (fechas, repeticiones, puntos, hábitos, sueño, niveles); pp.js, la pantalla y los datos.
+- Pruebas: `npm test` (Node 20, sin dependencias). En GitHub, el flujo **Probar y publicar** las pasa y solo publica si van bien.
 - **Siri**: ⋯ → Siri y Atajos genera una clave personal y explica cómo crear el atajo “Añade tarea”. La clave solo permite añadir tareas, no leerlas.
 
 ## Pasar tus tareas antiguas

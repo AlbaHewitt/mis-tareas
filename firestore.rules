@@ -1,20 +1,38 @@
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
-    // Cada persona solo puede leer y escribir sus propios datos (tareas, categorías, ajustes).
-    match /users/{userId}/{document=**} {
-      allow read, write: if request.auth != null && request.auth.uid == userId;
-    }
-    // Siri (Atajos) puede AÑADIR tareas sin iniciar sesión si trae la clave personal correcta.
-    // No puede leer, cambiar ni borrar nada.
+    function owner(userId) { return request.auth != null && request.auth.uid == userId; }
+    function siriKeyOf(userId) { return get(/databases/$(database)/documents/users/$(userId)/settings/siri).data.key; }
+
+    // Tareas: solo la dueña, y con un título razonable
     match /users/{userId}/tasks/{taskId} {
+      allow read, delete: if owner(userId);
+      allow create, update: if owner(userId)
+        && (!('title' in request.resource.data) || (request.resource.data.title is string && request.resource.data.title.size() <= 300));
+      // Siri (Atajos) puede AÑADIR tareas sin iniciar sesión si trae la clave personal correcta.
       allow create: if request.auth == null
         && request.resource.data.keys().hasOnly(['title', 'siriKey'])
         && request.resource.data.title is string
         && request.resource.data.title.size() > 0
         && request.resource.data.title.size() < 500
         && exists(/databases/$(database)/documents/users/$(userId)/settings/siri)
-        && request.resource.data.siriKey == get(/databases/$(database)/documents/users/$(userId)/settings/siri).data.key;
+        && request.resource.data.siriKey == siriKeyOf(userId);
+    }
+
+    // Hábitos y ajustes: solo la dueña
+    match /users/{userId}/{coll}/{docId} {
+      allow read, write: if owner(userId) && coll != 'tasks';
+    }
+
+    // Resumen del día para "¿Qué tengo hoy?": se lee sabiendo la clave (no se puede listar)
+    // y solo lo escribe la dueña de esa clave.
+    match /siri/{key} {
+      allow get: if true;
+      allow create, update: if request.auth != null
+        && request.resource.data.uid == request.auth.uid
+        && request.resource.data.keys().hasOnly(['uid', 'fecha', 'hoy', 'manana', 'actualizado'])
+        && siriKeyOf(request.auth.uid) == key;
+      allow delete: if request.auth != null && resource.data.uid == request.auth.uid;
     }
   }
 }

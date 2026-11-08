@@ -1,0 +1,10 @@
+{
+  "name": "mis-tareas",
+  "private": true,
+  "type": "module",
+  "description": "App de tareas, hábitos y progreso (PWA con Firebase).",
+  "scripts": {
+    "test": "node --test tests/",
+    "check": "node --check app.js && node --check logic.js && node --check parse.js && node --check cal.js && node --check sw.js"
+  }
+}

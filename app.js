@@ -1,6 +1,7 @@
 import { firebaseConfig } from './config.js';
 import { parseQuick, fold } from './parse.js';
 import { toICS, googleURL } from './cal.js';
+import { DAY_ORDER, DAY_LETTER, MONTHS_SHORT, normTag, pad, isoDate, todayISO, parseISO, addDays, dim, mondayOf, toMin, uid, esc, cap, monthDate, stepDate, nextDate, alignStart, friendlyDate, longDate, repeatLabel, durationMin, autoPoints, taskPoints, isLate, habitPoints, habitOK, weekCount, applies, habitStreak, habitBest, wakeTarget, bedMin, fmtDur, judgeSleep, nowHM, LEVEL_NAMES, levelStart, levelOf } from './logic.js';
 
 const FB = 'https://www.gstatic.com/firebasejs/10.12.2/';
 const COLORS = ['violeta', 'naranja', 'verde', 'azul', 'gris', 'rosa', 'rojo', 'amarillo', 'turquesa', 'marron'];
@@ -11,9 +12,6 @@ const DEFAULT_CATS = [
 ];
 const NO_CAT = { id: '', name: 'Sin categoría', color: 'gris' };
 const VIEWS = { hoy: 'Hoy', semana: 'Agenda', habitos: 'Hábitos', proximas: 'Próximas', sinfecha: 'Sin fecha', hechas: 'Progreso' };
-const DAY_ORDER = [1, 2, 3, 4, 5, 6, 0];
-const DAY_LETTER = { 1: 'L', 2: 'M', 3: 'X', 4: 'J', 5: 'V', 6: 'S', 0: 'D' };
-const MONTHS_SHORT = ['Ene', 'Feb', 'Mar', 'Abr', 'May', 'Jun', 'Jul', 'Ago', 'Sep', 'Oct', 'Nov', 'Dic'];
 const TICK = c => `<svg viewBox="0 0 16 16" fill="none" stroke="${c}" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M3 8.5l3 3 7-7"/></svg>`;
 const $ = s => document.querySelector(s);
 
@@ -24,9 +22,24 @@ let stats = { goal: 100, days: {}, focus: {} };
 let rewards = { list: [], redeemed: [] };
 let templates = [];
 // Ajustes extra guardados en la nube: ánimo, filtros y jardín
-let extra = { mood: {}, filters: [], garden: [] };
+let extra = { mood: {}, filters: [], garden: [], prefs: {} };
+// Secciones que se pueden apagar en ⋯ → Ayuda y secciones
+const SECTIONS = [
+  ['ahora', 'Ahora toca', 'Tarjeta en Hoy con lo que toca según la hora'],
+  ['bandeja', 'Bandeja rápida', 'Campo “Apuntar rápido…” en Hoy'],
+  ['planificar', 'Planificar mi día', 'Aviso por la mañana y botón en Hoy'],
+  ['repaso', 'Repaso de la semana', 'Aviso de los domingos'],
+  ['matriz', 'Matriz de prioridades', 'Vista en Agenda'],
+  ['temporizador', 'Temporizador', 'Botón para concentrarte en una tarea'],
+  ['jardin', 'Jardín', 'La planta del temporizador y tu jardín en Progreso'],
+  ['recompensas', 'Recompensas', 'Canjear puntos por premios'],
+  ['logros', 'Niveles y logros', 'En Progreso'],
+  ['animo', 'Ánimo y energía', 'En Hábitos, Hoy (aviso) y Progreso'],
+  ['estimado', 'Estimado vs real', 'En Progreso'],
+  ['concentracion', 'Concentración por asignatura', 'En Progreso'],
+];
+const on = id => !(extra.prefs?.off || []).includes(id);
 let dayOffset = 0, monthOffset = 0, calSel = null, sinfechaMode = 'sinfecha', activeFilter = null;
-const normTag = s => String(s || '').trim().toLowerCase().replace(/^[@#]/, '').replace(/\s+/g, '-').slice(0, 30);
 let loaded = false;
 let view = 'hoy';
 let agendaMode = 'semana';
@@ -37,6 +50,19 @@ let showDone = false;
 let selectedDay = null;
 // Estado del formulario de tarea
 let editingId = null, formCat = 'personal', formDays = [], formParts = [], formNoDate = false, splitDays = [1, 2, 3, 4, 5], formSomeday = false, formTonight = false;
+
+document.documentElement.dataset.v = '9';
+// ---------- Registro de errores (se ve en ⋯ → Ayuda) ----------
+const EKEY = 'mis-tareas-errores';
+function logError(msg, where) {
+  try {
+    const list = JSON.parse(localStorage.getItem(EKEY) || '[]');
+    list.push({ at: new Date().toISOString(), msg: String(msg).slice(0, 400), where: String(where || '').slice(0, 200), v: document.documentElement.dataset.v || '' });
+    localStorage.setItem(EKEY, JSON.stringify(list.slice(-30)));
+  } catch {}
+}
+window.addEventListener('error', e => logError(e.message, `${(e.filename || '').split('/').pop()}:${e.lineno}:${e.colno}`));
+window.addEventListener('unhandledrejection', e => logError(e.reason?.message || e.reason, e.reason?.code || 'promesa'));
 
 // ---------- Que no parezca una web ----------
 document.addEventListener('gesturestart', e => e.preventDefault());
@@ -67,68 +93,10 @@ applyLook();
 darkMQ.addEventListener?.('change', applyLook);
 
 // ---------- Utilidades ----------
-const pad = n => String(n).padStart(2, '0');
-const isoDate = d => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
-const todayISO = () => isoDate(new Date());
-const parseISO = s => { const [y, m, d] = s.split('-').map(Number); return new Date(y, m - 1, d); };
-const addDays = (iso, n) => { const d = parseISO(iso); d.setDate(d.getDate() + n); return isoDate(d); };
-const dim = (y, m) => new Date(y, m + 1, 0).getDate();
-const mondayOf = iso => addDays(iso, -((parseISO(iso).getDay() + 6) % 7));
-const toMin = hm => { const [h, m] = hm.split(':').map(Number); return h * 60 + m; };
-const uid = () => Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
-const esc = s => String(s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
-const cap = s => s.charAt(0).toUpperCase() + s.slice(1);
-
-// Día concreto del mes (1–31, o -1 = último día) en el mes de "iso" + n meses
-function monthDate(iso, n, md) {
-  const d = parseISO(iso), y = d.getFullYear(), m = d.getMonth() + n;
-  const last = dim(y, m);
-  return isoDate(new Date(y, m, md === -1 ? last : Math.min(md || d.getDate(), last)));
-}
-function stepDate(t, x) {
-  const days = Array.isArray(t.days) && t.days.length ? t.days : null;
-  if (t.repeat === 'diario') return addDays(x, 1);
-  if (t.repeat === 'mensual') return monthDate(x, 1, t.monthDay);
-  if (t.repeat === 'dias' && days) { let y = x; do { y = addDays(y, 1); } while (!days.includes(parseISO(y).getDay())); return y; }
-  return addDays(x, 7);
-}
-// Siguiente repetición (nunca en el pasado); null si ya ha pasado la fecha de fin
-function nextDate(t) {
-  let d = t.date || todayISO(), n = 0;
-  do { d = stepDate(t, d); } while (d <= todayISO() && n++ < 1000);
-  return t.until && d > t.until ? null : d;
-}
-// Coloca la primera fecha en un día válido de la repetición (hoy incluido)
-function alignStart(t) {
-  if (!t.date) return;
-  if (t.repeat === 'dias' && t.days.length) { for (let i = 0; i < 7 && !t.days.includes(parseISO(t.date).getDay()); i++) t.date = addDays(t.date, 1); }
-  if (t.repeat === 'mensual' && t.monthDay) { const c = monthDate(t.date, 0, t.monthDay); t.date = c >= t.date ? c : monthDate(t.date, 1, t.monthDay); }
-}
-function friendlyDate(iso) {
-  const t = todayISO();
-  if (iso === t) return 'Hoy';
-  if (iso === addDays(t, 1)) return 'Mañana';
-  if (iso === addDays(t, -1)) return 'Ayer';
-  const d = parseISO(iso), o = { weekday: 'short', day: 'numeric', month: 'short' };
-  if (d.getFullYear() !== new Date().getFullYear()) o.year = 'numeric';
-  return cap(d.toLocaleDateString('es-ES', o));
-}
-function longDate(iso) {
-  const f = friendlyDate(iso), d = parseISO(iso).toLocaleDateString('es-ES', { weekday: 'short', day: 'numeric', month: 'short' });
-  return ['Hoy', 'Mañana', 'Ayer'].includes(f) ? `${f} · ${d}` : f;
-}
-const repeatLabel = t => t.repeat === 'diario' ? 'Cada día' : t.repeat === 'semanal' ? 'Cada semana'
-  : t.repeat === 'mensual' ? (t.monthDay === -1 ? 'Último día de cada mes' : `El ${t.monthDay || parseISO(t.date || todayISO()).getDate()} de cada mes`)
-  : t.repeat === 'dias' ? DAY_ORDER.filter(d => (t.days || []).includes(d)).map(d => DAY_LETTER[d]).join(' ') : '';
 const catOf = id => cats.find(c => c.id === id) || NO_CAT;
 const colorVar = c => `var(--k-${COLORS.includes(c) ? c : 'gris'})`;
 const children = id => tasks.filter(x => x.parentId === id);
 const progressOf = id => { const ch = children(id); return { done: ch.filter(c => c.done).length, total: ch.length }; };
-const durationMin = t => t.date && t.time && t.endTime ? ((toMin(t.endTime) - toMin(t.time) + 1440) % 1440) || null : null;
-// Puntos: los que pongas a mano; si no, la duración (hora inicio–fin) o los minutos; si no hay nada, 10
-const autoPoints = t => durationMin(t) || (Number(t.minutes) > 0 ? Math.round(Number(t.minutes)) : 10);
-const taskPoints = t => t.points !== null && t.points !== undefined && t.points !== '' ? Number(t.points) : autoPoints(t);
-const isLate = x => !x.done && x.date && x.date < todayISO();
 
 function clean(t) {
   const num = v => v === '' || v === null || v === undefined || !Number.isFinite(Number(v)) ? null : Number(v);
@@ -147,6 +115,7 @@ function clean(t) {
     streak: Number(t.streak) || 0, best: Number(t.best) || 0,
     history: Array.isArray(t.history) ? t.history.filter(d => typeof d === 'string').slice(-120) : [],
     pts: Number(t.pts) || 0, ptsDay: t.ptsDay || '', focus: Number(t.focus) || 0,
+    gcal: t.gcal && t.gcal.id ? { id: String(t.gcal.id), updated: String(t.gcal.updated || '') } : null,
     focusLog: t.focusLog && typeof t.focusLog === 'object' ? Object.fromEntries(Object.entries(t.focusLog).filter(([k, v]) => /^\d{4}-\d{2}-\d{2}$/.test(k) && Number(v) > 0).sort().slice(-120)) : {},
   };
 }
@@ -218,7 +187,7 @@ const store = {
   async addPoints(n, day) { if (!this.fb) return local(LSTATS, stats); return this.fb.setDoc(this.ref('settings', 'stats'), { days: { [day]: this.fb.increment(n) } }, { merge: true }); },
   async saveExtra(key) {
     if (!this.fb) return local('mis-tareas-' + key, extra[key]);
-    const val = key === 'mood' ? { days: extra.mood } : key === 'filters' ? { list: extra.filters } : { plants: extra.garden.slice(-600) };
+    const val = key === 'mood' ? { days: extra.mood } : key === 'filters' ? { list: extra.filters } : key === 'prefs' ? { value: extra.prefs } : { plants: extra.garden.slice(-600) };
     return this.fb.setDoc(this.ref('settings', key), structuredClone(val));
   },
   async saveTemplates() { if (!this.fb) return local(LTPL, templates); return this.fb.setDoc(this.ref('settings', 'templates'), { list: structuredClone(templates) }); },
@@ -227,7 +196,7 @@ const store = {
   async saveGoal(goal) { if (!this.fb) return local(LSTATS, stats); return this.fb.setDoc(this.ref('settings', 'stats'), { goal }, { merge: true }); },
 };
 function setSync(kind, text) { $('#sync').className = 'sync ' + kind; $('#syncText').textContent = text; }
-function writeFailed() { setSync('warn', 'No se guardó el último cambio'); }
+function writeFailed(e) { setSync('warn', 'No se guardó el último cambio'); logError(e?.message || 'Fallo al guardar', e?.code || 'guardar'); }
 function addPoints(n, day = todayISO()) {
   if (!n) return;
   stats.days[day] = Math.max(0, (stats.days[day] || 0) + n);
@@ -245,7 +214,7 @@ async function initStore() {
     stats = { goal: 100, days: {}, focus: {}, ...get(LSTATS, {}) };
     rewards = normRewards(get(LREW, {}));
     templates = normTemplates(get(LTPL, []));
-    extra = { mood: get('mis-tareas-mood', {}), filters: get('mis-tareas-filters', []), garden: get('mis-tareas-garden', []) };
+    extra = { mood: get('mis-tareas-mood', {}), filters: get('mis-tareas-filters', []), garden: get('mis-tareas-garden', []), prefs: get('mis-tareas-prefs', {}) };
     loaded = true;
     setSync('warn', 'Solo en este dispositivo');
     $('#accountInfo').textContent = 'La sincronización no está configurada. Las tareas se guardan solo en este dispositivo.';
@@ -269,7 +238,7 @@ async function initStore() {
   auth.onAuthStateChanged(a, user => {
     unsubs.forEach(u => u()); unsubs = [];
     if (!user) {
-      store.fb = null; store.user = null; tasks = []; cats = DEFAULT_CATS; habits = []; stats = { goal: 100, days: {}, focus: {} }; rewards = { list: [], redeemed: [] }; extra = { mood: {}, filters: [], garden: [] }; loaded = false;
+      store.fb = null; store.user = null; tasks = []; cats = DEFAULT_CATS; habits = []; stats = { goal: 100, days: {}, focus: {} }; rewards = { list: [], redeemed: [] }; extra = { mood: {}, filters: [], garden: [], prefs: {} }; loaded = false;
       $('#login').hidden = false; $('#logoutBtn').hidden = true;
       render(); return;
     }
@@ -299,10 +268,11 @@ async function initStore() {
       stats = { goal: Number(d.goal) > 0 ? Number(d.goal) : 100, days: d.days && typeof d.days === 'object' ? d.days : {}, focus: d.focus && typeof d.focus === 'object' ? d.focus : {} };
       render(); if (!$('#rewardSheet').hidden) renderRewards();
     }, () => {}));
-    for (const [key, field] of [['mood', 'days'], ['filters', 'list'], ['garden', 'plants']]) {
+    for (const [key, field] of [['mood', 'days'], ['filters', 'list'], ['garden', 'plants'], ['prefs', 'value']]) {
       unsubs.push(fs.onSnapshot(store.ref('settings', key), snap => {
         const v = snap.exists() ? snap.data()[field] : null;
-        extra[key] = key === 'mood' ? (v && typeof v === 'object' ? v : {}) : (Array.isArray(v) ? v : []);
+        extra[key] = key === 'mood' || key === 'prefs' ? (v && typeof v === 'object' ? v : {}) : (Array.isArray(v) ? v : []);
+        if (key === 'prefs' && !snap.metadata.fromCache) maybeWelcome(!snap.exists());
         render(); if (key === 'filters' && !$('#filterSheet').hidden) renderFilterSheet();
       }, () => {}));
     }
@@ -368,7 +338,15 @@ function setupLogin(a, auth) {
   const err = m => { $('#loginErr').textContent = m; $('#loginErr').hidden = !m; };
   const creds = () => [$('#email').value.trim(), $('#password').value];
   $('#loginForm').addEventListener('submit', async e => { e.preventDefault(); err(''); try { await auth.signInWithEmailAndPassword(a, ...creds()); } catch (x) { err(authMsg(x)); } });
-  $('#signupBtn').addEventListener('click', async () => { err(''); if (!$('#loginForm').reportValidity()) return; try { await auth.createUserWithEmailAndPassword(a, ...creds()); } catch (x) { err(authMsg(x)); } });
+  $('#signupBtn').addEventListener('click', async () => {
+    err(''); if (!$('#loginForm').reportValidity()) return;
+    try { const r = await auth.createUserWithEmailAndPassword(a, ...creds()); auth.sendEmailVerification(r.user).catch(() => {}); } catch (x) { err(authMsg(x)); }
+  });
+  $('#googleLogin').addEventListener('click', async () => {
+    err('');
+    try { await auth.signInWithPopup(a, new auth.GoogleAuthProvider()); }
+    catch (x) { err(x.code === 'auth/popup-blocked' || x.code === 'auth/operation-not-supported-in-this-environment' ? 'En la app del iPhone Google no puede abrir su ventana. Entra con tu correo, o prueba desde Safari.' : authMsg(x)); }
+  });
   $('#resetBtn').addEventListener('click', async () => {
     const email = $('#email').value.trim();
     if (!email) return err('Escribe tu correo y vuelve a pulsar.');
@@ -383,6 +361,10 @@ const authMsg = e => ({
   'auth/invalid-email': 'Ese correo no parece válido.', 'auth/network-request-failed': 'No hay conexión. Prueba otra vez cuando tengas internet.',
   'auth/too-many-requests': 'Demasiados intentos. Espera un momento y vuelve a probar.',
   'auth/current-password': 'La contraseña actual no es correcta.',
+  'auth/popup-closed-by-user': 'Has cerrado la ventana de Google antes de terminar.',
+  'auth/cancelled-popup-request': 'Has cerrado la ventana de Google antes de terminar.',
+  'auth/account-exists-with-different-credential': 'Ya tienes cuenta con ese correo: entra con tu contraseña y vincula Google en ⋯ → Cuenta.',
+  'auth/provider-already-linked': 'Tu cuenta de Google ya estaba vinculada.',
   'auth/requires-recent-login': 'Por seguridad, cierra sesión, vuelve a entrar y repite el cambio.',
   'auth/operation-not-allowed': 'Firebase no permite este cambio ahora mismo. Revisa la configuración de Authentication.',
 })[e.code] || 'No se pudo completar. Inténtalo otra vez.';
@@ -394,9 +376,23 @@ function showAccount() {
   $('#hello').textContent = u.displayName ? `Hola, ${u.displayName}` : 'Ajustes';
   $('#currentEmail').textContent = u.email;
   if (document.activeElement !== $('#nameInput')) $('#nameInput').value = u.displayName || '';
+  const hasGoogle = u.providerData.some(p => p.providerId === 'google.com'), hasPass = u.providerData.some(p => p.providerId === 'password');
+  $('#verifyInfo').textContent = u.emailVerified ? '✓ Tu correo está verificado.' : 'Tu correo aún no está verificado: verifícalo para poder recuperar la cuenta si olvidas la contraseña.';
+  $('#verifyBtn').hidden = u.emailVerified;
+  $('#googleInfo').textContent = hasGoogle ? '✓ Tu cuenta de Google está vinculada: puedes entrar con Google.' : 'Vincula tu cuenta de Google para poder entrar también con ella (en el ordenador o en Safari).';
+  $('#googleLink').hidden = hasGoogle;
+  document.querySelectorAll('#emailForm, #passForm').forEach(f => f.hidden = !hasPass);
 }
 function setupAccount() {
   const say = (el, text, ok) => { el.textContent = text; el.className = ok ? 'okmsg' : 'err'; el.hidden = !text; };
+  $('#verifyBtn').addEventListener('click', async () => {
+    try { await store.authLib.sendEmailVerification(store.user); say($('#secMsg'), `Te he enviado un correo a ${store.user.email}. Pulsa el enlace y vuelve a abrir la app.`, true); }
+    catch (x) { say($('#secMsg'), authMsg(x)); }
+  });
+  $('#googleLink').addEventListener('click', async () => {
+    try { await store.authLib.linkWithPopup(store.user, new store.authLib.GoogleAuthProvider()); await store.user.reload(); showAccount(); say($('#secMsg'), 'Cuenta de Google vinculada.', true); }
+    catch (x) { say($('#secMsg'), x.code === 'auth/credential-already-in-use' ? 'Esa cuenta de Google ya se usa en otra cuenta de la app.' : x.code === 'auth/popup-blocked' ? 'El navegador bloqueó la ventana de Google. Hazlo desde el ordenador o desde Safari.' : authMsg(x)); }
+  });
   const reauth = async pass => {
     const { EmailAuthProvider, reauthenticateWithCredential } = store.authLib;
     try { await reauthenticateWithCredential(store.user, EmailAuthProvider.credential(store.user.email, pass)); }
@@ -434,6 +430,9 @@ function setupSiri() {
     const b = $('#siriRotate');
     if (!armed) { b.textContent = 'Toca otra vez: el atajo actual dejará de funcionar'; armed = setTimeout(() => { armed = null; b.textContent = 'Cambiar clave'; }, 4000); return; }
     clearTimeout(armed); armed = null; b.textContent = 'Cambiar clave';
+    // El resumen público de la clave vieja se borra
+    if (siriKey) store.fb.deleteDoc(store.fb.doc(store.fb.db, 'siri', siriKey)).catch(() => {});
+    lastSummary = '';
     store.fb.setDoc(store.ref('settings', 'siri'), { key: newKey() }).catch(writeFailed);
   });
   document.querySelectorAll('[data-copy]').forEach(b => b.addEventListener('click', async () => {
@@ -443,9 +442,37 @@ function setupSiri() {
     $('#copyMsg').hidden = false;
   }));
 }
+// Resumen del día para el atajo "¿Qué tengo hoy?". Se guarda en siri/<clave>, que solo
+// se puede leer sabiendo la clave (no se pueden listar) y solo lo escribe la dueña.
+let lastSummary = '', summaryTimer = null;
+function daySummary(d) {
+  const today = todayISO(), list = tasks.filter(t => !t.done && t.date === d && !children(t.id).length).sort(sortTasks);
+  const name = parseISO(d).toLocaleDateString('es-ES', { weekday: 'long', day: 'numeric', month: 'long' });
+  const timed = list.filter(t => t.time).map(t => `a las ${t.time}, ${t.title}`), untimed = list.filter(t => !t.time).map(t => t.title);
+  let s = `${d === today ? 'Hoy' : 'Mañana'}, ${name}. ` + (list.length ? `Tienes ${list.length} ${list.length === 1 ? 'tarea' : 'tareas'}. ` : 'No tienes tareas. ');
+  if (timed.length) s += cap(timed.join('; ')) + '. ';
+  if (untimed.length) s += `Sin hora: ${untimed.join(', ')}. `;
+  if (d === today) {
+    const late = tasks.filter(isLate).length; if (late) s += `Y ${late} ${late === 1 ? 'atrasada' : 'atrasadas'}. `;
+    const hp = habits.filter(h => !habitDoneToday(h)).length; if (hp) s += `Te ${hp === 1 ? 'queda 1 hábito' : `quedan ${hp} hábitos`}. `;
+    s += `Llevas ${pointsOn(today)} puntos.`;
+  }
+  return s.trim();
+}
+function publishSummary() {
+  if (!store.fb || !siriKey || !loaded) return;
+  clearTimeout(summaryTimer);
+  summaryTimer = setTimeout(() => {
+    const today = todayISO(), body = { uid: store.uid, fecha: today, hoy: daySummary(today), manana: daySummary(addDays(today, 1)) };
+    const sig = JSON.stringify(body); if (sig === lastSummary) return; lastSummary = sig;
+    store.fb.setDoc(store.fb.doc(store.fb.db, 'siri', siriKey), { ...body, actualizado: new Date().toISOString() }).catch(e => { lastSummary = ''; logError(e.message, 'resumen Siri'); });
+  }, 3000);
+}
 function renderSiri() {
   $('#siriOff').hidden = !!siriKey; $('#siriSetup').hidden = !siriKey;
   if (!siriKey || !store.uid) return;
+  $('#siriReadUrl').textContent = `https://firestore.googleapis.com/v1/projects/${firebaseConfig.projectId}/databases/(default)/documents/siri/${siriKey}?key=${firebaseConfig.apiKey}`;
+  publishSummary();
   $('#siriUrl').textContent = `https://firestore.googleapis.com/v1/projects/${firebaseConfig.projectId}/databases/(default)/documents/users/${store.uid}/tasks?key=${firebaseConfig.apiKey}`;
   $('#siriBody').textContent = `{"fields":{"title":{"stringValue":"DICTADO"},"siriKey":{"stringValue":"${siriKey}"}}}`;
 }
@@ -700,7 +727,7 @@ function openForm(id) {
   $('#submitBtn').textContent = t ? 'Guardar' : 'Añadir';
   $('#deleteBtn').hidden = !t;
   $('#calRow').hidden = !(t && t.date);
-  $('#timerBtn').hidden = !t || t.done || children(t.id).length > 0;
+  $('#timerBtn').hidden = !t || t.done || children(t.id).length > 0 || !on('temporizador');
   $('#tplSave').hidden = !t || !!t.parentId;
   $('#tplChips').hidden = !!t || !templates.length;
   $('#tplChips').innerHTML = templates.map(p => `<button type="button" class="chip" data-tpl="${p.id}">📋 ${esc(p.name)}</button>`).join('');
@@ -872,6 +899,7 @@ function drawTimer() {
   $('#tmTask').textContent = tm.title;
   // La planta crece mientras te concentras
   const frac = tm.phase !== 'focus' ? (tm.phase === 'break' ? 1 : 0) : tm.mode === 'free' ? Math.min(1, el / (50 * 60000)) : Math.min(1, tmElapsed() / L.f);
+  $('#tmPlant').hidden = !on('jardin');
   $('#tmPlant').textContent = frac < .2 ? '🌰' : frac < .45 ? '🌱' : frac < .7 ? '🌿' : frac < .95 ? '🪴' : '🌳';
   $('#tmPhase').textContent = !running ? 'Elige cómo quieres concentrarte' : tm.phase === 'break' ? `Descanso${tm.round % 4 === 0 && tm.mode === '25/5' ? ' largo' : ''}` : tm.mode === 'free' ? 'Concentración libre' : `Concentración · ronda ${tm.round}`;
   $('#tmClock').textContent = !running ? (tm.mode === 'free' ? '00:00' : mmss(L.f)) : tm.mode === 'free' ? mmss(el) : mmss(len - tmElapsed());
@@ -1115,47 +1143,7 @@ $('#importFile').addEventListener('change', async e => {
 });
 
 // ---------- Hábitos ----------
-const habitPoints = h => Number(h.minutes) > 0 ? Math.round(Number(h.minutes)) : 10;
-const habitOK = (h, d) => (h.log[d] || 0) === 1;
-const weekCount = (h, mon) => { let n = 0; for (let i = 0; i < 7; i++) if (habitOK(h, addDays(mon, i))) n++; return n; };
-// Una rutina solo cuenta los días de la semana que le tocan
-const applies = (h, d) => h.kind !== 'routine' || !h.days?.length || h.days.includes(parseISO(d).getDay());
-function habitStreak(h) {
-  const today = todayISO();
-  if (h.kind === 'routine') {
-    let d = habitOK(h, today) || !applies(h, today) ? today : addDays(today, -1), n = 0, g = 0;
-    while (g++ < 1000) { if (!applies(h, d)) { d = addDays(d, -1); continue; } if (!habitOK(h, d)) break; n++; d = addDays(d, -1); }
-    return n;
-  }
-  if (h.freq === 'weekly') {
-    let w = mondayOf(today), n = 0;
-    if (weekCount(h, w) < h.target) w = addDays(w, -7);
-    while (weekCount(h, w) >= h.target && n < 520) { n++; w = addDays(w, -7); }
-    return n;
-  }
-  let d = habitOK(h, today) ? today : addDays(today, -1), n = 0;
-  while (habitOK(h, d) && n < 1000) { n++; d = addDays(d, -1); }
-  return n;
-}
-function habitBest(h) {
-  const ok = Object.keys(h.log).filter(d => h.log[d] === 1).sort();
-  let best = 0, run = 0, prev = null;
-  ok.forEach(d => { run = prev && addDays(prev, 1) === d ? run + 1 : 1; best = Math.max(best, run); prev = d; });
-  return best;
-}
 // --- Rutina de sueño: se apunta cada mañana; la noche cuenta en el día en que te levantas ---
-const wakeTarget = (h, day) => [0, 6].includes(parseISO(day).getDay()) ? h.wakeWe : h.wakeWk;
-// Hora de acostarse en minutos, contando las horas de madrugada como "después de medianoche"
-const bedMin = hm => { const m = toMin(hm); return m < 12 * 60 ? m + 1440 : m; };
-const fmtDur = m => m < 60 ? `${m} min` : `${Math.floor(m / 60)} h${m % 60 ? ` ${m % 60} min` : ''}`;
-function judgeSleep(h, day, bed, wake) {
-  const slept = (toMin(wake) + 1440 - bedMin(bed)) % 1440 || 1440;
-  const bedOK = bedMin(bed) <= bedMin(h.bed) + h.tol;
-  const wakeOK = toMin(wake) <= toMin(wakeTarget(h, day)) + h.tol;
-  const hoursOK = slept >= h.hours * 60 - h.tol;
-  const fails = [!bedOK && 'te acostaste tarde', !wakeOK && 'te levantaste tarde', !hoursOK && `dormiste ${fmtDur(slept)}`].filter(Boolean);
-  return { ok: bedOK && wakeOK && hoursOK, slept, fails };
-}
 function saveSleep(id, bed, wake) {
   const h = habits.find(x => x.id === id); if (!h || !bed || !wake) return;
   const d = todayISO(), prev = h.log[d], r = judgeSleep(h, d, bed, wake), next = r.ok ? 1 : -1;
@@ -1266,7 +1254,7 @@ function nowHTML() {
   const cur = items.filter(i => i.s <= now && now < i.e), next = items.find(i => i.s > now);
   if (!cur.length && !next) return '';
   const row = (i, isNext) => `<div class="nowrow ${isNext ? 'next' : ''}"><div><div class="t">${esc(i.title)}</div><div class="m">${esc(i.sub)}</div></div>
-    <div class="acts">${i.timer && !isNext ? `<button class="iconbtn" data-act="timer" data-id="${i.timer}" aria-label="Empezar temporizador">⏱</button>` : ''}${isNext ? '' : i.act}</div></div>`;
+    <div class="acts">${i.timer && !isNext && on('temporizador') ? `<button class="iconbtn" data-act="timer" data-id="${i.timer}" aria-label="Empezar temporizador">⏱</button>` : ''}${isNext ? '' : i.act}</div></div>`;
   const inMin = next ? next.s - now : 0;
   return `<section class="now"><span class="lbl">Ahora · ${nowHM()}</span>
     ${cur.length ? cur.slice(0, 3).map(i => row(i, false)).join('') : '<div class="nowrow"><div class="m">Nada programado ahora mismo</div></div>'}
@@ -1278,7 +1266,6 @@ setInterval(() => {
     const y = $('#scroller').scrollTop; render(); $('#scroller').scrollTop = y;
   }
 }, 60000);
-const nowHM = () => { const d = new Date(); return `${pad(d.getHours())}:${pad(d.getMinutes())}`; };
 const SLEEP_DEFAULT = { name: 'Rutina de sueño', kind: 'sleep', minutes: 20, bed: '23:30', wakeWk: '07:15', wakeWe: '08:15', hours: 7.5, tol: 15 };
 const habitDoneToday = h => h.kind === 'routine' ? (h.log[todayISO()] === 1 || !applies(h, todayISO())) : (h.kind === 'quit' || h.kind === 'sleep') ? h.log[todayISO()] !== undefined
   : h.freq === 'weekly' ? (habitOK(h, todayISO()) || weekCount(h, mondayOf(todayISO())) >= h.target) : habitOK(h, todayISO());
@@ -1317,7 +1304,7 @@ function habitRowHTML(h) {
 }
 function habitsViewHTML() {
   const today = todayISO(), all = sortedHabits(), pts = pointsOn(today), goal = stats.goal;
-  let html = moodCardHTML() + `<section class="summary"><div class="rato-head"><h2>Hoy</h2><span class="hint">${all.filter(habitDoneToday).length} de ${all.length} hábitos</span></div>
+  let html = (on('animo') ? moodCardHTML() : '') + `<section class="summary"><div class="rato-head"><h2>Hoy</h2><span class="hint">${all.filter(habitDoneToday).length} de ${all.length} hábitos</span></div>
     <div class="rato-meter" style="max-width:none"><div class="nums"><span>⭐ ${pts} puntos</span><span>objetivo ${goal}</span></div><div class="bar"><i style="width:${Math.min(100, pts / goal * 100)}%"></i></div></div></section>`;
   if (!all.length) {
     return html + `<div class="empty"><strong>Aún no tienes hábitos</strong><span>Crea los que quieres cumplir y los que quieres dejar.</span>
@@ -1458,7 +1445,7 @@ function summaryHTML() {
   const byCatCount = {}; doneWeek.forEach(t => { byCatCount[t.cat || ''] = (byCatCount[t.cat || ''] || 0) + 1; });
   const maxC = Math.max(1, ...Object.values(byCatCount));
   return `<section class="summary">
-    <div class="rato-head"><h2>Esta semana</h2><span><button class="btn ghost small" data-act="rewards">🎁 ${balance()} ⭐</button><button class="btn ghost small" data-act="goal">Objetivo: ${stats.goal}/día</button></span></div>
+    <div class="rato-head"><h2>Esta semana</h2><span>${on('recompensas') ? `<button class="btn ghost small" data-act="rewards">🎁 ${balance()} ⭐</button>` : ''}<button class="btn ghost small" data-act="goal">Objetivo: ${stats.goal}/día</button></span></div>
     <div class="kpis"><div class="kpi"><b>${pointsOn(today)}</b><span>puntos hoy</span></div><div class="kpi"><b>${ptsWeek}</b><span>puntos semana</span></div><div class="kpi"><b>${doneWeek.length}</b><span>tareas hechas</span></div></div>
     <div class="weekbars">${week.map((d, i) => { const p = pointsOn(d); return `<div class="wb ${d === today ? 'today' : ''}"><span class="v">${p || ''}</span><div class="col"><i style="height:${p / maxP * 100}%"></i><b style="bottom:${stats.goal / maxP * 100}%"></b></div><span>${DAY_LETTER[DAY_ORDER[i]]}</span></div>`; }).join('')}</div>
     ${(() => { const f = week.reduce((s, d) => s + (Number(stats.focus?.[d]) || 0), 0); return f ? `<p class="hint">⏱ ${fmtDur(f)} de concentración esta semana</p>` : ''; })()}
@@ -1587,7 +1574,7 @@ function estimateHTML() {
 // ---------- Jardín de concentración ----------
 const plantEmoji = p => !p.ok ? '🥀' : p.min < 15 ? '🌱' : p.min < 30 ? '🌿' : p.min < 50 ? '🪴' : '🌳';
 function plant(min, ok) {
-  if (!tm) return;
+  if (!tm || !on('jardin')) return;
   extra.garden.push({ d: todayISO(), min: Math.round(min), ok, t: String(tm.title).slice(0, 60) });
   extra.garden = extra.garden.slice(-600);
   store.saveExtra('garden').catch(writeFailed);
@@ -1601,11 +1588,160 @@ function gardenHTML() {
     <p class="hint">Cada sesión de concentración planta algo: 🌱 menos de 15 min, 🌿 15–30, 🪴 30–50, 🌳 más de 50. Si dejas un pomodoro a medias, se marchita 🥀.</p></section>`;
 }
 
+// ---------- Google Calendar ----------
+// Permisos mínimos: leer tus calendarios y gestionar solo el calendario que crea la app ("Mis Tareas")
+const GSCOPES = 'https://www.googleapis.com/auth/calendar.readonly https://www.googleapis.com/auth/calendar.app.created';
+const gopt = () => ({ import: true, skipGrey: true, export: true, ...(extra.prefs.gcal || {}) });
+let gBusy = false, gcalMsg = '', gAuto = false;
+const gToken = () => { try { const t = JSON.parse(localStorage.getItem('gcal-token')); return t && t.exp > Date.now() + 60000 ? t.t : null; } catch { return null; } };
+const loadGIS = () => window.google?.accounts?.oauth2 ? Promise.resolve() : new Promise((res, rej) => {
+  const s = document.createElement('script'); s.src = 'https://accounts.google.com/gsi/client'; s.async = true;
+  s.onload = res; s.onerror = () => rej(new Error('No se pudo cargar Google. ¿Tienes conexión?')); document.head.appendChild(s);
+});
+async function getToken(interactive) {
+  const t = gToken(); if (t || !interactive) return t;
+  if (!firebaseConfig.googleClientId) throw new Error('Falta configurar el permiso de Google para esta app.');
+  await loadGIS();
+  return new Promise((res, rej) => {
+    const c = google.accounts.oauth2.initTokenClient({
+      client_id: firebaseConfig.googleClientId, scope: GSCOPES,
+      callback: r => {
+        if (r.error) return rej(new Error(r.error === 'access_denied' ? 'No diste permiso a Google Calendar.' : (r.error_description || r.error)));
+        if (!google.accounts.oauth2.hasGrantedAllScopes(r, ...GSCOPES.split(' '))) return rej(new Error('Hace falta marcar los dos permisos de calendario.'));
+        try { localStorage.setItem('gcal-token', JSON.stringify({ t: r.access_token, exp: Date.now() + (Number(r.expires_in) || 3600) * 1000 })); } catch {}
+        res(r.access_token);
+      },
+      error_callback: e => rej(new Error(e.type === 'popup_closed' ? 'Has cerrado la ventana de Google.' : e.type === 'popup_failed_to_open' ? 'El navegador no dejó abrir la ventana de Google.' : (e.message || e.type))),
+    });
+    c.requestAccessToken();
+  });
+}
+async function gapi(token, path, opts = {}) {
+  const r = await fetch('https://www.googleapis.com/calendar/v3' + path, { ...opts, headers: { Authorization: 'Bearer ' + token, 'Content-Type': 'application/json' } });
+  if (r.status === 401) { try { localStorage.removeItem('gcal-token'); } catch {} throw new Error('El permiso de Google ha caducado: pulsa Sincronizar otra vez.'); }
+  if (r.status === 204) return null;
+  const j = await r.json().catch(() => ({}));
+  if (!r.ok) { const e = new Error(j.error?.message || 'Google respondió con un error ' + r.status); e.status = r.status; throw e; }
+  return j;
+}
+const gLocal = ev => { if (ev.date) return { date: ev.date, time: '' }; const d = new Date(ev.dateTime); return { date: isoDate(d), time: `${pad(d.getHours())}:${pad(d.getMinutes())}` }; };
+const toRFC = d => { const o = -d.getTimezoneOffset(), s = o >= 0 ? '+' : '-'; return `${isoDate(d)}T${pad(d.getHours())}:${pad(d.getMinutes())}:00${s}${pad(Math.floor(Math.abs(o) / 60))}:${pad(Math.abs(o) % 60)}`; };
+async function gList(token, cal, q) {
+  const out = []; let pt = '';
+  do { const j = await gapi(token, `/calendars/${encodeURIComponent(cal)}/events?maxResults=250${q}${pt ? '&pageToken=' + pt : ''}`); out.push(...(j.items || [])); pt = j.nextPageToken || ''; } while (pt && out.length < 2000);
+  return out;
+}
+async function syncGcal(interactive) {
+  if (gBusy || !store.fb) return;
+  const o = gopt(); let token;
+  try { token = await getToken(interactive); } catch (e) { setGcalStatus('✗ ' + e.message); logError(e.message, 'Google Calendar'); return; }
+  if (!token) return;
+  gBusy = true; setGcalStatus('Sincronizando…');
+  try {
+    const today = todayISO(), from = addDays(today, -7), to = addDays(today, 90);
+    const range = `&timeMin=${encodeURIComponent(new Date(from + 'T00:00:00').toISOString())}&timeMax=${encodeURIComponent(new Date(to + 'T23:59:59').toISOString())}`;
+    let got = 0, gone = 0, sent = 0;
+    if (o.import) {
+      const items = (await gList(token, 'primary', '&singleEvents=true&orderBy=startTime' + range)).filter(ev =>
+        ev.status !== 'cancelled' && ev.start && !(o.skipGrey && ev.colorId === '8') && !ev.extendedProperties?.private?.misTareas);
+      const ids = new Set(items.map(ev => ev.id)), writes = [];
+      for (const ev of items) {
+        const id = 'g-' + ev.id.replace(/[^\w-]/g, '_').slice(0, 120), s = gLocal(ev.start), e = gLocal(ev.end || ev.start);
+        // Busca la tarea de este evento, o una que ya importé a mano (mismo título y día) para no duplicar
+        let t = tasks.find(x => x.gcal?.id === ev.id) || tasks.find(x => !x.gcal && !x.parentId && x.date === s.date && fold(x.title) === fold(ev.summary || ''));
+        if (t && t.gcal?.updated === ev.updated) continue;
+        const exam = /examen|entrega|parcial|^ex\.? /.test(fold(ev.summary || ''));
+        const data = { title: (ev.summary || '(sin título)').slice(0, 300), date: s.date, time: s.time, endTime: s.time && e.date === s.date ? e.time : '', gcal: { id: ev.id, updated: ev.updated } };
+        if (!t) { t = { id, cat: exam ? 'estudio' : 'evento', prio: exam ? 'alta' : 'normal', notes: ev.location || '', done: false, created: Date.now(), ...data }; tasks.push(t); }
+        else Object.assign(t, data);
+        writes.push(t); got++;
+      }
+      // Un evento borrado en Google se quita de la app (si no lo habías completado)
+      tasks.filter(t => t.gcal?.id && !t.done && t.date >= from && t.date <= to && !ids.has(t.gcal.id)).forEach(t => { tasks = tasks.filter(x => x !== t); store.remove(t.id).catch(writeFailed); gone++; });
+      if (writes.length) await store.putMany(writes);
+    }
+    if (o.export) {
+      let cal = o.calId;
+      if (cal) { try { await gapi(token, `/calendars/${encodeURIComponent(cal)}`); } catch (e) { if (e.status === 404 || e.status === 403) cal = null; else throw e; } }
+      if (!cal) { cal = (await gapi(token, '/calendars', { method: 'POST', body: JSON.stringify({ summary: 'Mis Tareas', timeZone: 'Europe/Madrid', description: 'Tareas con hora de la app Mis Tareas' }) })).id; saveGopt({ calId: cal }); }
+      const byTask = new Map((await gList(token, cal, `&timeMin=${encodeURIComponent(new Date(addDays(today, -1) + 'T00:00:00').toISOString())}`)).filter(ev => ev.extendedProperties?.private?.taskId).map(ev => [ev.extendedProperties.private.taskId, ev]));
+      const want = tasks.filter(t => !t.done && t.date && t.time && !t.gcal && t.date >= addDays(today, -1) && t.date <= to);
+      for (const t of want) {
+        const st = new Date(`${t.date}T${t.time}:00`), en = new Date(st.getTime() + (durationMin(t) || 60) * 60000);
+        const body = { summary: t.title, description: t.notes || '', start: { dateTime: toRFC(st), timeZone: 'Europe/Madrid' }, end: { dateTime: toRFC(en), timeZone: 'Europe/Madrid' },
+          reminders: { useDefault: false, overrides: [{ method: 'popup', minutes: t.remind !== null && t.remind !== undefined ? Number(t.remind) : 10 }] },
+          extendedProperties: { private: { taskId: t.id, misTareas: '1' } } };
+        const ex = byTask.get(t.id); byTask.delete(t.id);
+        if (ex && ex.summary === body.summary && new Date(ex.start?.dateTime).getTime() === st.getTime() && new Date(ex.end?.dateTime).getTime() === en.getTime() && (ex.description || '') === body.description) continue;
+        await gapi(token, `/calendars/${encodeURIComponent(cal)}/events${ex ? '/' + ex.id : ''}`, { method: ex ? 'PATCH' : 'POST', body: JSON.stringify(body) });
+        sent++;
+      }
+      // Lo que ya no está pendiente con hora (hecho, borrado, sin hora) sale del calendario
+      for (const ev of byTask.values()) await gapi(token, `/calendars/${encodeURIComponent(cal)}/events/${ev.id}`, { method: 'DELETE' }).catch(() => {});
+    }
+    saveGopt({ last: Date.now() });
+    setGcalStatus(`✓ Sincronizado: ${got} ${got === 1 ? 'evento actualizado' : 'eventos actualizados'}${gone ? `, ${gone} quitados` : ''}${o.export ? `, ${sent} ${sent === 1 ? 'tarea enviada' : 'tareas enviadas'}` : ''}.`);
+    render();
+  } catch (e) { setGcalStatus('✗ ' + e.message); logError(e.message, 'Google Calendar'); }
+  finally { gBusy = false; if (!$('#gcalSheet').hidden) renderGcal(); }
+}
+function saveGopt(p) { extra.prefs = { ...extra.prefs, gcal: { ...gopt(), ...p } }; store.saveExtra('prefs').catch(writeFailed); }
+function setGcalStatus(s) { gcalMsg = s; if (!$('#gcalSheet').hidden) renderGcal(); }
+function renderGcal() {
+  const o = gopt(), conn = !!o.last;
+  document.querySelectorAll('[data-gopt]').forEach(b => b.setAttribute('aria-checked', !!o[b.dataset.gopt]));
+  $('#gcalStatus').textContent = gcalMsg || (conn ? `Última sincronización: ${new Date(o.last).toLocaleString('es-ES', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })}` : firebaseConfig.googleClientId ? 'Aún no está conectado.' : 'Falta configurar el permiso de Google para esta app.');
+  $('#gcalSync').textContent = gBusy ? 'Sincronizando…' : conn ? 'Sincronizar ahora' : 'Conectar y sincronizar';
+  $('#gcalSync').disabled = gBusy || !firebaseConfig.googleClientId;
+  $('#gcalOff').hidden = !conn;
+}
+$('#openGcal').addEventListener('click', () => { gcalMsg = ''; renderGcal(); openSheet('#gcalSheet'); });
+$('#gcalSync').addEventListener('click', () => syncGcal(true));
+document.querySelectorAll('[data-gopt]').forEach(b => b.addEventListener('click', () => { saveGopt({ [b.dataset.gopt]: !gopt()[b.dataset.gopt] }); renderGcal(); }));
+$('#gcalOff').addEventListener('click', () => {
+  const t = gToken(); if (t && window.google?.accounts?.oauth2) google.accounts.oauth2.revoke(t, () => {});
+  try { localStorage.removeItem('gcal-token'); } catch {}
+  saveGopt({ last: 0 }); gcalMsg = 'Desconectado. Las tareas que ya trajiste se quedan en la app.'; renderGcal();
+});
+// Al abrir la app, si el permiso de la última hora sigue valiendo, sincroniza sola (como mucho cada 10 min)
+function autoGcal() {
+  if (gAuto || !loaded || !store.fb || !gToken()) return;
+  gAuto = true;
+  if (Date.now() - (gopt().last || 0) > 10 * 60000) syncGcal(false);
+}
+
+// ---------- Ayuda, secciones y bienvenida ----------
+function renderHelp() {
+  $('#sectionList').innerHTML = SECTIONS.map(([id, n, d]) => `<div class="secrow"><span><b>${n}</b><small>${d}</small></span><button type="button" class="switch" role="switch" aria-checked="${on(id)}" data-sec="${id}" aria-label="${n}"></button></div>`).join('');
+  let errs = []; try { errs = JSON.parse(localStorage.getItem(EKEY) || '[]'); } catch {}
+  $('#errInfo').textContent = errs.length ? `${errs.length} errores guardados en este dispositivo. Si algo falla, copia el registro y pásamelo.` : 'No hay errores. ¡Todo bien!';
+  $('#errList').hidden = !errs.length;
+  $('#errList').textContent = errs.slice().reverse().map(e => `${e.at.slice(0, 16).replace('T', ' ')} · ${e.msg} (${e.where})`).join('\n');
+  $('#appVersion').textContent = `Versión ${document.documentElement.dataset.v || ''} · ${navigator.onLine ? 'con conexión' : 'sin conexión'}`;
+}
+$('#openHelp').addEventListener('click', () => { renderHelp(); openSheet('#helpSheet'); });
+$('#sectionList').addEventListener('click', e => {
+  const b = e.target.closest('[data-sec]'); if (!b) return;
+  const off = new Set(extra.prefs.off || []); off.has(b.dataset.sec) ? off.delete(b.dataset.sec) : off.add(b.dataset.sec);
+  extra.prefs = { ...extra.prefs, off: [...off] }; store.saveExtra('prefs').catch(writeFailed); renderHelp(); render();
+});
+$('#errCopy').addEventListener('click', async () => {
+  const t = $('#errList').textContent || 'Sin errores';
+  try { await navigator.clipboard.writeText(t); $('#errInfo').textContent = 'Copiado.'; } catch { const r = document.createRange(); r.selectNodeContents($('#errList')); getSelection().removeAllRanges(); getSelection().addRange(r); }
+});
+$('#errClear').addEventListener('click', () => { try { localStorage.removeItem(EKEY); } catch {} renderHelp(); });
+$('#showWelcome').addEventListener('click', () => openSheet('#welcomeSheet'));
+$('#welcomeDone').addEventListener('click', () => { extra.prefs = { ...extra.prefs, welcomed: true }; store.saveExtra('prefs').catch(writeFailed); closeSheets(); });
+// La bienvenida sale una vez por cuenta (y no a quien ya tenía tareas antes de esta versión)
+let welcomeChecked = false;
+function maybeWelcome(isNew) {
+  if (welcomeChecked || extra.prefs.welcomed) return; welcomeChecked = true;
+  if (!isNew || tasks.length > 3) { extra.prefs = { ...extra.prefs, welcomed: true }; store.saveExtra('prefs').catch(writeFailed); return; }
+  setTimeout(() => { if (!document.querySelector('.sheet.show')) openSheet('#welcomeSheet'); }, 800);
+}
+
 // ---------- Niveles y logros ----------
 // Nivel L empieza en 50·L·(L−1) puntos: 2 = 100, 3 = 300, 4 = 600, 5 = 1.000…
-const LEVEL_NAMES = ['Principiante', 'Aprendiz', 'Constante', 'Organizada', 'Enfocada', 'Disciplinada', 'Imparable', 'Experta', 'Maestra', 'Leyenda'];
-const levelStart = L => 50 * L * (L - 1);
-function levelOf(xp) { let L = 1; while (levelStart(L + 1) <= xp) L++; return L; }
 function achievements(full) {
   const doneN = tasks.filter(t => t.done).length, focusMin = tasks.reduce((s, t) => s + (t.focus || 0), 0), xp = earned();
   const bestHabit = Math.max(0, ...habits.filter(h => h.kind !== 'sleep').map(habitBest));
@@ -1645,7 +1781,7 @@ function levelHTML() {
 // Avisa cuando consigues un logro nuevo o subes de nivel
 let achTimer = null;
 function checkAchievements() {
-  if (!loaded || !store.fb && configured) return;
+  if (!loaded || !store.fb && configured || !on('logros')) return;
   clearTimeout(achTimer);
   achTimer = setTimeout(() => {
     if (!$('#toast').hidden && undoAction) { checkAchievements(); return; } // no tapar un "Deshacer"
@@ -1744,8 +1880,8 @@ function weekHTML(byCat) {
   }
   return { html, nDone };
 }
-const agendaSwitchHTML = () => `<div class="filters" style="margin-bottom:8px">${[['dia', 'Día'], ['semana', 'Semana'], ['mes', 'Mes'], ['lista', 'Próximas'], ['matriz', 'Matriz']].map(([m, l]) =>
-  `<button class="chip" data-act="amode" data-m="${m}" aria-pressed="${agendaMode === m}">${l}</button>`).join('')}<button class="chip edit" data-act="review">Repaso de la semana</button></div>`;
+const agendaSwitchHTML = () => `<div class="filters" style="margin-bottom:8px">${[['dia', 'Día'], ['semana', 'Semana'], ['mes', 'Mes'], ['lista', 'Próximas'], ...(on('matriz') ? [['matriz', 'Matriz']] : [])].map(([m, l]) =>
+  `<button class="chip" data-act="amode" data-m="${m}" aria-pressed="${agendaMode === m}">${l}</button>`).join('')}${on('repaso') ? '<button class="chip edit" data-act="review">Repaso de la semana</button>' : ''}</div>`;
 
 // --- Planificar mi día: eliges qué harás hoy y ves si cabe en tus horas libres ---
 const estMin = t => durationMin(t) || (Number(t.minutes) > 0 ? Number(t.minutes) : 30);
@@ -2069,6 +2205,7 @@ function render() {
   $('#viewTitle').textContent = query ? 'Buscar' : VIEWS[view];
   $('#ptsToday').textContent = `⭐ ${pointsOn(todayISO())}`;
   $('#filters').hidden = view === 'habitos' && !query;
+  $('#openRewards').hidden = !on('recompensas');
   $('#fab').setAttribute('aria-label', view === 'habitos' && !query ? 'Nuevo hábito' : 'Nueva tarea');
   const byCat = x => catFilter === null || (x.cat || '') === catFilter;
   document.querySelectorAll('#tabs button').forEach(b => {
@@ -2099,7 +2236,7 @@ function render() {
     html = `<div class="chips" style="margin:0 0 8px"><button class="chip" data-act="unfilter">✕ Quitar filtro</button></div>` + (list.length ? groupedOrFlat(list) : '<div class="empty"><strong>Nada con este filtro</strong></div>');
   } else if (view === 'habitos') {
     html = habitsViewHTML();
-  } else if (view === 'semana' && ['dia', 'mes', 'matriz'].includes(agendaMode)) {
+  } else if (view === 'semana' && ['dia', 'mes', 'matriz'].includes(agendaMode === 'matriz' && !on('matriz') ? (agendaMode = 'semana') : agendaMode)) {
     html = agendaSwitchHTML() + (agendaMode === 'dia' ? dayHTML(byCat) : agendaMode === 'mes' ? monthCalHTML(byCat) : matrixHTML(byCat)); count = 1;
     doneCount = agendaMode === 'matriz' ? 0 : tasks.filter(t => t.done && t.date === (agendaMode === 'dia' ? addDays(todayISO(), dayOffset) : calSel || todayISO())).length;
   } else if (view === 'semana' && agendaMode === 'semana') {
@@ -2111,10 +2248,12 @@ function render() {
     const list = tasks.filter(x => byCat(x) && inView(x, v) && v !== 'hechas').sort(sortTasks);
     const done = tasks.filter(x => byCat(x) && doneInView(x, v)).sort((a, b) => (b.doneAt || 0) - (a.doneAt || 0));
     count = list.length; doneCount = v === 'proximas' ? 0 : done.length;
-    if (v === 'hechas') html += levelHTML() + summaryHTML() + moodStatsHTML() + focusHTML() + estimateHTML() + gardenHTML() + (() => { const p = buildProgress(); return monthHTML(p) + yearHTML(p) + areasHTML(p); })();
-    if (v === 'hoy') html += inboxHTML() + nowHTML();
+    if (v === 'hechas') html += (on('logros') ? levelHTML() : '') + summaryHTML() + (on('animo') ? moodStatsHTML() : '') + (on('concentracion') ? focusHTML() : '')
+      + (on('estimado') ? estimateHTML() : '') + (on('jardin') ? gardenHTML() : '') + (() => { const p = buildProgress(); return monthHTML(p) + yearHTML(p) + areasHTML(p); })();
+    if (v === 'hoy') html += (on('bandeja') ? inboxHTML() : '') + (on('ahora') ? nowHTML() : '');
     if (view === 'semana') html += agendaSwitchHTML();
-    if (v === 'hoy') html += timerBannerHTML() + planBannerHTML() + moodBannerHTML() + reviewBannerHTML() + backupBannerHTML() + `<div class="chips" style="margin:2px 0 4px"><button class="chip" data-act="plan">📝 Planificar hoy</button></div>`;
+    if (v === 'hoy') html += timerBannerHTML() + (on('planificar') ? planBannerHTML() : '') + (on('animo') ? moodBannerHTML() : '') + (on('repaso') ? reviewBannerHTML() : '') + backupBannerHTML()
+      + (on('planificar') ? `<div class="chips" style="margin:2px 0 4px"><button class="chip" data-act="plan">📝 Planificar hoy</button></div>` : '');
     if (v !== 'hechas') {
       if (!list.length) { const [h, p] = EMPTY[v]; html += `<div class="empty"><strong>${h}</strong><span>${p}</span></div>`; }
       else html += v === 'sinfecha' || v === 'someday' ? `<ul class="list">${list.map(taskHTML).join('')}</ul>` : groupedHTML(list);
@@ -2136,7 +2275,7 @@ function render() {
   let tipSeen = false; try { tipSeen = localStorage.getItem('tip-swipe') === '1'; } catch {}
   $('#tip').hidden = tipSeen || !count || view === 'habitos';
   if (!clearArmed) $('#clearDone').textContent = 'Borrar las hechas';
-  checkAchievements();
+  checkAchievements(); publishSummary(); autoGcal();
 }
 $('#showDoneBtn').addEventListener('click', () => { showDone = !showDone; render(); });
 // Las horas del registro de sueño se ven en el botón al elegirlas

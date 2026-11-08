@@ -14,6 +14,31 @@
 <meta name="format-detection" content="telephone=no">
 <link rel="manifest" href="manifest.webmanifest">
 <link rel="apple-touch-icon" href="icons/icon-180.png">
+<!-- Pantallas de carga del iPhone (claras y oscuras) -->
+<link rel="apple-touch-startup-image" media="(device-width: 440px) and (device-height: 956px) and (-webkit-device-pixel-ratio: 3) and (orientation: portrait)" href="icons/splash/splash-1320x2868-light.png">
+<link rel="apple-touch-startup-image" media="(device-width: 402px) and (device-height: 874px) and (-webkit-device-pixel-ratio: 3) and (orientation: portrait)" href="icons/splash/splash-1206x2622-light.png">
+<link rel="apple-touch-startup-image" media="(device-width: 430px) and (device-height: 932px) and (-webkit-device-pixel-ratio: 3) and (orientation: portrait)" href="icons/splash/splash-1290x2796-light.png">
+<link rel="apple-touch-startup-image" media="(device-width: 393px) and (device-height: 852px) and (-webkit-device-pixel-ratio: 3) and (orientation: portrait)" href="icons/splash/splash-1179x2556-light.png">
+<link rel="apple-touch-startup-image" media="(device-width: 428px) and (device-height: 926px) and (-webkit-device-pixel-ratio: 3) and (orientation: portrait)" href="icons/splash/splash-1284x2778-light.png">
+<link rel="apple-touch-startup-image" media="(device-width: 390px) and (device-height: 844px) and (-webkit-device-pixel-ratio: 3) and (orientation: portrait)" href="icons/splash/splash-1170x2532-light.png">
+<link rel="apple-touch-startup-image" media="(device-width: 375px) and (device-height: 812px) and (-webkit-device-pixel-ratio: 3) and (orientation: portrait)" href="icons/splash/splash-1125x2436-light.png">
+<link rel="apple-touch-startup-image" media="(device-width: 360px) and (device-height: 780px) and (-webkit-device-pixel-ratio: 3) and (orientation: portrait)" href="icons/splash/splash-1080x2340-light.png">
+<link rel="apple-touch-startup-image" media="(device-width: 414px) and (device-height: 896px) and (-webkit-device-pixel-ratio: 3) and (orientation: portrait)" href="icons/splash/splash-1242x2688-light.png">
+<link rel="apple-touch-startup-image" media="(device-width: 414px) and (device-height: 896px) and (-webkit-device-pixel-ratio: 2) and (orientation: portrait)" href="icons/splash/splash-828x1792-light.png">
+<link rel="apple-touch-startup-image" media="(device-width: 375px) and (device-height: 667px) and (-webkit-device-pixel-ratio: 2) and (orientation: portrait)" href="icons/splash/splash-750x1334-light.png">
+<link rel="apple-touch-startup-image" media="(device-width: 440px) and (device-height: 956px) and (-webkit-device-pixel-ratio: 3) and (orientation: portrait) and (prefers-color-scheme: dark)" href="icons/splash/splash-1320x2868-dark.png">
+<link rel="apple-touch-startup-image" media="(device-width: 402px) and (device-height: 874px) and (-webkit-device-pixel-ratio: 3) and (orientation: portrait) and (prefers-color-scheme: dark)" href="icons/splash/splash-1206x2622-dark.png">
+<link rel="apple-touch-startup-image" media="(device-width: 430px) and (device-height: 932px) and (-webkit-device-pixel-ratio: 3) and (orientation: portrait) and (prefers-color-scheme: dark)" href="icons/splash/splash-1290x2796-dark.png">
+<link rel="apple-touch-startup-image" media="(device-width: 393px) and (device-height: 852px) and (-webkit-device-pixel-ratio: 3) and (orientation: portrait) and (prefers-color-scheme: dark)" href="icons/splash/splash-1179x2556-dark.png">
+<link rel="apple-touch-startup-image" media="(device-width: 428px) and (device-height: 926px) and (-webkit-device-pixel-ratio: 3) and (orientation: portrait) and (prefers-color-scheme: dark)" href="icons/splash/splash-1284x2778-dark.png">
+<link rel="apple-touch-startup-image" media="(device-width: 390px) and (device-height: 844px) and (-webkit-device-pixel-ratio: 3) and (orientation: portrait) and (prefers-color-scheme: dark)" href="icons/splash/splash-1170x2532-dark.png">
+<link rel="apple-touch-startup-image" media="(device-width: 375px) and (device-height: 812px) and (-webkit-device-pixel-ratio: 3) and (orientation: portrait) and (prefers-color-scheme: dark)" href="icons/splash/splash-1125x2436-dark.png">
+<link rel="apple-touch-startup-image" media="(device-width: 360px) and (device-height: 780px) and (-webkit-device-pixel-ratio: 3) and (orientation: portrait) and (prefers-color-scheme: dark)" href="icons/splash/splash-1080x2340-dark.png">
+<link rel="apple-touch-startup-image" media="(device-width: 414px) and (device-height: 896px) and (-webkit-device-pixel-ratio: 3) and (orientation: portrait) and (prefers-color-scheme: dark)" href="icons/splash/splash-1242x2688-dark.png">
+<link rel="apple-touch-startup-image" media="(device-width: 414px) and (device-height: 896px) and (-webkit-device-pixel-ratio: 2) and (orientation: portrait) and (prefers-color-scheme: dark)" href="icons/splash/splash-828x1792-dark.png">
+<link rel="apple-touch-startup-image" media="(device-width: 375px) and (device-height: 667px) and (-webkit-device-pixel-ratio: 2) and (orientation: portrait) and (prefers-color-scheme: dark)" href="icons/splash/splash-750x1334-dark.png">
+<meta name="color-scheme" content="light dark">
+<style>html{background:#f3f4f1}@media (prefers-color-scheme: dark){html{background:#121413}}</style>
 <link rel="icon" type="image/png" href="icons/icon-192.png">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -437,6 +462,18 @@
   .mb .col { position: relative; width: 100%; height: 50px; background: var(--sunken); border-radius: 5px; overflow: hidden; }
   .mb .col i { position: absolute; left: 0; right: 0; bottom: 0; background: var(--k-verde); border-radius: 5px 5px 0 0; }
   .mb.today span:last-child { color: var(--accent); }
+  .gbtn { display: inline-flex; align-items: center; justify-content: center; gap: 10px; }
+  .gbtn svg { width: 20px; height: 20px; }
+  .welcome { display: grid; gap: 10px; }
+  .welcome div { display: grid; grid-template-columns: 40px 1fr; gap: 10px; align-items: center; background: var(--sunken); border-radius: 14px; padding: 10px 12px; }
+  .welcome span { font-size: 28px; text-align: center; }
+  .welcome p { margin: 0; font-size: 15px; }
+  .secrow { display: grid; grid-template-columns: 1fr auto; gap: 10px; align-items: center; padding: 6px 2px; }
+  .secrow b { display: block; } .secrow small { color: var(--muted); font-size: 12px; }
+  .switch { width: 50px; height: 30px; border-radius: 99px; border: 0; background: var(--border); position: relative; padding: 0; }
+  .switch::after { content: ""; position: absolute; top: 3px; left: 3px; width: 24px; height: 24px; border-radius: 50%; background: #fff; box-shadow: 0 1px 3px rgb(0 0 0 / .3); transition: left .15s; }
+  .switch[aria-checked="true"] { background: var(--ok); }
+  .switch[aria-checked="true"]::after { left: 23px; }
   .badges { display: grid; grid-template-columns: repeat(auto-fill, minmax(96px, 1fr)); gap: 6px; }
   .badge { background: var(--sunken); border-radius: 12px; padding: 8px 6px; display: grid; justify-items: center; gap: 2px; text-align: center; opacity: .45; filter: grayscale(1); }
   .badge.on { opacity: 1; filter: none; background: color-mix(in srgb, var(--k-amarillo) 18%, var(--sunken)); }
@@ -659,6 +696,8 @@
       <button type="button" id="openAccount" data-cloud><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8" r="4"/><path d="M4 21a8 8 0 0 1 16 0"/></svg>Cuenta<span class="go">›</span></button>
       <button type="button" id="openCats"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7h4l2-3h6l2 3h4v13H3z"/><circle cx="12" cy="13" r="3"/></svg>Categorías<span class="go">›</span></button>
       <button type="button" id="openGoal"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3l2.7 5.6 6.1.9-4.4 4.3 1 6.1L12 17l-5.4 2.9 1-6.1-4.4-4.3 6.1-.9z"/></svg>Puntos y objetivo<span class="go">›</span></button>
+      <button type="button" id="openGcal" data-cloud><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="5" width="18" height="16" rx="3"/><path d="M3 10h18M8 3v4M16 3v4M9 15l2 2 4-4"/></svg>Google Calendar<span class="go">›</span></button>
+      <button type="button" id="openHelp"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M9.5 9a2.5 2.5 0 1 1 3.5 2.3c-.6.3-1 .9-1 1.6V14M12 17.5v.01"/></svg>Ayuda y secciones<span class="go">›</span></button>
       <button type="button" id="openFilters"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 5h16l-6 8v6l-4-2v-4z"/></svg>Filtros<span class="go">›</span></button>
       <button type="button" id="openTpl"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="3" width="16" height="18" rx="2"/><path d="M8 8h8M8 12h8M8 16h5"/></svg>Plantillas<span class="go">›</span></button>
       <button type="button" id="openLook"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 3a9 9 0 0 0 0 18z" fill="currentColor"/></svg>Apariencia<span class="go">›</span></button>
@@ -679,6 +718,14 @@
   <div class="inner">
     <div class="sheet-head"><h3>Cuenta</h3><button type="button" class="btn ghost" data-back>Atrás</button></div>
 
+    <div class="box-card" id="secBox">
+      <h4>Seguridad</h4>
+      <p class="hint" id="verifyInfo"></p>
+      <button class="btn" type="button" id="verifyBtn" hidden>Enviarme el correo de verificación</button>
+      <p class="hint" id="googleInfo"></p>
+      <button class="btn gbtn" type="button" id="googleLink" hidden>Vincular mi cuenta de Google</button>
+      <p class="okmsg" id="secMsg" hidden></p>
+    </div>
     <form class="box-card" id="nameForm">
       <h4>Tu nombre</h4>
       <input class="inp" type="text" id="nameInput" placeholder="Cómo quieres que te salude" autocomplete="given-name">
@@ -801,6 +848,65 @@
   </div>
 </div>
 
+<!-- Hoja: Google Calendar -->
+<div class="sheet" id="gcalSheet" hidden>
+  <div class="grab"></div>
+  <div class="inner">
+    <div class="sheet-head"><h3>Google Calendar</h3><button type="button" class="btn ghost" data-back>Atrás</button></div>
+    <p class="hint">Trae a la app los eventos de tu calendario principal (los próximos 3 meses) y pone tus tareas con hora en un calendario “Mis Tareas” de tu Google Calendar, con sus avisos en el iPhone.</p>
+    <p class="hint" id="gcalStatus"></p>
+    <button class="btn primary block" type="button" id="gcalSync">Conectar y sincronizar</button>
+    <div class="box-card">
+      <div class="secrow"><span><b>Traer mis eventos</b><small>De tu calendario principal a la app</small></span><button type="button" class="switch" role="switch" data-gopt="import" aria-label="Traer mis eventos"></button></div>
+      <div class="secrow"><span><b>Sin las clases en Grafito</b><small>No trae los eventos de color gris (Grafito)</small></span><button type="button" class="switch" role="switch" data-gopt="skipGrey" aria-label="Sin los eventos en Grafito"></button></div>
+      <div class="secrow"><span><b>Llevar mis tareas con hora</b><small>Al calendario “Mis Tareas”, con aviso</small></span><button type="button" class="switch" role="switch" data-gopt="export" aria-label="Llevar mis tareas con hora"></button></div>
+    </div>
+    <p class="hint">Se sincroniza al abrir la app (si ya diste permiso en la última hora) o con el botón. Lo que cambies en Google Calendar manda sobre la copia de la app.</p>
+    <button class="btn ghost" type="button" id="gcalOff" hidden>Desconectar Google Calendar</button>
+  </div>
+</div>
+
+<!-- Hoja: ayuda y secciones -->
+<div class="sheet" id="helpSheet" hidden>
+  <div class="grab"></div>
+  <div class="inner">
+    <div class="sheet-head"><h3>Ayuda y secciones</h3><button type="button" class="btn ghost" data-back>Atrás</button></div>
+    <details class="box-card" open><summary>Cómo funciona</summary>
+      <ul class="steps" style="list-style:disc">
+        <li><b>Apuntar:</b> pulsa <b>+</b> y escribe como hablas: “mañana de 10 a 12 estudiar #estudio @cálculo !”. La <b>!</b> es prioridad alta. Para algo rápido, usa “Apuntar rápido…” en Hoy.</li>
+        <li><b>Completar y borrar:</b> toca el círculo o desliza a la derecha; a la izquierda, borrar. Siempre puedes <b>Deshacer</b>.</li>
+        <li><b>Hoy:</b> lo de hoy y lo atrasado, lo que toca ahora y tu bandeja. <b>Planificar hoy</b> te ayuda a elegir.</li>
+        <li><b>Agenda:</b> día (línea de tiempo), semana, mes, próximas y matriz de prioridades.</li>
+        <li><b>Partes:</b> divide una tarea grande (un examen) en partes repartidas por días; cada una sale en su día y ves 3/20.</li>
+        <li><b>Hábitos:</b> para hacer, para dejar, rutina de sueño y rutinas con horario. Arriba, tu ánimo del día.</li>
+        <li><b>Puntos y progreso:</b> cada tarea da puntos (sus minutos). En Progreso ves tu nivel, tu semana, el mes y el año en cuadraditos.</li>
+        <li><b>Más:</b> temporizador al editar una tarea, recompensas, plantillas, filtros, Siri, calendario y copias en ⋯.</li>
+      </ul>
+    </details>
+    <div class="box-card"><h4>Secciones</h4><p class="hint">Apaga lo que no uses para que la app se vea más limpia. Se guarda en tu cuenta.</p><div class="sublist" id="sectionList"></div></div>
+    <div class="box-card"><h4>Registro de errores</h4><p class="hint" id="errInfo"></p><div class="code" id="errList" hidden></div>
+      <div class="grid2"><button class="btn small" type="button" id="errCopy">Copiar</button><button class="btn small" type="button" id="errClear">Borrar</button></div></div>
+    <button class="btn ghost" type="button" id="showWelcome">Ver la bienvenida otra vez</button>
+    <p class="hint" id="appVersion"></p>
+  </div>
+</div>
+
+<!-- Hoja: bienvenida -->
+<div class="sheet" id="welcomeSheet" hidden>
+  <div class="grab"></div>
+  <div class="inner">
+    <h3>¡Bienvenida a Mis Tareas!</h3>
+    <div class="welcome">
+      <div><span>✍️</span><p><b>Apúntalo todo</b> con el botón +. Escribe como hablas: “mañana a las 8 correr #entreno”.</p></div>
+      <div><span>☀️</span><p><b>Hoy</b> te enseña lo que toca ahora y lo que tienes pendiente. Desliza para completar.</p></div>
+      <div><span>🔥</span><p><b>Hábitos</b> para cumplir, para dejar, tu sueño y tus rutinas, con rachas.</p></div>
+      <div><span>⭐</span><p>Cada cosa que haces da <b>puntos</b>: subes de nivel y puedes canjearlos por premios.</p></div>
+      <div><span>⚙️</span><p>En <b>⋯ → Ayuda y secciones</b> puedes apagar lo que no uses.</p></div>
+    </div>
+    <button class="btn primary block" type="button" id="welcomeDone">Empezar</button>
+  </div>
+</div>
+
 <!-- Hoja: planificar mi día -->
 <div class="sheet" id="planSheet" hidden>
   <div class="grab"></div>
@@ -876,7 +982,17 @@
       <div class="copyrow"><span class="label">Texto 1 · URL</span><div class="code" id="siriUrl"></div><button class="btn small" type="button" data-copy="siriUrl">Copiar URL</button></div>
       <div class="copyrow"><span class="label">Texto 2 · Cuerpo</span><div class="code" id="siriBody"></div><button class="btn small" type="button" data-copy="siriBody">Copiar texto</button></div>
       <p class="okmsg" id="copyMsg" hidden></p>
-      <p class="hint">Este texto lleva tu clave de Siri: solo sirve para <b>añadir</b> tareas, no para verlas. Si la pierdes o la compartes sin querer, cámbiala aquí y actualiza el atajo.</p>
+      <h4>Atajo 2 · “¿Qué tengo hoy?”</h4>
+      <p class="hint">Siri te lee lo que tienes hoy (tareas con su hora, las atrasadas, los hábitos que te quedan y tus puntos). El resumen se actualiza cada vez que abres la app.</p>
+      <ol class="steps">
+        <li>En Atajos, crea otro atajo llamado <b>Qué tengo hoy</b>.</li>
+        <li>Añade <b>Obtener contenido de URL</b> y pega el <b>texto 3</b> (método GET, sin cambiar nada más).</li>
+        <li>Añade <b>Obtener valor del diccionario</b> con la clave <b>fields</b>; otra con la clave <b>hoy</b>; y otra con la clave <b>stringValue</b>.</li>
+        <li>Añade <b>Leer texto</b> (o “Mostrar resultado”). Pruébalo: “Oye Siri, qué tengo hoy”.</li>
+      </ol>
+      <div class="copyrow"><span class="label">Texto 3 · URL del resumen</span><div class="code" id="siriReadUrl"></div><button class="btn small" type="button" data-copy="siriReadUrl">Copiar URL</button></div>
+      <p class="hint">Si cambias <b>hoy</b> por <b>manana</b> en el paso 3, te lee lo de mañana.</p>
+      <p class="hint">Estos textos llevan tu clave de Siri: con ella se pueden <b>añadir</b> tareas y <b>oír el resumen del día</b>, pero no ver ni cambiar nada más. Si la pierdes o la compartes sin querer, cámbiala aquí y actualiza los atajos.</p>
       <button class="btn danger" type="button" id="siriRotate">Cambiar clave</button>
     </div>
   </div>
@@ -894,6 +1010,8 @@
     <button class="btn primary block" type="submit" id="loginBtn">Entrar</button>
     <button class="btn block" type="button" id="signupBtn">Crear cuenta</button>
     <button class="btn ghost block" type="button" id="resetBtn">He olvidado la contraseña</button>
+    <button class="btn block gbtn" type="button" id="googleLogin"><svg viewBox="0 0 24 24" aria-hidden="true"><path fill="#4285F4" d="M23 12.3c0-.8-.1-1.6-.2-2.3H12v4.4h6.2a5.3 5.3 0 0 1-2.3 3.5v2.9h3.7c2.2-2 3.4-5 3.4-8.5z"/><path fill="#34A853" d="M12 24c3.1 0 5.7-1 7.6-2.8l-3.7-2.9c-1 .7-2.4 1.1-3.9 1.1-3 0-5.5-2-6.4-4.7H1.8v3A11.5 11.5 0 0 0 12 24z"/><path fill="#FBBC05" d="M5.6 14.7a6.9 6.9 0 0 1 0-4.4v-3H1.8a11.5 11.5 0 0 0 0 10.4z"/><path fill="#EA4335" d="M12 4.6c1.7 0 3.2.6 4.4 1.7l3.3-3.3A11.5 11.5 0 0 0 1.8 7.3l3.8 3C6.5 6.6 9 4.6 12 4.6z"/></svg>Entrar con Google</button>
+    <p class="hint">“Entrar con Google” solo funciona si antes la vinculaste en ⋯ → Cuenta.</p>
   </form>
 </div>
 
