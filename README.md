@@ -39,6 +39,12 @@ Abre la dirección en **Safari** → botón Compartir → **Añadir a pantalla d
 - **Pasos** dentro de cada tarea y **buscador** (lupa arriba).
 - **Categorías** editables en ⋯ → Categorías (nombre, color, orden, borrar).
 - **Cuenta**: nombre, correo y contraseña en ⋯ → Cuenta.
+- **Calendario**: al editar una tarea con fecha, “Calendario iPhone” (archivo .ics con aviso) o “Google Calendar”.
+- **Rato de casa**: tareas en rotación con minutos; cada día en Hoy salen las que caben en tu rato (⋯ → Rato de casa para los minutos por día).
+- **Agenda**: semana a semana (con las repeticiones) o todo lo próximo.
+- **Hábitos**: para hacer (cada día o X veces por semana) y para dejar, con rachas.
+- **Puntos**: 1 punto por minuto de cada tarea o hábito cumplido; objetivo diario en ⋯ → Puntos.
+- **Progreso**: resumen de la semana, gráfico del mes, el año en cuadraditos (una fila por mes) y cuadraditos por apartado.
 - **Siri**: ⋯ → Siri y Atajos genera una clave personal y explica cómo crear el atajo “Añade tarea”. La clave solo permite añadir tareas, no leerlas.
 
 ## Pasar tus tareas antiguas
