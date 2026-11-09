@@ -505,6 +505,21 @@
   .erow1 .inp { min-height: 40px; padding: 8px 10px; }
   .erow .pickbtn { min-height: 44px; }
   .prompt { border-color: var(--accent); }
+  .smedia { margin: 2px 0 6px; font-size: 15px; color: var(--muted); } .smedia b { color: var(--text); font-size: 17px; }
+  .swrap { display: grid; grid-template-columns: 30px 1fr; align-items: start; margin: 4px 0 2px; }
+  .sscroll { overflow-x: auto; overflow-y: hidden; -webkit-overflow-scrolling: touch; scrollbar-width: none; overscroll-behavior-x: contain; }
+  .sscroll::-webkit-scrollbar { display: none; }
+  .sscroll .schart { width: auto; max-width: none; margin: 0; display: block; }
+  .schart .st.sm { font-size: 9px; }
+  .hab.sleep .dots i.bad, .hab.sleep .dots i.past { background: color-mix(in srgb, var(--text) 55%, var(--sunken)); color: var(--surface); }
+  .ck { width: 22px; height: 22px; flex: none; border-radius: 50%; border: 2px solid var(--c); display: grid; place-items: center; background: var(--surface); }
+  .ck svg { width: 12px; height: 12px; opacity: 0; }
+  .ck.on { background: var(--c); } .ck.on svg { opacity: 1; }
+  .tl2i .ck { margin-top: 2px; }
+  .tl2i.late .ck, .xrow.late .ck { border-color: var(--danger); }
+  .tsub { display: block; font-size: 12.5px; line-height: 1.3; font-weight: 500; color: var(--muted); margin-top: 1px; }
+  .tl2i b .tsub { font-size: 12px; }
+  .catn:empty { display: none; }
   .kv { display: grid; gap: 6px; }
   .kvrow { display: grid; grid-template-columns: 6.5em 1fr auto; align-items: center; gap: 8px; background: var(--sunken); border-radius: 12px; padding: 6px 6px 6px 14px; min-height: 52px; }
   .kvrow .k { color: var(--muted); font-size: 13px; font-weight: 700; }
@@ -784,6 +799,7 @@
       <button type="button" id="openAccount" data-cloud><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8" r="4"/><path d="M4 21a8 8 0 0 1 16 0"/></svg>Cuenta<span class="go">›</span></button>
       <button type="button" id="openPrefs"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/></svg>Personalizar<span class="go">›</span></button>
       <button type="button" id="openBooks"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20V3H6.5A2.5 2.5 0 0 0 4 5.5z"/><path d="M4 19.5A2.5 2.5 0 0 0 6.5 22H20v-5"/></svg>Libros<span class="go">›</span></button>
+      <button type="button" id="openMovies"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M7 4v16M17 4v16M3 9h4M3 15h4M17 9h4M17 15h4"/></svg>Películas<span class="go">›</span></button>
       <button type="button" id="openHelp"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M9.5 9a2.5 2.5 0 1 1 3.5 2.3c-.6.3-1 .9-1 1.6V14M12 17.5v.01"/></svg>Ayuda<span class="go">›</span></button>
       <button type="button" id="exportBtn"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v12M7 10l5 5 5-5M5 21h14"/></svg>Guardar copia de seguridad</button>
       <button type="button" id="importBtn"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 21V9M7 14l5-5 5 5M5 3h14"/></svg>Importar copia</button>
@@ -818,6 +834,15 @@
     <div class="sheet-head"><h3>Secciones</h3><button type="button" class="btn ghost" data-back="#prefSheet">Atrás</button></div>
     <p class="hint">Apaga lo que no uses para que la app se vea más limpia. Se guarda en tu cuenta.</p>
     <div class="sublist" id="sectionList"></div>
+  </div>
+</div>
+
+<!-- Hoja: películas -->
+<div class="sheet" id="moviesSheet" hidden>
+  <div class="grab"></div>
+  <div class="inner">
+    <div class="sheet-head"><h3>Películas</h3><button type="button" class="btn ghost" data-back>Atrás</button></div>
+    <div id="moviesBody"></div>
   </div>
 </div>
 
