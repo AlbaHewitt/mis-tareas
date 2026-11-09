@@ -52,7 +52,7 @@ let selectedDay = null;
 // Estado del formulario de tarea
 let editingId = null, formCat = 'personal', formDays = [], formParts = [], formNoDate = false, splitDays = [1, 2, 3, 4, 5], formSomeday = false, formTonight = false;
 
-document.documentElement.dataset.v = '11';
+document.documentElement.dataset.v = '12';
 // ---------- Registro de errores (se ve en ⋯ → Ayuda) ----------
 const EKEY = 'mis-tareas-errores';
 function logError(msg, where) {
@@ -353,6 +353,8 @@ function migrate() {
 }
 
 // ---------- Acceso ----------
+// Google siempre pregunta con qué cuenta entrar (si no, entra sola con la última y puede ser otra)
+const googleProvider = lib => { const p = new lib.GoogleAuthProvider(); p.setCustomParameters({ prompt: 'select_account' }); return p; };
 function setupLogin(a, auth) {
   const err = m => { $('#loginErr').textContent = m; $('#loginErr').hidden = !m; };
   const creds = () => [$('#email').value.trim(), $('#password').value];
@@ -363,7 +365,7 @@ function setupLogin(a, auth) {
   });
   $('#googleLogin').addEventListener('click', async () => {
     err('');
-    try { await auth.signInWithPopup(a, new auth.GoogleAuthProvider()); }
+    try { await auth.signInWithPopup(a, googleProvider(auth)); }
     catch (x) { err(x.code === 'auth/popup-blocked' || x.code === 'auth/operation-not-supported-in-this-environment' ? 'En la app del iPhone Google no puede abrir su ventana. Entra con tu correo, o prueba desde Safari.' : authMsg(x)); }
   });
   $('#resetBtn').addEventListener('click', async () => {
@@ -384,6 +386,9 @@ const authMsg = e => ({
   'auth/cancelled-popup-request': 'Has cerrado la ventana de Google antes de terminar.',
   'auth/account-exists-with-different-credential': 'Ya tienes cuenta con ese correo: entra con tu contraseña y vincula Google en ⋯ → Cuenta.',
   'auth/provider-already-linked': 'Tu cuenta de Google ya estaba vinculada.',
+  'auth/popup-blocked': 'No se pudo abrir la ventana de Google. En la app del iPhone hazlo desde Safari o el ordenador.',
+  'auth/operation-not-supported-in-this-environment': 'En la app del iPhone Google no puede abrir su ventana. Hazlo desde Safari o el ordenador.',
+  'auth/user-mismatch': 'Elige en Google la misma cuenta con la que has entrado.',
   'auth/requires-recent-login': 'Por seguridad, cierra sesión, vuelve a entrar y repite el cambio.',
   'auth/operation-not-allowed': 'Firebase no permite este cambio ahora mismo. Revisa la configuración de Authentication.',
 })[e.code] || 'No se pudo completar. Inténtalo otra vez.';
@@ -401,8 +406,10 @@ function showAccount() {
   $('#verifyBtn').hidden = u.emailVerified;
   $('#googleInfo').textContent = hasGoogle ? '✓ Tu cuenta de Google está vinculada: puedes entrar con Google.' : 'Vincula tu cuenta de Google para poder entrar también con ella (en el ordenador o en Safari).';
   $('#googleLink').hidden = hasGoogle;
-  $('#accPassRow').hidden = !hasPass; $('#accEmailBtn').hidden = !hasPass;
-  if (!hasPass) ['#emailForm', '#passForm'].forEach(x => $(x).hidden = true);
+  // El correo se puede cambiar siempre: con contraseña, o confirmando con Google si entras solo con Google
+  $('#accPassRow').hidden = !hasPass; if (!hasPass) $('#passForm').hidden = true;
+  $('#emailPass').hidden = !hasPass; $('#emailPass').required = hasPass;
+  $('#emailGoogleHint').hidden = hasPass;
 }
 function setupAccount() {
   const say = (el, text, ok) => { el.textContent = text; el.className = ok ? 'okmsg' : 'err'; el.hidden = !text; };
@@ -411,7 +418,7 @@ function setupAccount() {
     catch (x) { say($('#secMsg'), authMsg(x)); }
   });
   $('#googleLink').addEventListener('click', async () => {
-    try { await store.authLib.linkWithPopup(store.user, new store.authLib.GoogleAuthProvider()); await store.user.reload(); showAccount(); say($('#secMsg'), 'Cuenta de Google vinculada.', true); }
+    try { await store.authLib.linkWithPopup(store.user, googleProvider(store.authLib)); await store.user.reload(); showAccount(); say($('#secMsg'), 'Cuenta de Google vinculada.', true); }
     catch (x) { say($('#secMsg'), x.code === 'auth/credential-already-in-use' ? 'Esa cuenta de Google ya se usa en otra cuenta de la app.' : x.code === 'auth/popup-blocked' ? 'El navegador bloqueó la ventana de Google. Hazlo desde el ordenador o desde Safari.' : authMsg(x)); }
   });
   const reauth = async pass => {
@@ -428,7 +435,8 @@ function setupAccount() {
     e.preventDefault(); const msg = $('#emailMsg'); say(msg, '');
     const email = $('#newEmail').value.trim();
     try {
-      await reauth($('#emailPass').value);
+      if (store.user.providerData.some(p => p.providerId === 'password')) await reauth($('#emailPass').value);
+      else await store.authLib.reauthenticateWithPopup(store.user, googleProvider(store.authLib));
       await store.authLib.verifyBeforeUpdateEmail(store.user, email);
       $('#emailForm').reset();
       say(msg, `Te he enviado un correo a ${email}. El cambio se hace cuando pulses el enlace. Después tendrás que volver a entrar con el correo nuevo.`, true);

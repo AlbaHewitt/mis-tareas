@@ -846,6 +846,7 @@
       <form class="box-card" id="emailForm" hidden>
         <input class="inp" type="email" id="newEmail" placeholder="Correo nuevo" autocomplete="email" required>
         <input class="inp" type="password" id="emailPass" placeholder="Tu contraseña actual" autocomplete="current-password" required>
+        <p class="hint" id="emailGoogleHint" hidden>Para confirmar que eres tú, se abrirá Google: elige la cuenta con la que entras.</p>
         <p class="err" id="emailMsg" hidden></p>
         <button class="btn primary" type="submit">Cambiar correo</button>
       </form>
@@ -1123,8 +1124,8 @@
     <img class="logo" src="icons/icon-192.png" alt="">
     <h1>Mis Tareas</h1>
     <p class="hint">Entra con tu cuenta para tener tus tareas en el móvil y en el ordenador.</p>
-    <input class="inp" type="email" id="email" placeholder="Correo" autocomplete="email" required>
-    <input class="inp" type="password" id="password" placeholder="Contraseña (mínimo 6)" autocomplete="current-password" required minlength="6">
+    <input class="inp" type="email" id="email" name="username" placeholder="Correo" autocomplete="username" autocapitalize="off" spellcheck="false" required>
+    <input class="inp" type="password" id="password" name="password" placeholder="Contraseña (mínimo 6)" autocomplete="current-password" required minlength="6">
     <p class="err" id="loginErr" hidden></p>
     <button class="btn primary block" type="submit" id="loginBtn">Entrar</button>
     <button class="btn block" type="button" id="signupBtn">Crear cuenta</button>
