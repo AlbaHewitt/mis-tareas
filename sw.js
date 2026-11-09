@@ -1,6 +1,6 @@
 // Guarda la app para que abra al instante y sin conexión.
 // Sube VERSION cada vez que publiques cambios.
-const VERSION = 'v9';
+const VERSION = 'v11';
 const CACHE = 'mis-tareas-' + VERSION;
 const SHELL = ['./', 'index.html', 'app.js', 'logic.js', 'parse.js', 'cal.js', 'config.js', 'manifest.webmanifest', 'icons/icon-180.png', 'icons/icon-192.png', 'icons/icon-512.png'];
 

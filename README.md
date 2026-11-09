@@ -40,8 +40,14 @@ Abre la dirección en **Safari** → botón Compartir → **Añadir a pantalla d
 - **Categorías** editables en ⋯ → Categorías (nombre, color, orden, borrar).
 - **Cuenta**: nombre, correo y contraseña en ⋯ → Cuenta.
 - **Calendario**: al editar una tarea con fecha, “Calendario iPhone” (archivo .ics con aviso) o “Google Calendar”.
-- **Agenda**: semana a semana (con las repeticiones) o todo lo próximo.
-- **Hábitos**: para hacer (cada día o X veces por semana), para dejar, y rutina de sueño (hora de acostarse, de levantarse y horas dormidas), con rachas.
+- **Hoy**: una línea con las horas (todas del mismo alto) y cada tarea a su hora, solo con su nombre y un punto de color. Lo hecho se aclara y lo que se ha pasado sin hacer sale en rojo. Lo que no tiene hora sale al final como “Extra”. Con ✏️ Editar arrastras una tarea para moverla, tiras de su borde de arriba o de abajo para cambiar cuándo empieza o acaba, y arrastras las que no tienen hora a la línea (1 h por defecto). También cambias nombres, quitas o añades; Guardar vuelve a la línea.
+- **Agenda**: el mes; tocas un día y ves sus tareas, y con las flechas pasas de mes.
+- **Hábitos**: para hacer (cada día o X veces por semana), para dejar, y rutina de sueño (hora de acostarse, de levantarse y horas dormidas), con rachas. Al añadir uno no se sugieren los que ya tienes.
+- **¿Qué tal hoy? y ¿Cómo has dormido?**: salen en Hoy hasta que los apuntas. En Progreso solo salen sus estadísticas: el ánimo en cuadraditos del año (más claro, mejor día) y el sueño en un gráfico de líneas (punto verde si llegaste a tu mínimo, rojo si no). El lápiz junto al título cambia lo de hoy.
+- **Por apartado**: en Progreso, el lápiz elige qué apartados ver.
+- **Ajustes**: Cuenta (nombre, correo y contraseña, cada uno con su lápiz; Google Calendar y Siri), Personalizar (apariencia, puntos y objetivos, categorías, secciones, filtros, plantillas y recompensas), Libros y Ayuda.
+- **Libros**: los que quieres leer, el que estás leyendo con su página y su progreso, y los leídos (plegados) con su nota. Por defecto van por orden alfabético del título; se puede buscar y filtrar por autor, categoría y páginas, y ordenar por autor, páginas o los añadidos hace poco.
+- **Tareas sin fecha**: no llevan prioridad, repetición ni aviso; esas casillas salen al ponerles un día.
 - **Puntos**: cada tarea da su duración (hora de inicio a fin) o sus minutos, o los puntos que le pongas a mano; objetivo diario en ⋯ → Puntos.
 - **Progreso**: resumen de la semana, gráfico del mes, el año en cuadraditos (una fila por mes) y cuadraditos por apartado.
 - **Plan de examen**: en una tarea con fecha, “Repartir en varias partes” propone acabar el día antes y reparte las partes hasta ahí; la tarea muestra “faltan 16 días · vas 1 por detrás”.
@@ -55,9 +61,8 @@ Abre la dirección en **Safari** → botón Compartir → **Añadir a pantalla d
 - **Importar rutinas**: ⋯ → Importar copia admite un archivo `{"habits": [...]}` (como `mis-tareas-rutinas.json`, que no se sube a GitHub).
 - **Bandeja rápida**: arriba en Hoy, “Apuntar rápido…”; luego cada cosa se manda a hoy, mañana o sin fecha.
 - **Plantillas**: al editar una tarea, “Guardar como plantilla” (con sus partes en días relativos); al crear una tarea, se elige arriba. Se gestionan en ⋯ → Plantillas.
-- **Estadísticas de sueño**: en la rutina de sueño, las últimas 2 semanas (media dormida, hora media de acostarse, % de noches cumplidas y barras).
+- **Estadísticas de sueño**: en Progreso, las últimas 2 semanas (media dormida, hora media de acostarse, noches que llegaste a tu mínimo y gráfico).
 - **Copia de seguridad**: ⋯ → Guardar copia guarda todo (tareas, hábitos, categorías, recompensas, plantillas). Si pasan 7 días sin copia, Hoy lo recuerda. En el iPhone se puede guardar en Archivos o en Google Drive desde el menú Compartir.
-- **Agenda**: Día (línea de tiempo con tareas, clases y rutinas, y tus huecos libres), Semana, Mes (calendario con puntos de colores), Próximas y Matriz (urgente/importante).
 - **Planificar mi día**: por la mañana eliges qué harás hoy y ves si cabe en tus horas libres; lo que no elijas pasa a mañana.
 - **Etiquetas y filtros**: escribe @etiqueta en el título o en el campo Etiquetas; busca @etiqueta; guarda filtros en ⋯ → Filtros.
 - **Algún día y Esta noche**: ideas sin prisa en Sin fecha → Algún día; las tareas de hoy marcadas “Esta noche” salen aparte.
