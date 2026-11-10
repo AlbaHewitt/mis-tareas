@@ -1,11 +1,12 @@
 import { firebaseConfig } from './config.js';
 import { parseQuick, fold } from './parse.js';
 import { toICS, googleURL } from './cal.js';
-import { DAY_ORDER, DAY_LETTER, MONTHS_SHORT, normTag, pad, isoDate, todayISO, parseISO, addDays, dim, mondayOf, toMin, uid, esc, cap, monthDate, stepDate, nextDate, alignStart, friendlyDate, longDate, repeatLabel, durationMin, autoPoints, taskPoints, isLate, habitPoints, habitOK, weekCount, applies, habitStreak, habitBest, wakeTarget, bedMin, fmtDur, judgeSleep, nowHM, LEVEL_NAMES, levelStart, levelOf } from './logic.js';
+import { DAY_ORDER, DAY_LETTER, MONTHS_SHORT, normTag, pad, isoDate, todayISO, parseISO, addDays, dim, mondayOf, toMin, uid, esc, cap, monthDate, stepDate, nextDate, alignStart, friendlyDate, longDate, repeatLabel, durationMin, autoPoints, taskPoints, isLate, habitPoints, habitOK, weekCount, PERIODIC, periodStart, periodCount, prevPeriod, applies, WD_NAME, habitStreak, habitBest, wakeTarget, bedMin, fmtDur, judgeSleep, nowHM, LEVEL_NAMES, levelStart, levelOf } from './logic.js';
 
 const FB = 'https://www.gstatic.com/firebasejs/10.12.2/';
 const COLORS = ['violeta', 'naranja', 'verde', 'azul', 'gris', 'rosa', 'rojo', 'amarillo', 'turquesa', 'marron'];
 const DEFAULT_CATS = [
+  { id: 'urgente', name: 'Urgente', color: 'rojo' },
   { id: 'evento', name: 'Evento', color: 'violeta' }, { id: 'entreno', name: 'Entreno', color: 'naranja' },
   { id: 'casa', name: 'Casa', color: 'verde' }, { id: 'estudio', name: 'Estudio', color: 'azul' },
   { id: 'trabajo', name: 'Trabajo', color: 'gris' }, { id: 'personal', name: 'Personal', color: 'rosa' },
@@ -25,16 +26,14 @@ let templates = [];
 let extra = { mood: {}, filters: [], garden: [], prefs: {} };
 // Secciones que se pueden apagar en ⋯ → Ayuda y secciones
 const SECTIONS = [
-  ['ahora', 'Ahora toca', 'Tarjeta en Hoy con lo que toca según la hora'],
-  ['bandeja', 'Bandeja rápida', 'Campo “Apuntar rápido…” en Hoy'],
-  ['planificar', 'Planificar mi día', 'Aviso por la mañana y botón en Hoy'],
+  ['bandeja', 'Bandeja rápida', 'Campo “Apuntar rápido…” arriba en Hoy'],
+  ['planificar', 'Planificar mi día', 'Aviso por la mañana en Hoy'],
   ['repaso', 'Repaso de la semana', 'Aviso de los domingos'],
-  ['matriz', 'Matriz de prioridades', 'Vista en Agenda'],
   ['temporizador', 'Temporizador', 'Botón para concentrarte en una tarea'],
   ['jardin', 'Jardín', 'La planta del temporizador y tu jardín en Progreso'],
   ['recompensas', 'Recompensas', 'Canjear puntos por premios'],
   ['logros', 'Niveles y logros', 'En Progreso'],
-  ['animo', 'Ánimo y energía', 'En Hábitos, Hoy (aviso) y Progreso'],
+  ['animo', 'Ánimo y energía', 'Pregunta en Hoy y estadísticas en Progreso'],
   ['estimado', 'Estimado vs real', 'En Progreso'],
   ['concentracion', 'Concentración por asignatura', 'En Progreso'],
 ];
@@ -51,7 +50,7 @@ let selectedDay = null;
 // Estado del formulario de tarea
 let editingId = null, formCat = 'personal', formDays = [], formParts = [], formNoDate = false, splitDays = [1, 2, 3, 4, 5], formSomeday = false, formTonight = false;
 
-document.documentElement.dataset.v = '14';
+document.documentElement.dataset.v = '16';
 // ---------- Registro de errores (se ve en ⋯ → Ayuda) ----------
 const EKEY = 'mis-tareas-errores';
 function logError(msg, where) {
@@ -104,12 +103,14 @@ function clean(t) {
     title: String(t.title || '').slice(0, 300), cat: String(t.cat ?? 'personal'),
     date: t.date || '', time: t.date ? (t.time || '') : '', endTime: t.date && t.time ? (t.endTime || '') : '',
     prio: t.prio || 'normal', repeat: t.date ? (t.repeat || '') : '',
-    days: Array.isArray(t.days) ? t.days.filter(d => d >= 0 && d <= 6) : [],
+    days: Array.isArray(t.days) ? [...new Set(t.days.filter(d => d >= 0 && d <= 6))].sort() : [],
     monthDay: num(t.monthDay), until: t.until || '',
+    every: Math.max(1, Math.min(365, Math.round(Number(t.every)) || 1)), nth: [1, 2, 3, 4, -1].includes(Number(t.nth)) ? Number(t.nth) : null,
+    nthDay: t.nthDay === null || t.nthDay === undefined || t.nthDay === '' ? null : Math.max(0, Math.min(6, Number(t.nthDay))), anchor: /^\d{4}-\d{2}-\d{2}$/.test(t.anchor || '') ? t.anchor : '',
     notes: String(t.notes || ''), done: !!t.done, doneAt: t.doneAt || null, created: t.created || Date.now(), spawned: !!t.spawned,
     remind: num(t.remind), minutes: Number(t.minutes) > 0 ? Math.min(480, Math.round(Number(t.minutes))) : null,
     points: num(t.points) === null ? null : Math.max(0, Math.min(1000, Math.round(num(t.points)))),
-    parentId: t.parentId || '', inbox: !!t.inbox && !t.date,
+    parentId: t.parentId || '', order: Number(t.order) || 0, inbox: !!t.inbox && !t.date,
     someday: !!t.someday && !t.date, tonight: !!t.tonight && !!t.date,
     tags: Array.isArray(t.tags) ? [...new Set(t.tags.map(normTag).filter(Boolean))].slice(0, 10) : [],
     streak: Number(t.streak) || 0, best: Number(t.best) || 0,
@@ -126,8 +127,8 @@ function cleanHabit(h) {
   const hm = (v, d) => /^\d{2}:\d{2}$/.test(v || '') ? v : d;
   const out = {
     name: String(h.name || '').slice(0, 80), kind,
-    freq: kind === 'build' && h.freq === 'weekly' ? 'weekly' : 'daily',
-    target: Math.min(7, Math.max(1, Number(h.target) || 3)),
+    freq: kind === 'build' && PERIODIC.includes(h.freq) ? h.freq : 'daily',
+    target: Math.min(h.freq === 'yearly' ? 366 : h.freq === 'monthly' ? 31 : 7, Math.max(1, Number(h.target) || (h.freq === 'weekly' ? 3 : 1))),
     minutes: Number(h.minutes) > 0 ? Math.min(240, Math.round(Number(h.minutes))) : 10,
     order: Number(h.order) || Date.now(), log,
   };
@@ -169,7 +170,8 @@ function cleanItem(kind, b) {
     status: sts.includes(b.status) ? b.status : 'want', rating: [1, 2, 3, 4, 5].includes(Number(b.rating)) ? Number(b.rating) : null,
     notes: String(b.notes || '').slice(0, 1000), started: day(b.started), finished: day(b.finished), order: Number(b.order) || Date.now() };
   if (kind === 'books') { out.pages = n(b.pages, 20000); out.page = out.pages ? Math.min(out.pages, n(b.page, 20000) || 0) : (n(b.page, 20000) || 0); }
-  else out.year = n(b.year, 2100) >= 1880 ? n(b.year, 2100) : null;
+  out.year = n(b.year, 2100) >= (kind === 'books' ? 1 : 1880) ? n(b.year, 2100) : null;
+  out.looked = !!b.looked;
   return out;
 }
 const normTemplates = l => (Array.isArray(l) ? l : []).filter(x => x && x.name && x.task).slice(0, 50);
@@ -191,7 +193,7 @@ const store = {
       await b.commit();
     }
   },
-  async saveCats(list) { cats = list; if (!this.fb) return local(LCATS, list); return this.fb.setDoc(this.ref('settings', 'categories'), { list }); },
+  async saveCats(list) { cats = list; if (!this.fb) return local(LCATS, list); return this.fb.setDoc(this.ref('settings', 'categories'), { list, urg: true }); },
   async putHabit(h) { if (!this.fb) return local(LHAB, habits); const { id, ...rest } = h; return this.fb.setDoc(this.ref('habits', id), cleanHabit(rest)); },
   async removeHabit(id) { if (!this.fb) return local(LHAB, habits); return this.fb.deleteDoc(this.ref('habits', id)); },
   async setHabitDay(h, day, val) {
@@ -245,7 +247,7 @@ async function initStore() {
     setSync('warn', 'Solo en este dispositivo');
     $('#accountInfo').textContent = 'La sincronización no está configurada. Las tareas se guardan solo en este dispositivo.';
     document.querySelectorAll('[data-cloud]').forEach(b => b.hidden = true);
-    migrate(); render();
+    migrate(); rollRepeats(); render();
     return;
   }
   const [{ initializeApp }, auth, fs] = await Promise.all([
@@ -278,12 +280,14 @@ async function initStore() {
       loaded = true; clearTimeout(slow);
       if (snap.metadata.fromCache) setSync('warn', 'Sin conexión · se sincroniza al volver');
       else setSync('ok', snap.metadata.hasPendingWrites ? 'Guardando…' : 'Sincronizado');
-      adoptSiriTasks(); migrate();
+      adoptSiriTasks(); migrate(); if (!snap.metadata.fromCache) rollRepeats();
       render();
     }, () => { clearTimeout(slow); loaded = true; setSync('warn', 'No se pudo sincronizar'); render(); }));
     unsubs.push(fs.onSnapshot(store.ref('settings', 'categories'), snap => {
       const list = snap.exists() ? snap.data().list : null;
       cats = Array.isArray(list) ? list : DEFAULT_CATS;
+      // Una sola vez: añade la categoría Urgente a las cuentas que ya tenían categorías
+      if (Array.isArray(list) && !snap.data().urg && !snap.metadata.fromCache) store.saveCats(list.some(c => c.id === 'urgente') ? list : [{ id: 'urgente', name: 'Urgente', color: 'rojo' }, ...list]).catch(() => {});
       render(); if (!$('#catSheet').hidden) renderCatSheet();
     }, () => {}));
     unsubs.push(fs.onSnapshot(fs.collection(db, 'users', user.uid, 'habits'), snap => {
@@ -325,14 +329,26 @@ function adoptSiriTasks() {
   tasks.filter(t => t.siriKey !== undefined && !adopting.has(t.id)).forEach(t => {
     adopting.add(t.id);
     const p = parseQuick(t.title, cats);
-    const full = { id: t.id, title: p.title, cat: p.cat || (cats[0]?.id ?? ''), date: p.date ?? todayISO(), time: p.time || '', endTime: p.endTime || '',
-      prio: p.prio || 'normal', repeat: p.repeat || '', days: p.days || [], notes: '', done: false, created: Date.now() };
+    const full = { id: t.id, title: p.title, cat: p.cat || (p.prio && cats.some(c => c.id === 'urgente') ? 'urgente' : '') || (cats.find(c => c.id !== 'urgente')?.id ?? ''), date: p.date ?? todayISO(), time: p.time || '', endTime: p.endTime || '',
+      prio: p.prio || 'normal', repeat: p.repeat || '', days: p.days || [], every: p.every || 1, nth: p.nth || null, nthDay: p.nthDay ?? null, notes: '', done: false, created: Date.now() };
     alignStart(full);
     Object.keys(t).forEach(k => delete t[k]); Object.assign(t, full);
     store.put(full).catch(writeFailed);
   });
 }
 
+// Repeticiones: si una tarea que se repite se quedó sin hacer, se mueve al siguiente día que le toca (hoy o después)
+function rollRepeats() {
+  const today = todayISO(), fixes = [];
+  tasks.forEach(t => {
+    if (!t.repeat || t.done || !t.date || t.date >= today || t.parentId || t.siriKey !== undefined) return;
+    let d = t.date, g = 0;
+    while (d < today && g++ < 2000) d = stepDate(t, d);
+    if (t.until && d > t.until) return;
+    t.date = d; t.streak = 0; fixes.push(t);
+  });
+  if (fixes.length) store.putMany(fixes).catch(writeFailed);
+}
 // Arreglos automáticos de datos antiguos (solo tocan lo que lo necesita)
 const migrated = new Set();
 function migrate() {
@@ -541,8 +557,8 @@ document.querySelectorAll('[data-close]').forEach(b => b.addEventListener('click
 document.querySelectorAll('[data-back]').forEach(b => b.addEventListener('click', () => openSheet(b.dataset.back || '#menuSheet')));
 $('#openPrefs').addEventListener('click', () => openSheet('#prefSheet'));
 $('#openSections').addEventListener('click', () => { renderHelp(); openSheet('#secSheet'); });
-$('#openBooks').addEventListener('click', () => { shelf.books.open = null; renderShelf('books'); openSheet('#booksSheet'); });
-$('#openMovies').addEventListener('click', () => { shelf.movies.open = null; renderShelf('movies'); openSheet('#moviesSheet'); });
+$('#openBooks').addEventListener('click', () => { shelf.books.open = null; shelf.books.adding = false; renderShelf('books'); openSheet('#booksSheet'); });
+$('#openMovies').addEventListener('click', () => { shelf.movies.open = null; shelf.movies.adding = false; renderShelf('movies'); openSheet('#moviesSheet'); });
 // Cuenta: el lápiz de cada dato abre su formulario
 document.querySelectorAll('[data-acc]').forEach(b => b.addEventListener('click', () => {
   const f = $('#' + b.dataset.acc), show = f.hidden;
@@ -625,14 +641,20 @@ function renderWhen() {
   $('#somedayBtn').hidden = !formNoDate; $('#somedayBtn').setAttribute('aria-pressed', formSomeday);
   $('#tonightBtn').hidden = formNoDate || date !== todayISO(); $('#tonightBtn').setAttribute('aria-pressed', formTonight);
   // Sin fecha no hay prioridad, repetición ni aviso: salen al ponerle un día
-  ['#prioField', '#repeatField', '#remindField'].forEach(x => $(x).hidden = formNoDate);
+  ['#repeatField', '#remindField'].forEach(x => $(x).hidden = formNoDate);
   $('#repeat').disabled = formNoDate || formParts.length > 0;
   if (formNoDate || formParts.length) $('#repeat').value = '';
   const r = $('#repeat').value;
   $('#repeatOpts').hidden = !r;
+  const n = Math.max(1, Number($('#every').value) || 1), U = { diario: ['día', 'días'], dias: ['semana', 'semanas'], semanal: ['semana', 'semanas'], mensual: ['mes', 'meses'], anual: ['año', 'años'] }[r] || ['', ''];
+  $('#everyUnit').textContent = n === 1 ? U[0] : U[1];
+  $('#everyHint').textContent = r === 'dias' ? (n === 2 ? 'Una semana sí y otra no.' : n === 1 ? 'Pon 2 para una semana sí y otra no.' : '') : '';
+  $('#mMode').hidden = r !== 'mensual';
+  document.querySelectorAll('#mMode [data-mm]').forEach(b => b.setAttribute('aria-pressed', b.dataset.mm === formMonthMode));
+  $('#nthField').hidden = r !== 'mensual' || formMonthMode !== 'nth';
   $('#daysRow').hidden = r !== 'dias';
   if (r === 'dias') $('#daysRow').innerHTML = dayChips(formDays, 'data-day');
-  $('#monthDayField').hidden = r !== 'mensual';
+  $('#monthDayField').hidden = r !== 'mensual' || formMonthMode !== 'day';
   $('#startText').textContent = date ? longDate(date) : '—';
   $('#untilText').textContent = $('#until').value ? longDate($('#until').value) : 'Nunca';
   $('#clearUntil').hidden = !$('#until').value;
@@ -657,20 +679,36 @@ function renderDetected() {
   if (p.date) bits.push(friendlyDate(p.date));
   if (p.time) bits.push(p.time + (p.endTime ? '–' + p.endTime : ''));
   if (p.cat) bits.push('#' + catOf(p.cat).name);
-  if (p.prio) bits.push('Prioridad alta');
+  else if (!formCatTouched && guessCat(p.title || '')) bits.push('#' + catOf(guessCat(p.title)).name);
+  if (p.prio && cats.some(c => c.id === 'urgente')) bits.push('#Urgente');
   (p.tags || []).forEach(t => bits.push('@' + t));
   if (p.repeat) bits.push('↻ ' + repeatLabel({ ...p, date: p.date || $('#date').value }));
   $('#detected').innerHTML = bits.map(b => `<span>${esc(b)}</span>`).join('');
   $('#detected').hidden = !bits.length;
 }
-$('#catChips').addEventListener('click', e => { const b = e.target.closest('[data-cat]'); if (b) { formCat = b.dataset.cat; renderCatChips(); } });
+let formCatTouched = false;
+// Si no eliges categoría, se adivina por las palabras (gym → Entreno, estudiar → Estudio, limpiar → Casa…)
+const CAT_WORDS = [['entreno', /\b(gym|gimnasio|entren|correr|running|pesas|yoga|pilates|nadar|piscina|crossfit|spinning|bici|futbol|fútbol|padel|pádel|caminar)/i],
+  ['estudio', /\b(estudi|examen|repas|tema \d|apuntes|deberes|practica|práctica|entrega|clase de|leer el tema|ejercicios)/i],
+  ['casa', /\b(limpi|lavar|lavadora|tender|planchar|cocinar|compra|super|barrer|fregar|aspir|ordenar|regar|basura|cama|baño)/i],
+  ['evento', /\b(cumple|boda|cena con|comida con|quedar|quedada|concierto|cine|fiesta|viaje|vuelo|reuni)/i]];
+const guessCat = title => { const c = CAT_WORDS.find(([id, rx]) => rx.test(title) && cats.some(x => x.id === id)); return c ? c[0] : ''; };
+$('#catChips').addEventListener('click', e => { const b = e.target.closest('[data-cat]'); if (b) { formCat = b.dataset.cat; formCatTouched = true; renderCatChips(); } });
 $('#date').addEventListener('change', () => { if ($('#date').value) formNoDate = false; renderMonthDay(); renderWhen(); });
 $('#noDateBtn').addEventListener('click', () => {
   formNoDate = !formNoDate;
   if (!formNoDate && !$('#date').value) $('#date').value = todayISO();
   renderWhen();
 });
-$('#time').addEventListener('change', renderWhen);
+let formPrevStart = '';
+$('#time').addEventListener('focus', () => { formPrevStart = $('#time').value; });
+$('#time').addEventListener('change', () => {
+  // La hora de fin, por defecto una hora después; si ya había una, se mueve con el inicio
+  const s = $('#time').value, en = $('#endTime').value;
+  if (s && (!en || toMin(en) <= toMin(s))) $('#endTime').value = hhmm(toMin(s) + (en && formPrevStart && toMin(en) > toMin(formPrevStart) ? toMin(en) - toMin(formPrevStart) : 60));
+  else if (s && en && formPrevStart && toMin(en) > toMin(formPrevStart)) $('#endTime').value = hhmm(toMin(en) + toMin(s) - toMin(formPrevStart));
+  formPrevStart = s; renderWhen();
+});
 $('#somedayBtn').addEventListener('click', () => { formSomeday = !formSomeday; renderWhen(); });
 $('#tonightBtn').addEventListener('click', () => { formTonight = !formTonight; renderWhen(); });
 const readTags = () => $('#tags').value.split(/[,\s]+/).map(normTag).filter(Boolean);
@@ -686,20 +724,27 @@ $('#daysRow').addEventListener('click', e => {
   const d = +b.dataset.day; formDays = formDays.includes(d) ? formDays.filter(x => x !== d) : [...formDays, d]; renderWhen();
 });
 $('#until').addEventListener('change', renderWhen);
+let formMonthMode = 'day';
+$('#every').addEventListener('input', renderWhen);
+$('#mMode').addEventListener('click', e => { const b = e.target.closest('[data-mm]'); if (b) { formMonthMode = b.dataset.mm; renderWhen(); } });
 $('#clearUntil').addEventListener('click', () => { $('#until').value = ''; renderWhen(); });
 $('#minutes').addEventListener('input', renderPointsHint);
-$('#points').addEventListener('input', renderPointsHint);
+$('#points').addEventListener('input', () => { renderPointsHint(); refreshShares(); });
 $('#title').addEventListener('input', renderDetected);
 
 // --- Partes ---
 function renderParts() {
   const done = formParts.filter(p => p.done).length;
   $('#partsCount').textContent = formParts.length ? `· ${done}/${formParts.length} (${Math.round(done / formParts.length * 100)}%)` : '';
+  const sh = formShares();
   $('#partList').innerHTML = formParts.map((p, i) => `<div class="partrow" data-i="${i}">
+    <span class="grip" data-pact="grip" aria-label="Arrastra para cambiar el orden">⋮⋮</span>
     <button type="button" class="box" data-pact="toggle" aria-pressed="${p.done}" aria-label="Hecha">${TICK('var(--accent-ink)')}</button>
     <input class="inp" type="text" value="${esc(p.title)}" data-pact="title" aria-label="Parte">
     <label class="pickbtn"><span>${p.date ? friendlyDate(p.date) : 'Sin fecha'}</span><input type="date" value="${p.date}" data-pact="date" aria-label="Día de la parte"></label>
+    <input class="inp pts" type="number" inputmode="numeric" min="0" data-pact="pts" value="${p.points ?? ''}" placeholder="${sh[i]}" aria-label="Puntos de la parte">
     <button type="button" class="x" data-pact="del" aria-label="Quitar parte">✕</button></div>`).join('');
+  $('#partsHint').hidden = !formParts.length;
   $('#splitDays').innerHTML = dayChips(splitDays, 'data-sday');
   $('#splitFromText').textContent = $('#splitFrom').value ? longDate($('#splitFrom').value) : 'Hoy';
   $('#splitToText').textContent = $('#splitTo').value ? longDate($('#splitTo').value) : 'Una por día';
@@ -711,6 +756,26 @@ $('#splitBox').addEventListener('toggle', () => {
   if (!$('#splitBox').open || $('#splitTo').value || formNoDate || !$('#date').value || $('#date').value <= todayISO()) return;
   $('#splitTo').value = addDays($('#date').value, -1); renderParts();
 });
+// Puntos por parte: por defecto, lo proporcional al total de la tarea (el campo ⭐ de abajo)
+const formShares = () => partShares($('#points').value === '' ? null : $('#points').value, formParts.map(p => ({ points: p.points, date: p.date })));
+function refreshShares() { const sh = formShares(); document.querySelectorAll('#partList [data-pact=pts]').forEach((el, i) => { el.placeholder = sh[i]; }); }
+// Arrastrar las partes por el asa para cambiar el orden
+let partDrag = null;
+$('#partList').addEventListener('pointerdown', e => {
+  const g = e.target.closest('[data-pact=grip]'); if (!g) return;
+  e.preventDefault(); partDrag = { i: +g.closest('.partrow').dataset.i };
+  g.closest('.partrow').classList.add('dragging');
+  try { $('#partList').setPointerCapture(e.pointerId); } catch {}
+});
+$('#partList').addEventListener('pointermove', e => {
+  if (!partDrag) return; e.preventDefault();
+  const rows = [...$('#partList').querySelectorAll('.partrow')];
+  const j = rows.filter((r, k) => k !== partDrag.i && e.clientY > r.getBoundingClientRect().top + r.offsetHeight / 2).length;
+  if (j !== partDrag.i) { const [it] = formParts.splice(partDrag.i, 1); formParts.splice(j, 0, it); partDrag.i = j; renderParts(); $('#partList').querySelectorAll('.partrow')[j]?.classList.add('dragging'); }
+});
+const endPartDrag = () => { if (partDrag) { partDrag = null; renderParts(); } };
+$('#partList').addEventListener('pointerup', endPartDrag);
+$('#partList').addEventListener('pointercancel', endPartDrag);
 function addPart(title, date) { formParts.push({ id: (editingId || 'nuevo') + '-' + uid(), title, date: date || '', done: false, isNew: true }); }
 $('#partAdd').addEventListener('click', () => {
   const t = $('#partNew').value.trim(); if (!t) return;
@@ -725,7 +790,11 @@ $('#partList').addEventListener('click', e => {
   if (b.dataset.pact === 'del') formParts.splice(i, 1);
   renderParts();
 });
-$('#partList').addEventListener('input', e => { if (e.target.dataset.pact === 'title') formParts[+e.target.closest('.partrow').dataset.i].title = e.target.value; });
+$('#partList').addEventListener('input', e => {
+  const i = +e.target.closest('.partrow')?.dataset.i;
+  if (e.target.dataset.pact === 'title') formParts[i].title = e.target.value;
+  if (e.target.dataset.pact === 'pts') { formParts[i].points = e.target.value === '' ? null : Math.max(0, Number(e.target.value)); refreshShares(); }
+});
 $('#partList').addEventListener('change', e => { if (e.target.dataset.pact === 'date') { formParts[+e.target.closest('.partrow').dataset.i].date = e.target.value; renderParts(); } });
 $('#splitDays').addEventListener('click', e => {
   const b = e.target.closest('[data-sday]'); if (!b) return;
@@ -752,7 +821,7 @@ $('#splitGo').addEventListener('click', () => {
 
 function openForm(id) {
   const t = id ? tasks.find(x => x.id === id) : null;
-  editingId = t ? t.id : null; tplParts = null;
+  editingId = t ? t.id : null; tplParts = null; formCatTouched = !!t;
   $('#title').value = t ? t.title : '';
   formCat = t ? (t.cat ?? '') : (catFilter || cats[cats.length - 1]?.id || '');
   if (!t && !cats.some(c => c.id === formCat)) formCat = cats[0]?.id || '';
@@ -760,7 +829,7 @@ function openForm(id) {
   formSomeday = t ? !!t.someday : (view === 'sinfecha' && sinfechaMode === 'someday');
   formTonight = t ? !!t.tonight : false;
   $('#tags').value = t ? (t.tags || []).join(', ') : '';
-  $('#date').value = t ? (t.date || todayISO()) : todayISO();
+  $('#date').value = t ? (t.date || todayISO()) : (view === 'semana' && agendaSel ? agendaSel : todayISO());
   $('#time').value = t ? (t.time || '') : '';
   $('#endTime').value = t ? (t.endTime || '') : '';
   $('#prio').value = t ? (t.prio || 'normal') : 'normal';
@@ -770,11 +839,15 @@ function openForm(id) {
   renderMonthDay();
   if (t && t.monthDay) $('#monthDay').value = String(t.monthDay);
   $('#until').value = t ? (t.until || '') : '';
+  $('#every').value = t && t.every > 1 ? t.every : 1;
+  formMonthMode = t && t.nth ? 'nth' : 'day';
+  { const base = parseISO((t && t.date) || todayISO()); $('#nth').value = String(t && t.nth ? t.nth : Math.min(4, Math.ceil(base.getDate() / 7))); $('#nthDay').value = String(t && t.nthDay !== null && t.nthDay !== undefined ? t.nthDay : base.getDay()); }
   $('#minutes').value = t && t.minutes ? t.minutes : '';
   $('#points').value = t && t.points !== null && t.points !== undefined ? t.points : '';
   $('#remind').value = t && t.remind !== null && t.remind !== undefined ? String(t.remind) : '';
   $('#notes').value = t ? (t.notes || '') : '';
-  formParts = t ? children(t.id).sort((a, b) => (a.date || '9999').localeCompare(b.date || '9999') || (a.created || 0) - (b.created || 0)).map(c => ({ id: c.id, title: c.title, date: c.date || '', done: !!c.done })) : [];
+  formParts = t ? children(t.id).sort(sortParts).map(c => ({ id: c.id, title: c.title, date: c.date || '', done: !!c.done, points: c.points ?? null, time: c.time || '', endTime: c.endTime || '' })) : [];
+  formPrevStart = t ? (t.time || '') : '';
   $('#partsField').hidden = !!(t && t.parentId);
   $('#splitFrom').value = ''; $('#splitTo').value = ''; $('#splitName').value = ''; $('#splitBox').open = false; $('#partNew').value = '';
   $('#sheetTitle').textContent = t ? (t.parentId ? 'Editar parte' : 'Editar tarea') : 'Nueva tarea';
@@ -799,7 +872,10 @@ $('#taskSheet').addEventListener('submit', e => {
     title, cat: formCat, date: formNoDate ? '' : ($('#date').value || todayISO()),
     time: $('#time').value, endTime: $('#time').value ? $('#endTime').value : '',
     prio: $('#prio').value, repeat: $('#repeat').value, days: $('#repeat').value === 'dias' ? formDays : [],
-    monthDay: $('#repeat').value === 'mensual' ? Number($('#monthDay').value) : null, until: $('#repeat').value ? $('#until').value : '',
+    monthDay: $('#repeat').value === 'mensual' && formMonthMode === 'day' ? Number($('#monthDay').value) : null, until: $('#repeat').value ? $('#until').value : '',
+    every: $('#repeat').value ? Math.max(1, Number($('#every').value) || 1) : 1,
+    nth: $('#repeat').value === 'mensual' && formMonthMode === 'nth' ? Number($('#nth').value) : null,
+    nthDay: $('#repeat').value === 'mensual' && formMonthMode === 'nth' ? Number($('#nthDay').value) : null,
     minutes: formNoDate && Number($('#minutes').value) > 0 ? Number($('#minutes').value) : null,
     points: $('#points').value === '' ? null : Number($('#points').value),
     remind: formNoDate || $('#remind').value === '' ? null : Number($('#remind').value), notes: $('#notes').value.trim(), inbox: false,
@@ -811,12 +887,16 @@ $('#taskSheet').addEventListener('submit', e => {
     if (p.date) { data.date = p.date; formNoDate = false; }
     if (p.time) { data.time = p.time; data.endTime = p.endTime || data.endTime || $('#endTime').value; if (!data.date) data.date = todayISO(); }
     if (p.cat) data.cat = p.cat;
-    if (p.prio) data.prio = p.prio;
+    else if (!formCatTouched) { const g = guessCat(p.title); if (g) data.cat = g; }
+    if (p.prio && cats.some(c => c.id === 'urgente')) data.cat = 'urgente';
     if (p.tags) data.tags = [...new Set([...data.tags, ...p.tags.map(normTag)])];
-    if (p.repeat && !formParts.length) { data.repeat = p.repeat; data.days = p.days || []; }
+    if (p.repeat && !formParts.length) { data.repeat = p.repeat; data.days = p.days || []; data.every = p.every || 1; data.nth = p.nth || null; data.nthDay = p.nthDay ?? null; data.monthDay = null; }
   }
   if (!data.date) { data.time = ''; data.endTime = ''; data.repeat = ''; }
+  if (data.time && !data.endTime) data.endTime = hhmm(toMin(data.time) + 60);
   if (data.repeat === 'dias' && !data.days.length) data.repeat = 'semanal';
+  // La semana de referencia (para "una semana sí y otra no") se mantiene si no cambias la repetición
+  { const old = editingId && tasks.find(x => x.id === editingId); data.anchor = old && old.anchor && old.repeat === data.repeat && (old.every || 1) === data.every && String(old.days) === String(data.days) ? old.anchor : ''; }
   alignStart(data);
   let t;
   if (editingId) { t = tasks.find(x => x.id === editingId); if (!t) return closeSheets(); Object.assign(t, data); }
@@ -834,7 +914,8 @@ function saveParts(parent) {
     const id = p.isNew ? parent.id + '-' + uid() : p.id;
     if (!c) { c = { id, created: Date.now() + i, done: false }; tasks.push(c); }
     const was = !!c.done;
-    Object.assign(c, { title: p.title.trim() || `Parte ${i + 1}`, date: p.date, cat: parent.cat, parentId: parent.id, prio: parent.prio });
+    Object.assign(c, { title: p.title.trim() || `Parte ${i + 1}`, date: p.date, cat: parent.cat, parentId: parent.id, prio: parent.prio, order: i, points: p.points ?? null });
+    if (!p.date) { c.time = ''; c.endTime = ''; }
     if (p.done !== was) setDone(c, p.done);
     writes.push(c);
   });
@@ -850,7 +931,8 @@ $('#tplSave').addEventListener('click', () => {
   const tpl = {
     id: 'tp' + uid(), name,
     task: { title: name, cat: formCat, noDate: formNoDate, time: $('#time').value, endTime: $('#endTime').value, prio: $('#prio').value,
-      repeat: $('#repeat').value, days: formDays, monthDay: $('#repeat').value === 'mensual' ? Number($('#monthDay').value) : null,
+      repeat: $('#repeat').value, days: formDays, monthDay: $('#repeat').value === 'mensual' && formMonthMode === 'day' ? Number($('#monthDay').value) : null,
+      every: Math.max(1, Number($('#every').value) || 1), nth: $('#repeat').value === 'mensual' && formMonthMode === 'nth' ? Number($('#nth').value) : null, nthDay: $('#repeat').value === 'mensual' && formMonthMode === 'nth' ? Number($('#nthDay').value) : null,
       minutes: $('#minutes').value, points: $('#points').value, remind: $('#remind').value, notes: $('#notes').value.trim() },
     parts: formParts.map(p => ({ title: p.title, offset: p.date && base ? Math.round((parseISO(p.date) - parseISO(base)) / 864e5) : null })),
   };
@@ -866,6 +948,7 @@ $('#tplChips').addEventListener('click', e => {
   if (!$('#date').value) $('#date').value = todayISO();
   $('#time').value = t.time || ''; $('#endTime').value = t.endTime || ''; $('#prio').value = t.prio || 'normal';
   $('#repeat').value = t.repeat || ''; formDays = [...(t.days || [])]; renderMonthDay(); if (t.monthDay) $('#monthDay').value = String(t.monthDay);
+  $('#every').value = t.every || 1; formMonthMode = t.nth ? 'nth' : 'day'; if (t.nth) { $('#nth').value = String(t.nth); $('#nthDay').value = String(t.nthDay ?? 0); }
   $('#minutes').value = t.minutes || ''; $('#points').value = t.points ?? ''; $('#remind').value = t.remind ?? ''; $('#notes').value = t.notes || '';
   tplParts = p.parts;
   placeTplParts();
@@ -1008,7 +1091,7 @@ const timerBannerHTML = () => tm && tm.phase !== 'idle' && $('#timer').hidden
 function setDone(t, done) {
   if (!!t.done === done) return;
   t.done = done; t.doneAt = done ? Date.now() : null;
-  if (done) { t.pts = taskPoints(t); t.ptsDay = todayISO(); addPoints(t.pts); }
+  if (done) { t.pts = t.parentId ? partPoints(t) : children(t.id).length ? 0 : taskPoints(t); t.ptsDay = todayISO(); addPoints(t.pts); }
   else if (t.pts) { addPoints(-t.pts, t.ptsDay || todayISO()); t.pts = 0; t.ptsDay = ''; }
 }
 let undoAction = null, toastTimer = null;
@@ -1054,7 +1137,7 @@ function toggle(id) {
   // La tarea principal se completa sola cuando terminas todas sus partes
   if (parent) {
     const pr = progressOf(parent.id);
-    if (pr.total && pr.done === pr.total && !parent.done) { setDone(parent, true); store.put(parent).catch(writeFailed); msg = `¡Terminaste ${parent.title}! ${pr.done}/${pr.total} · +${t.pts + parent.pts} ⭐`; }
+    if (pr.total && pr.done === pr.total && !parent.done) { setDone(parent, true); store.put(parent).catch(writeFailed); msg = `¡Terminaste ${parent.title}! ${pr.done}/${pr.total} · +${t.pts} ⭐`; }
     else if (!nowDone && parent.done) { setDone(parent, false); store.put(parent).catch(writeFailed); }
     else if (nowDone) msg = `${t.title} · ${pr.done}/${pr.total} de ${parent.title} · +${t.pts} ⭐`;
   }
@@ -1096,7 +1179,7 @@ $('#clearDone').addEventListener('click', () => {
 let swipe = null, suppressClick = false;
 const SW_MAX = 120, SW_GO = 90;
 $('#list').addEventListener('pointerdown', e => {
-  const li = e.target.closest('li.task'); if (!li || e.button > 0) return;
+  const li = e.target.closest('li.task'); if (!li || !li.dataset.id || e.button > 0) return;
   swipe = { li, row: li.querySelector('.row'), x: e.clientX, y: e.clientY, dx: 0, active: false, id: li.dataset.id };
 });
 $('#list').addEventListener('pointermove', e => {
@@ -1181,9 +1264,10 @@ $('#importFile').addEventListener('change', async e => {
     }
     // Un archivo de hábitos o rutinas: {"habits":[…]}
     if (data && !Array.isArray(data) && Array.isArray(data.habits)) {
-      const base = Date.now(), list = data.habits.filter(h => h && h.name).map((h, i) => ({ id: String(h.id || 'h' + uid()).replace(/[^\w.~:@+-]/g, '_'), ...cleanHabit({ ...h, order: h.order || base + i }) }));
+      const base = Date.now(), list = data.habits.filter(h => h && h.name && (habits.some(x => x.id === h.id) || !habits.some(x => fold(x.name) === fold(h.name)))).map((h, i) => ({ id: String(h.id || 'h' + uid()).replace(/[^\w.~:@+-]/g, '_'), ...cleanHabit({ ...h, order: h.order || base + i }) }));
       list.forEach(h => { const i = habits.findIndex(x => x.id === h.id); if (i >= 0) habits[i] = h; else habits.push(h); store.putHabit(h).catch(writeFailed); });
-      info.textContent = `Listo: ${list.length} ${list.length === 1 ? 'hábito importado' : 'hábitos o rutinas importados'}. Míralos en la pestaña Hábitos.`;
+      const skipped = data.habits.length - list.length;
+      info.textContent = `Listo: ${list.length} ${list.length === 1 ? 'hábito importado' : 'hábitos o rutinas importados'}${skipped ? ` (${skipped} ya los tenías)` : ''}. Míralos en la pestaña Hábitos.`;
       render(); return;
     }
     if (!Array.isArray(data)) throw 0;
@@ -1232,6 +1316,7 @@ function sleepMedia(sc) {
   const out = sc.closest('.summary')?.querySelector('[data-smedia]');
   if (out && v.length) out.textContent = hm2(Math.round(v.reduce((t, x) => t + x, 0) / v.length));
 }
+$('#list').addEventListener('toggle', e => { const g = e.target.dataset?.g; if (g && e.target.classList.contains('hgroup')) { try { localStorage.setItem('hg-' + g, e.target.open ? '1' : '0'); } catch {} } }, true);
 $('#list').addEventListener('scroll', e => { const sc = e.target; if (!sc.classList?.contains('sscroll')) return; sFromRight = sc.scrollWidth - sc.clientWidth - sc.scrollLeft; sleepMedia(sc); }, true);
 function sleepProgHTML(h) {
   const d = todayISO(), n = h.nights[d], s = habitStreak(h), b = habitBest(h);
@@ -1295,7 +1380,7 @@ function routineRowHTML(h) {
   const on = applies(h, today);
   const daysTxt = h.days?.length && h.days.length < 7 ? DAY_ORDER.filter(d => h.days.includes(d)).map(d => DAY_LETTER[d]).join(' ') : 'Todos los días';
   return `<div class="hab routine" style="--c:var(--accent)">
-    <div class="hb"><div class="n" data-act="hedit" data-id="${h.id}">🕘 ${esc(h.name)} <span class="m">· ${done.size}/${h.steps.length}</span></div>
+    <div class="hb"><div class="n">🕘 ${esc(h.name)} <span class="m">· ${done.size}/${h.steps.length}</span>${editBtn('hedit', 'Editar rutina', h.id)}</div>
       <div class="m">${daysTxt} · ${h.steps[0]?.time || ''}–${h.steps[h.steps.length - 1]?.time || ''} · ${s ? `🔥 ${s} ${s === 1 ? 'día' : 'días'}` : 'Sin racha todavía'}${b > s ? ` · récord ${b}` : ''}</div>
       ${on ? `<ul class="steps-list">${h.steps.map((st, i) => {
         const next = h.steps[i + 1], cur = toMin(st.time) <= now && (!next || now < toMin(next.time));
@@ -1339,7 +1424,7 @@ setInterval(() => {
 }, 60000);
 const SLEEP_DEFAULT = { name: 'Rutina de sueño', kind: 'sleep', minutes: 20, bed: '23:30', wakeWk: '07:15', wakeWe: '08:15', hours: 7.5, tol: 15 };
 const habitDoneToday = h => h.kind === 'routine' ? (h.log[todayISO()] === 1 || !applies(h, todayISO())) : (h.kind === 'quit' || h.kind === 'sleep') ? h.log[todayISO()] !== undefined
-  : h.freq === 'weekly' ? (habitOK(h, todayISO()) || weekCount(h, mondayOf(todayISO())) >= h.target) : habitOK(h, todayISO());
+  : PERIODIC.includes(h.freq) ? (habitOK(h, todayISO()) || periodCount(h, periodStart(h, todayISO())) >= h.target) : habitOK(h, todayISO());
 const sortedHabits = () => [...habits].sort((a, b) => a.order - b.order);
 function setHabit(id, val) {
   const h = habits.find(x => x.id === id); if (!h) return;
@@ -1351,7 +1436,7 @@ function setHabit(id, val) {
   if (next === 1) {
     navigator.vibrate?.(10);
     const s = habitStreak(h);
-    showToast(`+${habitPoints(h)} ⭐ · ${h.name}${s >= 2 ? ` · 🔥 ${s} ${h.freq === 'weekly' ? 'semanas' : 'días'}` : ''}`, () => setHabit(id, 1));
+    showToast(`+${habitPoints(h)} ⭐ · ${h.name}${s >= 2 ? ` · 🔥 ${s} ${PUNIT[h.freq]?.[1] || 'días'}` : ''}`, () => setHabit(id, 1));
   }
   render();
 }
@@ -1359,19 +1444,26 @@ function dotsHTML(h) {
   const mon = mondayOf(todayISO()), today = todayISO();
   return `<div class="dots">${DAY_ORDER.map((wd, i) => { const d = addDays(mon, i), v = h.log[d]; return `<i class="${v === 1 ? 'on' : v === -1 ? 'bad' : d > today ? 'off' : d < today ? 'past' : ''}">${DAY_LETTER[wd]}</i>`; }).join('')}</div>`;
 }
+const PUNIT = { weekly: ['semana', 'semanas', 'esta semana'], monthly: ['mes', 'meses', 'este mes'], yearly: ['año', 'años', 'este año'] };
+// Para los de cada mes o cada año: los últimos meses o años, en verde los cumplidos
+function periodDotsHTML(h) {
+  let st = periodStart(h, todayISO()); const list = [];
+  for (let i = 0; i < (h.freq === 'yearly' ? 4 : 6); i++) { list.unshift(st); st = prevPeriod(h, st); }
+  return `<div class="dots pdots">${list.map((p, i) => `<i class="${periodCount(h, p) >= h.target ? 'on' : i === list.length - 1 ? '' : 'past'}">${h.freq === 'yearly' ? p.slice(0, 4) : MONTHS_SHORT[+p.slice(5, 7) - 1]}</i>`).join('')}</div>`;
+}
 function habitRowHTML(h) {
   const s = habitStreak(h), today = todayISO(), v = h.log[today];
-  const unit = h.freq === 'weekly' ? (s === 1 ? 'semana' : 'semanas') : (s === 1 ? 'día' : 'días');
+  const unit = PUNIT[h.freq] ? PUNIT[h.freq][s === 1 ? 0 : 1] : (s === 1 ? 'día' : 'días');
   let meta = h.kind === 'quit' ? (s ? `🔥 ${s} ${unit} sin caer` : 'Empieza hoy')
-    : h.freq === 'weekly' ? `${weekCount(h, mondayOf(today))}/${h.target} esta semana${s ? ` · 🔥 ${s} ${unit}` : ''}`
+    : PUNIT[h.freq] ? `${periodCount(h, periodStart(h, today))}/${h.target} ${PUNIT[h.freq][2]}${s ? ` · 🔥 ${s} ${unit}` : ''}`
     : (s ? `🔥 ${s} ${unit}` : 'Sin racha todavía');
-  const b = habitBest(h); if (b > s && h.freq !== 'weekly') meta += ` · récord ${b}`;
+  const b = habitBest(h); if (b > s && !PUNIT[h.freq]) meta += ` · récord ${b}`;
   meta += ` · +${habitPoints(h)} ⭐`;
   const actions = h.kind === 'quit'
     ? `<div class="qbtns"><button class="qb ok ${v === 1 ? 'on' : ''}" data-act="hok" data-id="${h.id}" aria-label="Lo he evitado hoy">✓</button><button class="qb bad ${v === -1 ? 'on' : ''}" data-act="hbad" data-id="${h.id}" aria-label="Hoy he caído">✗</button></div>`
     : `<button class="hcheck ${v === 1 ? 'on' : ''}" data-act="hok" data-id="${h.id}" aria-label="Hecho hoy: ${esc(h.name)}">${TICK('var(--surface)')}</button>`;
   return `<div class="hab ${h.kind}" style="--c:${h.kind === 'quit' ? 'var(--k-turquesa)' : 'var(--k-verde)'}">
-    <div class="hb" data-act="hedit" data-id="${h.id}"><div class="n">${esc(h.name)}</div><div class="m">${meta}</div>${dotsHTML(h)}</div>${actions}</div>`;
+    <div class="hb"><div class="n">${esc(h.name)}${editBtn('hedit', 'Editar hábito', h.id)}</div><div class="m">${meta}</div>${h.freq === 'monthly' || h.freq === 'yearly' ? periodDotsHTML(h) : dotsHTML(h)}</div>${actions}</div>`;
 }
 function habitsViewHTML() {
   const today = todayISO(), all = sortedHabits(), pts = pointsOn(today), goal = stats.goal;
@@ -1384,17 +1476,21 @@ function habitsViewHTML() {
       <button class="btn block" data-act="hsleep">🌙 Añadir mi rutina de sueño (23:30 · 7:15)</button>
       <button class="btn block" data-act="hnew" style="margin-top:8px">+ Nuevo hábito</button>`;
   }
-  const sec = (title, list) => list.length ? `<h2 class="group"><span>${title}</span><span>${list.length}</span></h2><div class="habs">${list.map(habitRowHTML).join('')}</div>` : '';
+  const gOpen = k => { try { return localStorage.getItem('hg-' + k) !== '0'; } catch { return true; } };
+  const fold2 = (k, title, n, inner) => `<details class="hgroup" data-g="${k}"${gOpen(k) ? ' open' : ''}><summary class="group"><span>${title}</span><span>${n}</span></summary>${inner}</details>`;
+  const sec = (title, list, k) => list.length ? fold2(k, title, list.length, `<div class="habs">${list.map(habitRowHTML).join('')}</div>`) : '';
   const routines = all.filter(h => h.kind === 'routine');
-  if (routines.length) html += `<h2 class="group"><span>Rutinas</span><span>${routines.length}</span></h2><div class="habs">${routines.map(routineRowHTML).join('')}</div>`;
+  if (routines.length) html += fold2('rutinas', 'Rutinas', routines.length, `<div class="habs">${routines.map(routineRowHTML).join('')}</div>`);
   const sleep = all.filter(h => h.kind === 'sleep');
   // Aquí solo se configura; se apunta en Hoy y se ve y corrige en Progreso
-  html += sleep.length ? `<h2 class="group"><span>Sueño</span></h2><div class="habs">${sleep.map(h => { const s = habitStreak(h); return `<div class="hab sleep" style="--c:var(--k-violeta)"><div class="hb" data-act="hedit" data-id="${h.id}"><div class="n">🌙 ${esc(h.name)}</div>
-      <div class="m">Luz apagada ${h.bed} · despertar ${h.wakeWk} (L–V), ${h.wakeWe} (S–D) · ${fmtDur(h.hours * 60)}${s ? ` · 🔥 ${s} ${s === 1 ? 'noche' : 'noches'}` : ''}</div>${dotsHTML(h)}</div></div>`; }).join('')}</div>`
+  html += sleep.length ? fold2('sueno', 'Sueño', sleep.length, `<div class="habs">${sleep.map(h => { const s = habitStreak(h); return `<div class="hab sleep" style="--c:var(--k-violeta)"><div class="hb"><div class="n">🌙 ${esc(h.name)}${editBtn('hedit', 'Editar rutina de sueño', h.id)}</div>
+      <div class="m">Luz apagada ${h.bed} · despertar ${h.wakeWk} (L–V), ${h.wakeWe} (S–D) · ${fmtDur(h.hours * 60)}${s ? ` · 🔥 ${s} ${s === 1 ? 'noche' : 'noches'}` : ''}</div>${dotsHTML(h)}</div></div>`; }).join('')}</div>`)
     : `<button class="btn block" data-act="hsleep" style="margin-top:10px">🌙 Añadir mi rutina de sueño (23:30 · 7:15)</button>`;
-  html += sec('Cada día', all.filter(h => h.kind === 'build' && h.freq === 'daily'));
-  html += sec('Cada semana', all.filter(h => h.kind === 'build' && h.freq === 'weekly'));
-  html += sec('Para dejar', all.filter(h => h.kind === 'quit'));
+  html += sec('Cada día', all.filter(h => h.kind === 'build' && h.freq === 'daily'), 'dia');
+  html += sec('Cada semana', all.filter(h => h.kind === 'build' && h.freq === 'weekly'), 'semana');
+  html += sec('Cada mes', all.filter(h => h.kind === 'build' && h.freq === 'monthly'), 'mes');
+  html += sec('Cada año', all.filter(h => h.kind === 'build' && h.freq === 'yearly'), 'ano');
+  html += sec('Para dejar', all.filter(h => h.kind === 'quit'), 'dejar');
   return html + `<button class="btn block" data-act="hnew" style="margin-top:14px">+ Nuevo hábito</button>`;
 }
 const SEED_HABITS = [
@@ -1415,7 +1511,9 @@ function renderHabitChips() {
   document.querySelectorAll('#hKind [data-v]').forEach(b => b.setAttribute('aria-pressed', b.dataset.v === hKind));
   document.querySelectorAll('#hFreq [data-v]').forEach(b => b.setAttribute('aria-pressed', b.dataset.v === hFreq));
   $('#hFreqField').hidden = hKind !== 'build';
-  $('#hTargetField').hidden = hKind !== 'build' || hFreq !== 'weekly';
+  $('#hTargetField').hidden = hKind !== 'build' || !PERIODIC.includes(hFreq);
+  $('#hTargetLabel').textContent = `Veces ${hFreq === 'monthly' ? 'al mes' : hFreq === 'yearly' ? 'al año' : 'por semana'}`;
+  $('#hTarget').max = hFreq === 'yearly' ? 366 : hFreq === 'monthly' ? 31 : 7;
   $('#hSleepFields').hidden = hKind !== 'sleep';
   $('#hRoutineFields').hidden = hKind !== 'routine';
   if (hKind === 'routine') renderSteps();
@@ -1470,7 +1568,7 @@ $('#hSuggest').addEventListener('click', e => {
 $('#habitSheet').addEventListener('submit', e => {
   e.preventDefault();
   const name = $('#hName').value.trim(); if (!name) { $('#hName').focus(); return; }
-  const data = { name, kind: hKind, freq: hFreq, target: Number($('#hTarget').value) || 3, minutes: Number($('#hMin').value) || 10 };
+  const data = { name, kind: hKind, freq: hFreq, target: Number($('#hTarget').value) || (hFreq === 'weekly' ? 3 : 1), minutes: Number($('#hMin').value) || 10 };
   if (hKind === 'routine') {
     const steps = hSteps.filter(s => s.text.trim() && s.time).map(s => ({ ...s, text: s.text.trim() }));
     if (!steps.length) { $('#hStepAdd').focus(); return; }
@@ -1500,7 +1598,7 @@ function buildProgress() {
   });
   habits.forEach(h => {
     const key = 'h:' + h.id;
-    if (h.freq === 'weekly') { Object.keys(h.log).forEach(d => { if (h.log[d] === 1 && d <= today) add(key, d, 1, 1); }); return; }
+    if (PERIODIC.includes(h.freq)) { Object.keys(h.log).forEach(d => { if (h.log[d] === 1 && d <= today) add(key, d, 1, 1); }); return; }
     if (h.kind === 'routine') {
       // Cada paso cuenta: hacer 6 de 8 pasos ese día = 75 %
       let d = isoDate(new Date(h.order)), n = 0;
@@ -1683,10 +1781,9 @@ function plant(min, ok) {
 }
 function gardenHTML() {
   const m1 = todayISO().slice(0, 8) + '01', list = extra.garden.filter(p => p.d >= m1);
-  if (!extra.garden.length) return '';
   const alive = list.filter(p => p.ok).length;
   return `<section class="summary"><div class="rato-head"><h2>Tu jardín</h2><span class="hint">este mes · ${alive} 🌱${list.length - alive ? ` · ${list.length - alive} 🥀` : ''}</span></div>
-    <div class="garden">${list.length ? list.map(p => `<span title="${esc(p.t)} · ${p.min} min">${plantEmoji(p)}</span>`).join('') : '<p class="hint">Este mes aún no has plantado nada. Usa el temporizador.</p>'}</div>
+    <div class="garden">${list.length ? list.map(p => `<span title="${esc(p.t)} · ${p.min} min">${plantEmoji(p)}</span>`).join('') : '<p class="hint">Este mes aún no has plantado nada. Toca una tarea y pulsa ⏱ Concentrarme: cada sesión planta algo aquí.</p>'}</div>
     <p class="hint">Cada sesión de concentración planta algo: 🌱 menos de 15 min, 🌿 15–30, 🪴 30–50, 🌳 más de 50. Si dejas un pomodoro a medias, se marchita 🥀.</p></section>`;
 }
 
@@ -1982,13 +2079,14 @@ function itemSort(kind, list) {
     : s === 'num' ? (x[k] || 1e9) - (z[k] || 1e9) || bcmp(x.title, z.title)
     : s === 'recent' ? z.order - x.order : bcmp(x.title, z.title));
 }
-const itemSub = (kind, b) => [b.author, b.genre, b[SHELF[kind].num] ? `${b[SHELF[kind].num]}${SHELF[kind].unit ? ' ' + SHELF[kind].unit : ''}` : ''].filter(Boolean).join(' · ');
+const itemSub = (kind, b) => [b.author, b.genre, kind === 'books' && b.year ? b.year : '', b[SHELF[kind].num] ? `${b[SHELF[kind].num]}${SHELF[kind].unit ? ' ' + SHELF[kind].unit : ''}` : ''].filter(Boolean).join(' · ');
 function itemEditHTML(kind, b) {
   const C = SHELF[kind];
   return `<div class="editbox" data-bid="${b.id}">
     <input class="inp" type="text" data-bf="title" value="${esc(b.title)}" placeholder="Título" aria-label="Título">
     <div class="grid2"><input class="inp" type="text" data-bf="author" value="${esc(b.author)}" placeholder="${C.whoPh}" aria-label="${C.who}" list="${kind}Who"><input class="inp" type="number" inputmode="numeric" data-bf="${C.num}" value="${b[C.num] || ''}" placeholder="${C.numPh}" aria-label="${C.numLabel}"></div>
-    <input class="inp" type="text" data-bf="genre" value="${esc(b.genre)}" placeholder="${C.genrePh}" aria-label="Categoría" list="${kind}Genres">
+    <div class="${kind === 'books' ? 'grid2' : ''}"><input class="inp" type="text" data-bf="genre" value="${esc(b.genre)}" placeholder="${C.genrePh}" aria-label="Categoría" list="${kind}Genres">${kind === 'books' ? `<input class="inp" type="number" inputmode="numeric" data-bf="year" value="${b.year || ''}" placeholder="Año" aria-label="Año">` : ''}</div>
+    <button type="button" class="btn ghost small" data-bact="lookup">✨ Buscar los datos que faltan</button>
     <div class="chips">${C.editSt.map(([v, l]) => `<button type="button" class="chip ${b.status === v ? 'on' : ''}" data-bact="status" data-v="${v}">${l}</button>`).join('')}</div>
     ${b.status === 'read' ? `<div class="stars" aria-label="Valoración">${[1, 2, 3, 4, 5].map(n => `<button type="button" class="${(b.rating || 0) >= n ? 'on' : ''}" data-bact="rate" data-v="${n}" aria-label="${n} estrellas">★</button>`).join('')}</div>` : ''}
     <textarea class="inp" data-bf="notes" placeholder="Notas, citas, quién te lo recomendó…" aria-label="Notas">${esc(b.notes)}</textarea>
@@ -1996,57 +2094,116 @@ function itemEditHTML(kind, b) {
 }
 function renderShelf(kind) {
   const C = SHELF[kind], S = shelf[kind], F = S.f, items = S.items;
+  if (!S.tab || !C.st[S.tab]) S.tab = 'want';
   const uniq = k => [...new Set(items.map(b => b[k]).filter(Boolean))].sort(bcmp);
   const authors = uniq('author'), genres = uniq('genre');
   if (F.author && !authors.includes(F.author)) F.author = '';
   if (F.genre && !genres.includes(F.genre)) F.genre = '';
   const sel = (k, label, opts) => `<label class="field"><span class="label">${label}</span><select class="inp" data-bfil="${k}">${opts.map(([v, l]) => `<option value="${esc(v)}"${F[k] === v ? ' selected' : ''}>${esc(l)}</option>`).join('')}</select></label>`;
   const active = ['author', 'genre', 'num'].filter(k => F[k]).length;
-  $(C.body).innerHTML = `<form class="box-card" data-shelfadd autocomplete="off">
+  const missing = items.filter(b => needsLookup(kind, b)).length;
+  const tabs = Object.entries(C.st).map(([st, label]) => `<button type="button" class="seg ${S.tab === st ? 'on' : ''}" data-bact="tab" data-v="${st}">${label}<span>${items.filter(b => b.status === st).length}</span></button>`).join('');
+  $(C.body).innerHTML = `${S.adding ? `<form class="box-card" data-shelfadd autocomplete="off">
       <input class="inp" type="text" data-add="title" placeholder="${C.add}" aria-label="Título" maxlength="200">
       <div class="grid2"><input class="inp" type="text" data-add="author" placeholder="${C.whoPh} (opcional)" aria-label="${C.who}" list="${kind}Who"><input class="inp" type="number" inputmode="numeric" data-add="${C.num}" placeholder="${C.numPh} (opcional)" aria-label="${C.numLabel}"></div>
       <input class="inp" type="text" data-add="genre" placeholder="Categoría (opcional)" aria-label="Categoría" list="${kind}Genres">
       <div class="chips">${C.addSt.map(([v, l]) => `<button type="button" class="chip ${S.addSt === v ? 'on' : ''}" data-bact="addst" data-v="${v}">${l}</button>`).join('')}</div>
-      <button class="btn primary" type="submit">Añadir</button></form>
+      <p class="hint">Lo que dejes vacío (${C.who.toLowerCase()}, año y categoría) lo busco yo.</p>
+      <div class="grid2"><button class="btn" type="button" data-bact="canceladd">Cancelar</button><button class="btn primary" type="submit">Añadir</button></div></form>` : ''}
     <datalist id="${kind}Who">${authors.map(x => `<option value="${esc(x)}">`).join('')}</datalist><datalist id="${kind}Genres">${genres.map(x => `<option value="${esc(x)}">`).join('')}</datalist>
+    <div class="segs">${tabs}</div>
     ${items.length ? `<div class="bfilter">
       <input class="inp" type="search" data-search value="${esc(F.q)}" placeholder="🔍 Buscar por título, ${C.who.toLowerCase()} o categoría" aria-label="Buscar">
       <details class="box-card"${active ? ' open' : ''}><summary>Filtros y orden${active ? ` · ${active}` : ''}</summary>
         <div class="grid2">${sel('author', C.who, [['', 'Todos'], ...authors.map(x => [x, x])])}${sel('genre', 'Categoría', [['', 'Todas'], ...genres.map(x => [x, x])])}</div>
         <div class="grid2">${sel('num', C.numLabel, Object.entries(C.numF))}${sel('sort', 'Ordenar por', [['title', 'Título (A–Z)'], ['author', C.who], ['num', C.numLabel], ['recent', 'Añadidos hace poco']])}</div>
         ${active ? '<button type="button" class="btn ghost small" data-bact="clearf">Quitar filtros</button>' : ''}
-      </details></div>` : ''}
-    <div class="shelflists"></div>`;
+      </details>
+      ${missing ? `<button type="button" class="btn ghost small" data-bact="fillall" ${lookupRun[kind] ? 'disabled' : ''}>${lookupRun[kind] ? `✨ Buscando… ${lookupRun[kind]}` : `✨ Completar los datos que faltan (${missing})`}</button>` : ''}</div>` : ''}
+    <div class="shelflists"></div>
+    <button type="button" class="shelffab" data-bact="fab" aria-label="${C.add}">+</button>`;
   renderShelfLists(kind);
+  if (S.adding) $(C.body).querySelector('[data-add=title]')?.focus();
 }
 function renderShelfLists(kind) {
   const C = SHELF[kind], S = shelf[kind], F = S.f, y = todayISO().slice(0, 4);
   const filtering = F.q.trim() || F.author || F.genre || F.num;
-  const by = st => itemSort(kind, S.items.filter(b => b.status === st && itemMatch(kind, b)));
-  const reading = C.st.reading ? by('reading') : [], want = by('want'), read = by('read');
-  const thisYear = S.items.filter(b => b.status === 'read' && (b.finished || '').startsWith(y)).length;
+  const list = itemSort(kind, S.items.filter(b => b.status === S.tab && itemMatch(kind, b)));
   const box = $(C.body).querySelector('.shelflists');
-  if (filtering && !reading.length && !want.length && !read.length) { box.innerHTML = '<p class="hint">Nada coincide con la búsqueda.</p>'; return; }
+  if (!list.length) { box.innerHTML = `<p class="hint">${filtering ? 'Nada coincide con la búsqueda.' : S.tab === 'want' ? C.emptyWant : S.tab === 'reading' ? 'Nada ahora mismo. Empieza uno de “Quiero leer”.' : 'Todavía nada. Cuando termines uno, aparecerá aquí.'}</p>`; return; }
   let h = '';
-  if (C.st.reading && (reading.length || !filtering)) {
-    h += `<h2 class="group"><span>${C.st.reading}</span><span>${reading.length || ''}</span></h2>`;
-    h += reading.length ? `<div class="books">${reading.map(b => {
-      const pct = b.pages ? Math.round(b.page / b.pages * 100) : null;
-      return `<div class="book reading" data-bid="${b.id}">
-        <div class="bhead"><span><b>${esc(b.title)}</b><small>${esc(itemSub(kind, b))}${b.started ? ` · desde ${friendlyDate(b.started).toLowerCase()}` : ''}</small></span><button type="button" class="iconbtn" data-bact="edit" aria-label="Editar ${esc(b.title)}">${PENCIL}</button></div>
-        ${b.pages ? `<div class="bbar"><i style="width:${pct}%"></i></div>` : ''}
-        <div class="bpage"><span>Página</span><input class="inp" type="number" inputmode="numeric" data-bf="page" value="${b.page || ''}" placeholder="0" aria-label="Página por la que vas"><span>${b.pages ? `de ${b.pages} · ${pct}%` : ''}</span><button type="button" class="btn small" data-bact="plus">+10</button></div>
-        <button type="button" class="btn primary small" data-bact="finish">✓ Lo he terminado</button>
-        ${S.open === b.id ? itemEditHTML(kind, b) : ''}</div>`;
-    }).join('')}</div>` : `<p class="hint">Nada ahora mismo.${want.length ? ' Empieza uno de tu lista con “Empezar”.' : ''}</p>`;
-  }
-  if (want.length || !filtering) {
-    h += `<h2 class="group"><span>${C.st.want}</span><span>${want.length || ''}</span></h2>`;
+  if (S.tab === 'reading') h = `<div class="books">${list.map(b => {
+    const pct = b.pages ? Math.round(b.page / b.pages * 100) : null;
+    return `<div class="book reading" data-bid="${b.id}">
+      <div class="bhead"><span><b>${esc(b.title)}</b><small>${esc(itemSub(kind, b))}${b.started ? ` · desde ${friendlyDate(b.started).toLowerCase()}` : ''}</small></span><button type="button" class="iconbtn" data-bact="edit" aria-label="Editar ${esc(b.title)}">${PENCIL}</button></div>
+      ${b.pages ? `<div class="bbar"><i style="width:${pct}%"></i></div>` : ''}
+      <div class="bpage"><span>Página</span><input class="inp" type="number" inputmode="numeric" data-bf="page" value="${b.page || ''}" placeholder="0" aria-label="Página por la que vas"><span>${b.pages ? `de ${b.pages} · ${pct}%` : ''}</span><button type="button" class="btn small" data-bact="plus">+10</button></div>
+      <button type="button" class="btn primary small" data-bact="finish">✓ Lo he terminado</button>
+      ${S.open === b.id ? itemEditHTML(kind, b) : ''}</div>`;
+  }).join('')}</div>`;
+  else if (S.tab === 'want') {
     const btn = kind === 'books' ? '<button type="button" class="btn small" data-bact="start">Empezar</button>' : '<button type="button" class="btn small" data-bact="finish">✓ Vista</button>';
-    h += want.length ? `<div class="books">${want.map(b => `<div data-bid="${b.id}"><div class="brow"><span data-bact="edit"><b>${esc(b.title)}</b><small>${esc(itemSub(kind, b)) || '&nbsp;'}</small></span>${btn}</div>${S.open === b.id ? itemEditHTML(kind, b) : ''}</div>`).join('')}</div>` : `<p class="hint">${C.emptyWant}</p>`;
+    h = `<div class="books">${list.map(b => `<div data-bid="${b.id}"><div class="brow"><span data-bact="edit"><b>${esc(b.title)}</b><small>${esc(itemSub(kind, b)) || '&nbsp;'}</small></span>${btn}</div>${S.open === b.id ? itemEditHTML(kind, b) : ''}</div>`).join('')}</div>`;
+  } else {
+    const thisYear = S.items.filter(b => b.status === 'read' && (b.finished || '').startsWith(y)).length;
+    h = `${thisYear && !filtering ? `<p class="hint">${thisYear} en ${y}</p>` : ''}<div class="books">${list.map(b => `<div data-bid="${b.id}"><div class="brow"><span data-bact="edit"><b>${esc(b.title)}</b><small>${esc(itemSub(kind, b))}${b.finished ? `${itemSub(kind, b) ? ' · ' : ''}${parseISO(b.finished).toLocaleDateString('es-ES', { month: 'short', year: 'numeric' })}` : ''}</small></span>${b.rating ? `<span class="stars ro" aria-label="${b.rating} de 5">${STAR(b.rating)}</span>` : '<span></span>'}</div>${S.open === b.id ? itemEditHTML(kind, b) : ''}</div>`).join('')}</div>`;
   }
-  if (read.length) h += `<details class="booksdone"${filtering || (S.open && read.some(b => b.id === S.open)) ? ' open' : ''}><summary>${C.st.read} · ${read.length}${!filtering && thisYear ? ` (${thisYear} en ${y})` : ''}</summary><div class="books">${read.map(b => `<div data-bid="${b.id}"><div class="brow"><span data-bact="edit"><b>${esc(b.title)}</b><small>${esc(itemSub(kind, b))}${b.finished ? `${itemSub(kind, b) ? ' · ' : ''}${parseISO(b.finished).toLocaleDateString('es-ES', { month: 'short', year: 'numeric' })}` : ''}</small></span>${b.rating ? `<span class="stars ro" aria-label="${b.rating} de 5">${STAR(b.rating)}</span>` : '<span></span>'}</div>${S.open === b.id ? itemEditHTML(kind, b) : ''}</div>`).join('')}</div></details>`;
   box.innerHTML = h;
+}
+// --- Buscar los datos que faltan: libros en Open Library y películas en Wikidata (solo se envía el título) ---
+const BOOK_G = [[/science fiction|ciencia ficci|dystopi/i, 'Ciencia ficción'], [/classic|cl[aá]sic|nobel|literatura (espa|latino|rusa|francesa)|spanish literature|colombian|russian literature/i, 'Clásicos'], [/fantasy fiction|epic fantasy|romance fiction|love stor|romantasy/i, 'Fantasía y romance'], [/poetry|poes|poemas/i, 'Poesía'],
+  [/\bplays?\b|teatro|drama \(/i, 'Teatro'], [/mytholog|mitolog/i, 'Mitología'], [/autobiograph|biograph|memoir|biograf/i, 'Biografías y autobiografías'],
+  [/invest|finance|financ|money|dinero|wealth|stock|bolsa/i, 'Inversión y finanzas'], [/business|management|leadership|negocio|liderazgo|sales|selling|negotiat|marketing/i, 'Negocios y liderazgo'],
+  [/psycholog|psicolog/i, 'Psicología'], [/self-help|self help|success|personal development|autoayuda|motivation|habit|superaci/i, 'Desarrollo personal'],
+  [/philosoph|filosof|stoic/i, 'Filosofía'], [/spiritual|religio|meditat|espiritual|mystic|esoter/i, 'Espiritualidad'], [/mathemat|matem/i, 'Matemáticas'],
+  [/physics|astronom|science|cosmolog|biolog|ciencia|f[ií]sica/i, 'Ciencia'], [/history|histor/i, 'Historia'], [/politic|pol[ií]tica|sociolog/i, 'Política y sociedad'],
+  [/health|nutrition|fitness|diet|salud|bodybuild/i, 'Salud y deporte'], [/fiction|novel|ficci/i, 'Novela']];
+const MOVIE_G = [[/animaci|animat|anime/i, 'Animación'], [/ciencia ficci|science fiction/i, 'Ciencia ficción'], [/terror|horror/i, 'Terror'], [/b[eé]lic|war film|guerra/i, 'Bélica'],
+  [/musical/i, 'Musical'], [/comedia rom|romantic comedy/i, 'Comedia romántica'], [/rom[aá]ntic|romance/i, 'Romance'], [/thriller|suspense|suspens/i, 'Thriller'],
+  [/crim|gangster|g[aá]ngster|mafia|polic/i, 'Crimen'], [/hist[oó]ric|biogr|biopic|[eé]poca/i, 'Histórica'], [/fantas/i, 'Fantasía'], [/aventura|adventure/i, 'Aventuras'],
+  [/acci[oó]n|action|superh/i, 'Acción'], [/comedia|comedy/i, 'Comedia'], [/drama/i, 'Drama']];
+const pickGenre = (map, texts) => { const all = texts.join(' | '); for (const [rx, g] of map) if (rx.test(all)) return g; return ''; };
+const needsLookup = (kind, b) => !b.looked && (!b.author || !b.year || !b.genre || (kind === 'books' && !b.pages));
+const lookupRun = {};
+async function findBook(b) {
+  const q = new URLSearchParams({ q: `${b.title} ${b.author || ''}`.trim(), fields: 'title,author_name,first_publish_year,subject,number_of_pages_median', limit: '5' });
+  const r = await fetch('https://openlibrary.org/search.json?' + q); if (!r.ok) throw new Error('openlibrary ' + r.status);
+  const docs = (await r.json()).docs || [], d = docs.find(x => x.author_name?.length) || docs[0]; if (!d) return {};
+  return { author: d.author_name?.[0] || '', year: d.first_publish_year || null, pages: d.number_of_pages_median || null, genre: pickGenre(BOOK_G, d.subject || []) };
+}
+async function wdApi(p) { const r = await fetch('https://www.wikidata.org/w/api.php?' + new URLSearchParams({ format: 'json', origin: '*', ...p })); if (!r.ok) throw new Error('wikidata ' + r.status); return r.json(); }
+async function findMovie(b) {
+  const s = await wdApi({ action: 'wbsearchentities', search: b.title.replace(/\s*\(saga\)\s*$/i, ''), language: 'es', uselang: 'es', type: 'item', limit: '8' });
+  const hit = (s.search || []).find(x => /pel[ií]cula|film/i.test(x.description || '')); if (!hit) return {};
+  const e = (await wdApi({ action: 'wbgetentities', ids: hit.id, props: 'claims' })).entities[hit.id].claims || {};
+  const ids = k => (e[k] || []).map(c => c.mainsnak?.datavalue?.value?.id).filter(Boolean);
+  const years = (e.P577 || []).map(c => parseInt(String(c.mainsnak?.datavalue?.value?.time || '').slice(1, 5))).filter(Boolean);
+  const dir = ids('P57').slice(0, 2), gen = ids('P136').slice(0, 8), want = [...dir, ...gen];
+  const lab = want.length ? (await wdApi({ action: 'wbgetentities', ids: want.join('|'), props: 'labels', languages: 'es|en' })).entities : {};
+  const L = id => lab[id]?.labels?.es?.value || lab[id]?.labels?.en?.value || '';
+  return { author: dir.map(L).filter(Boolean).join(' y '), year: years.length ? Math.min(...years) : null, genre: pickGenre(MOVIE_G, gen.map(L)) };
+}
+// Rellena solo lo que está vacío; devuelve qué ha completado
+async function lookupItem(kind, b) {
+  const found = await (kind === 'books' ? findBook(b) : findMovie(b));
+  const cur = shelf[kind].items.find(x => x.id === b.id) || b, upd = { ...cur, looked: true }, got = [];
+  if (!cur.author && found.author) { upd.author = found.author; got.push(SHELF[kind].who.toLowerCase()); }
+  if (!cur.year && found.year) { upd.year = found.year; got.push('año'); }
+  if (!cur.genre && found.genre) { upd.genre = found.genre; got.push('categoría'); }
+  if (kind === 'books' && !cur.pages && found.pages) { upd.pages = found.pages; got.push('páginas'); }
+  saveItem(kind, upd);
+  return got;
+}
+async function fillAll(kind) {
+  if (lookupRun[kind]) return;
+  const list = shelf[kind].items.filter(b => needsLookup(kind, b)); let n = 0, fails = 0;
+  for (const b of list) {
+    lookupRun[kind] = `${++n}/${list.length}`; if (!$(SHELF[kind].sheet).hidden) renderShelf(kind);
+    try { await lookupItem(kind, b); } catch (e) { fails++; logError(e.message, 'buscar datos'); if (fails > 4) break; }
+    await new Promise(r => setTimeout(r, 350));
+  }
+  lookupRun[kind] = ''; if (!$(SHELF[kind].sheet).hidden) renderShelf(kind);
+  showToast(fails > 4 ? 'No se pudo buscar ahora (¿sin conexión?). Prueba más tarde.' : `Datos buscados para ${n} ${kind === 'books' ? 'libros' : 'películas'}`);
 }
 for (const kind in SHELF) {
   const body = $(SHELF[kind].body), S = shelf[kind];
@@ -2064,11 +2221,16 @@ for (const kind in SHELF) {
     const el = e.target.closest('[data-bact]'); if (!el) return;
     const act = el.dataset.bact;
     if (act === 'clearf') { S.f = { ...S.f, author: '', genre: '', num: '' }; renderShelf(kind); return; }
+    if (act === 'tab') { S.tab = el.dataset.v; S.open = null; renderShelf(kind); return; }
+    if (act === 'fab') { S.adding = true; S.addSt = S.tab; renderShelf(kind); $(SHELF[kind].sheet).scrollTop = 0; return; }
+    if (act === 'canceladd') { S.adding = false; renderShelf(kind); return; }
+    if (act === 'fillall') { fillAll(kind); return; }
     if (act === 'addst') { S.addSt = el.dataset.v; body.querySelectorAll('[data-bact=addst]').forEach(c => c.classList.toggle('on', c === el)); return; }
     const b = S.items.find(x => x.id === el.closest('[data-bid]')?.dataset.bid); if (!b) return;
     const today = todayISO();
     if (act === 'edit') S.open = S.open === b.id ? null : b.id;
     else if (act === 'close') S.open = null;
+    else if (act === 'lookup') { el.disabled = true; el.textContent = '✨ Buscando…'; lookupItem(kind, { ...b, looked: false }).then(got => { showToast(got.length ? `Completado: ${got.join(', ')}` : 'No he encontrado más datos'); renderShelf(kind); }).catch(() => { showToast('No se pudo buscar ahora. Prueba más tarde.'); renderShelf(kind); }); return; }
     else if (act === 'start') { saveItem(kind, { ...b, status: 'reading', started: today }); showToast(`📖 Empiezas “${b.title}”`); }
     else if (act === 'plus') saveItem(kind, { ...b, page: b.pages ? Math.min(b.pages, (b.page || 0) + 10) : (b.page || 0) + 10 });
     else if (act === 'finish') { saveItem(kind, { ...b, status: 'read', finished: today, ...(kind === 'books' ? { page: b.pages || b.page } : {}) }); S.open = b.id; showToast(kind === 'books' ? '🎉 ¡Terminado! Ponle nota si quieres' : '🍿 ¡Vista! Ponle nota si quieres'); }
@@ -2083,8 +2245,11 @@ for (const kind in SHELF) {
     const val = k => e.target.querySelector(`[data-add=${k}]`)?.value.trim() || '';
     const title = val('title'); if (!title) { e.target.querySelector('[data-add=title]').focus(); return; }
     const today = todayISO(), st = S.addSt, C = SHELF[kind];
-    saveItem(kind, { id: kind[0] + uid(), ...cleanItem(kind, { title, author: val('author'), genre: val('genre'), [C.num]: val(C.num), status: st, started: st !== 'want' ? today : '', finished: st === 'read' ? today : '', order: Date.now() }) });
-    S.addSt = 'want'; renderShelf(kind); $(C.body).querySelector('[data-add=title]').focus();
+    const item = { id: kind[0] + uid(), ...cleanItem(kind, { title, author: val('author'), genre: val('genre'), [C.num]: val(C.num), status: st, started: st !== 'want' ? today : '', finished: st === 'read' ? today : '', order: Date.now() }) };
+    saveItem(kind, item);
+    S.adding = false; S.tab = st; renderShelf(kind);
+    // Lo que no has rellenado lo busco
+    if (needsLookup(kind, item)) lookupItem(kind, item).then(got => { if (got.length) showToast(`“${title}”: completado ${got.join(', ')}`); if (!$(C.sheet).hidden) renderShelf(kind); }).catch(() => {});
   });
 }
 
@@ -2216,12 +2381,14 @@ function dayHTML(byCat) {
   return html + '</div>';
 }
 // --- Calendario del mes ---
+let agendaSel = null;
 function monthCalHTML(byCat) {
   const today = todayISO(), base = parseISO(today), y = base.getFullYear(), m = base.getMonth() + monthOffset;
   const first = new Date(y, m, 1), n = dim(first.getFullYear(), first.getMonth());
   const ym = `${first.getFullYear()}-${pad(first.getMonth() + 1)}`, from = `${ym}-01`, to = `${ym}-${pad(n)}`;
   const gh = ghostsIn(byCat, from, to), lead = (first.getDay() + 6) % 7;
   const sel = calSel && calSel.startsWith(ym) ? calSel : (monthOffset === 0 ? today : from);
+  agendaSel = sel;
   const dayTasks = d => tasks.filter(t => byCat(t) && t.date === d).concat(gh[d] || []);
   let cells = '';
   for (let i = 0; i < lead; i++) cells += '<span></span>';
@@ -2235,7 +2402,7 @@ function monthCalHTML(byCat) {
   return `<div class="weeknav"><button class="iconbtn" data-act="mprev" aria-label="Mes anterior">‹</button><strong>${title}</strong><button class="iconbtn" data-act="mnext" aria-label="Mes siguiente">›</button></div>
     <div class="mcal"><b>L</b><b>M</b><b>X</b><b>J</b><b>V</b><b>S</b><b>D</b>${cells}</div>
     <h2 class="group"><span>${cap(parseISO(sel).toLocaleDateString('es-ES', { weekday: 'long', day: 'numeric', month: 'long' }))}</span><span>${selReal.length + selGh.length || ''}</span></h2>
-    ${selReal.length ? `<ul class="list">${selReal.map(taskHTML).join('')}</ul>` : ''}
+    ${selReal.length ? `<ul class="list">${listItemsHTML(selReal)}</ul>` : ''}
     ${selGh.length ? `<div style="display:grid;gap:6px;margin-top:6px">${selGh.map(t => `<button class="ghost" data-act="edit" data-id="${t.id}"><span class="dot" style="background:${colorVar(catOf(t.cat).color)}"></span><span><b>${esc(t.title)}</b>${t.time ? ' · ' + t.time : ''}</span><span>↻</span></button>`).join('')}</div>` : ''}
     ${!selReal.length && !selGh.length ? '<p class="free">Nada este día</p>' : ''}`;
 }
@@ -2255,42 +2422,173 @@ function matrixHTML(byCat) {
     ${items.length > 12 ? `<p class="free">y ${items.length - 12} más</p>` : ''}</section>`).join('')}</div>`;
 }
 
+// ---------- Detalles: al tocar una tarea se ve; con el lápiz se edita ----------
+let detailId = null, detailRoutine = null;
+function openDetails(id) { detailId = id; detailRoutine = null; renderDetails(); openSheet('#detailSheet'); }
+function openRoutineDetails(hid) { detailRoutine = hid; detailId = null; renderDetails(); openSheet('#detailSheet'); }
+function renderDetails() {
+  const body = $('#detailBody'); if (!body) return;
+  if (detailRoutine) {
+    const h = habits.find(x => x.id === detailRoutine); if (!h) return closeSheets();
+    const done = new Set(stepsToday(h)), now = toMin(nowHM());
+    $('#detailTitle').textContent = h.name;
+    body.innerHTML = `<p class="hint">${done.size}/${h.steps.length} pasos hoy</p>
+      <ul class="steps-list">${h.steps.map((st, i) => { const nx = h.steps[i + 1], cur = toMin(st.time) <= now && (!nx || now < toMin(nx.time));
+        return `<li><button class="${done.has(st.id) ? 'on' : ''} ${cur ? 'cur' : ''}" data-dact="rstep" data-id="${h.id}" data-step="${st.id}"><span class="box">${TICK('var(--surface)')}</span><span class="tm">${st.time}</span><span>${esc(st.text)}</span></button></li>`; }).join('')}</ul>
+      <button class="btn block" type="button" data-dact="hedit" data-id="${h.id}">${PENCIL} Editar rutina</button>`;
+    return;
+  }
+  const t = tasks.find(x => x.id === detailId); if (!t) return closeSheets();
+  const root = t.parentId ? tasks.find(p => p.id === t.parentId) || t : t, parts = children(root.id).sort(sortParts);
+  const c = catOf(root.cat), pr = progressOf(root.id);
+  $('#detailTitle').textContent = root.title;
+  const when = t.date ? `${longDate(t.date)}${t.time ? ` · ${t.time}${t.endTime ? '–' + t.endTime : ''}` : ''}` : 'Sin fecha';
+  const facts = [
+    `<span class="catn"><span class="dot" style="background:${colorVar(c.color)}"></span>${esc(c.name)}</span>`,
+    parts.length ? '' : `<span>📅 ${esc(when)}</span>`,
+    root.repeat ? `<span>↻ ${repeatLabel(root)}</span>` : '',
+    parts.length ? '' : `<span>⭐ ${t.parentId ? partPoints(t) : taskPoints(t)}</span>`,
+    ...(root.tags || []).map(x => `<span class="tagchip">@${esc(x)}</span>`),
+  ].filter(Boolean).join('');
+  body.innerHTML = `<div class="dfacts">${facts}</div>
+    ${root.notes ? `<p class="dnotes">${esc(root.notes)}</p>` : ''}
+    ${parts.length ? `<div class="dprog"><span class="pbar"><i style="width:${pr.total ? pr.done / pr.total * 100 : 0}%"></i></span>${pr.done}/${pr.total} partes</div>
+      <ul class="dparts">${parts.map(p => `<li class="${p.done ? 'done' : ''} ${p.id === t.id && t.parentId ? 'me' : ''}" style="--c:${colorVar(c.color)}"><button class="check" data-dact="toggle" data-id="${p.id}" aria-label="${p.done ? 'Marcar como pendiente' : 'Completar'}: ${esc(p.title)}">${TICK('var(--surface)')}</button>
+        <span><b>${esc(p.title)}</b><small>${p.date ? friendlyDate(p.date) : 'Sin fecha'}${p.time ? ' · ' + p.time : ''} · ⭐ ${partPoints(p)}</small></span></li>`).join('')}</ul>`
+      : `<button class="btn primary block" type="button" data-dact="toggle" data-id="${t.id}">${t.done ? 'Marcar como pendiente' : '✓ Hecha'}</button>`}
+    ${!t.done && !parts.length ? `<div class="chips dmove"><span class="label">Mover a</span>${t.date !== todayISO() ? `<button type="button" class="chip" data-dact="move" data-to="hoy" data-id="${t.id}">Hoy</button>` : ''}<button type="button" class="chip" data-dact="move" data-to="manana" data-id="${t.id}">Mañana</button><button type="button" class="chip" data-dact="move" data-to="lunes" data-id="${t.id}">El lunes</button>${t.date ? `<button type="button" class="chip" data-dact="move" data-to="none" data-id="${t.id}">Sin fecha</button>` : ''}</div>` : ''}
+    <div class="grid2"><button class="btn" type="button" data-dact="edit" data-id="${root.id}">${PENCIL} Editar</button>${on('temporizador') && !t.done && !parts.length ? `<button class="btn" type="button" data-dact="timer" data-id="${t.id}">⏱ Concentrarme</button>` : '<span></span>'}</div>`;
+}
+$('#detailBody').addEventListener('click', e => {
+  const el = e.target.closest('[data-dact]'); if (!el) return;
+  const { dact, id } = el.dataset;
+  if (dact === 'toggle') { toggle(id); renderDetails(); }
+  else if (dact === 'rstep') { toggleStep(id, el.dataset.step); renderDetails(); }
+  else if (dact === 'edit') openForm(id);
+  else if (dact === 'hedit') openHabit(id);
+  else if (dact === 'move') { const t = tasks.find(x => x.id === id); if (t) { closeSheets(); moveTasks([t], el.dataset.to); } }
+  else if (dact === 'timer') { closeSheets(); openTimer(id); }
+});
+// Marcar varias partes a la vez (el círculo de un grupo): si están todas hechas, vuelven a pendientes
+function toggleMany(ids) {
+  const list = ids.map(id => tasks.find(x => x.id === id)).filter(Boolean); if (!list.length) return;
+  if (list.length === 1) return toggle(list[0].id);
+  const parent = list[0].parentId ? tasks.find(x => x.id === list[0].parentId) : null;
+  const before = snapshot([...list, ...(parent ? [parent] : [])]), ptsBefore = pointsOn(todayISO());
+  const allDone = list.every(t => t.done);
+  list.forEach(t => setDone(t, !allDone));
+  let msg = allDone ? `${list.length} partes pendientes otra vez` : `Hechas ${list.length} partes · +${list.reduce((s, t) => s + (t.pts || 0), 0)} ⭐`;
+  if (parent) {
+    const pr = progressOf(parent.id);
+    if (pr.total && pr.done === pr.total && !parent.done) { setDone(parent, true); msg = `¡Terminaste ${parent.title}! ${pr.done}/${pr.total}`; }
+    else if (allDone && parent.done) setDone(parent, false);
+  }
+  store.putMany([...list, ...(parent ? [parent] : [])]).catch(writeFailed);
+  navigator.vibrate?.(10);
+  showToast(msg, () => { const diff = pointsOn(todayISO()) - ptsBefore; restore(before); if (diff) addPoints(-diff); });
+  render();
+}
+// Rutina: el círculo marca todos los pasos (o los desmarca si ya estaban todos)
+function toggleRoutineAll(hid) {
+  const h = habits.find(x => x.id === hid); if (!h) return;
+  const done = new Set(stepsToday(h)), all = done.size === h.steps.length;
+  h.steps.forEach(st => { if (all ? done.has(st.id) : !done.has(st.id)) toggleStep(hid, st.id); });
+}
+// Puntos de una parte: los suyos si los pones; si no, su parte proporcional del total de la tarea
+function partShares(total, list) {
+  const auto = list.map(p => autoPoints(p)), fixed = list.map(p => p.points === null || p.points === undefined || p.points === '' ? null : Number(p.points));
+  if (total === null || total === undefined || total === '') return list.map((_, i) => fixed[i] ?? auto[i]);
+  const rest = Math.max(0, Number(total) - fixed.reduce((s, v) => s + (v || 0), 0)), w = auto.reduce((s, v, i) => s + (fixed[i] === null ? v : 0), 0) || 1;
+  return list.map((_, i) => fixed[i] ?? Math.round(rest * auto[i] / w));
+}
+function partPoints(c) {
+  const parent = tasks.find(x => x.id === c.parentId); if (!parent) return taskPoints(c);
+  const sibs = children(parent.id).sort(sortParts), i = sibs.findIndex(x => x.id === c.id);
+  return partShares(parent.points, sibs)[i] ?? taskPoints(c);
+}
+// --- Listas: las partes de una misma tarea en un mismo día salen juntas y se despliegan ---
+function listItemsHTML(list) {
+  const seen = new Set(), out = [];
+  list.forEach(x => {
+    if (!x.parentId) { out.push(taskHTML(x)); return; }
+    const k = x.parentId + '|' + (x.date || '');
+    if (seen.has(k)) return; seen.add(k);
+    const ms = list.filter(y => y.parentId === x.parentId && (y.date || '') === (x.date || ''));
+    out.push(ms.length > 1 ? groupHTML(tasks.find(p => p.id === x.parentId), ms.sort(sortParts), k) : taskHTML(x));
+  });
+  return out.join('');
+}
+function groupHTML(parent, ms, k) {
+  if (!parent) return ms.map(taskHTML).join('');
+  const c = colorVar(catOf(parent.cat).color), key = 'l' + k, open = openGroups.has(key), allDone = ms.every(m => m.done), pr = progressOf(parent.id);
+  const pct = pr.total ? Math.round(pr.done / pr.total * 100) : 0;
+  return `<li class="task tgroup ${allDone ? 'done' : ''}" style="--c:${c}">
+    <div class="row">
+      <button class="check" data-act="gtoggle" data-ids="${ms.map(m => m.id).join(',')}" aria-label="Completar las ${ms.length} partes">${TICK('var(--surface)')}</button>
+      <div class="body" data-act="gopen" data-key="${key}"><div class="t">${esc(parent.title)}</div><div class="meta"><span class="catn" title="${esc(catOf(parent.cat).name)}"><span class="dot" style="background:${c}"></span></span><span>${ms.filter(m => m.done).length}/${ms.length} partes hoy</span><span class="prog"><span class="pbar"><i style="width:${pct}%"></i></span>${pr.done}/${pr.total} · ${pct}%</span></div></div>
+      <button class="more chev${open ? ' open' : ''}" data-act="gopen" data-key="${key}" aria-label="Ver las partes" aria-expanded="${open}"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 6l6 6-6 6"/></svg></button>
+    </div>
+    ${open ? `<ul class="gparts">${ms.map(m => `<li class="${m.done ? 'done' : ''}"><button class="check" data-act="toggle" data-id="${m.id}" aria-label="Completar: ${esc(m.title)}">${TICK('var(--surface)')}</button><span data-act="details" data-id="${m.id}">${esc(m.title)}${m.time ? `<small>${m.time}${m.endTime ? '–' + m.endTime : ''}</small>` : ''}</span></li>`).join('')}</ul>` : ''}
+  </li>`;
+}
+
 // ---------- Hoy: línea de horas ----------
 let hoyEdit = false;
 const HOUR_PX = 56;
-// Lo de hoy, con hora (en la línea) y sin hora (extra). Las tareas grandes con partes no salen: salen sus partes.
-function hoyItems() {
-  const today = todayISO(), items = [], extras = [];
-  tasks.filter(t => t.date === today && !children(t.id).length).forEach(t => {
-    const color = colorVar(catOf(t.cat).color), par = t.parentId ? tasks.find(p => p.id === t.parentId) : null;
-    const title = par ? par.title : t.title, sub = par ? t.title : '';
-    if (!t.time) { extras.push({ title, sub, color, id: t.id, done: t.done, act: 'tltoggle' }); return; }
-    const s = toMin(t.time); let e = t.endTime ? toMin(t.endTime) : s + 60; if (e <= s) e += 1440;
-    items.push({ s, e, title, sub, color, id: t.id, done: t.done, act: 'tltoggle' });
+const openGroups = new Set(); // grupos de partes desplegados (como en Recordatorios)
+const sortParts = (a, b) => (a.order || 0) - (b.order || 0) || (a.date || '9999').localeCompare(b.date || '9999') || (a.created || 0) - (b.created || 0);
+// Lo de hoy: las partes de una misma tarea a la misma hora (o sin hora) salen juntas como una sola
+function hoyItems(edit) {
+  const today = todayISO(), items = [], extras = [], units = new Map();
+  tasks.filter(t => t.date === today && !children(t.id).length && !(edit && t.done)).sort(sortParts).forEach(t => {
+    const k = t.parentId ? `p|${t.parentId}|${t.time || ''}|${t.endTime || ''}` : 't|' + t.id;
+    if (!units.has(k)) units.set(k, []); units.get(k).push(t);
   });
-  habits.filter(h => h.kind === 'routine' && applies(h, today)).forEach(h => {
-    const done = new Set(stepsToday(h));
-    h.steps.forEach((st, i) => { const n = h.steps[i + 1], s = toMin(st.time); items.push({ s, e: n ? toMin(n.time) : s + 30, title: st.text, color: 'var(--accent)', id: h.id, step: st.id, done: done.has(st.id), act: 'rstep' }); });
+  units.forEach((ms, k) => {
+    const t = ms[0], par = t.parentId ? tasks.find(p => p.id === t.parentId) : null, multi = ms.length > 1;
+    const it = { key: 'h' + k, ids: ms.map(x => x.id), id: t.id, members: ms, multi, color: colorVar(catOf(t.cat).color),
+      title: par ? par.title : t.title, sub: par ? (multi ? `${ms.filter(x => x.done).length}/${ms.length} partes` : t.title) : '', done: ms.every(x => x.done) };
+    if (!t.time) { extras.push(it); return; }
+    const s = toMin(t.time); let e = t.endTime ? toMin(t.endTime) : s + 60; if (e <= s) e += 1440;
+    items.push({ ...it, s, e });
+  });
+  // Cada rutina es un solo bloque con su nombre; sus pasos se ven al tocarla
+  habits.filter(h => h.kind === 'routine' && applies(h, today) && h.steps.length).forEach(h => {
+    const done = new Set(stepsToday(h)), s = toMin(h.steps[0].time), last = toMin(h.steps[h.steps.length - 1].time);
+    let e = last + 30; if (e <= s) e += 1440;
+    items.push({ s, e, routine: h.id, id: h.id, title: h.name, sub: `${done.size}/${h.steps.length} pasos`, color: 'var(--accent)', done: done.size === h.steps.length });
   });
   return { items: items.sort((a, b) => a.s - b.s || a.e - b.e), extras, late: tasks.filter(t => isLate(t) && !children(t.id).length).sort(sortTasks) };
 }
+const ckBtn = it => `<button class="ck${it.done ? ' on' : ''}" style="--c:${it.color}" ${it.routine ? `data-act="rall" data-id="${it.routine}"` : `data-act="gtoggle" data-ids="${it.ids.join(',')}"`} aria-label="${it.done ? 'Marcar como pendiente' : 'Completar'}: ${esc(it.title)}">${TICK('var(--surface)')}</button>`;
+const itemText = it => `<b>${esc(it.title)}${it.sub ? `<small class="tsub">${esc(it.sub)}</small>` : ''}</b>`;
 function hoyHTML() {
-  const now = toMin(nowHM()), { items, extras, late } = hoyItems();
-  let html = timerBannerHTML() + backupBannerHTML() + sleepPromptHTML() + moodPromptHTML();
+  const now = toMin(nowHM()), { items, extras, late } = hoyItems(hoyEdit);
+  let html = timerBannerHTML() + backupBannerHTML() + (on('repaso') ? reviewBannerHTML() : '') + (on('planificar') && !hoyEdit ? planBannerHTML() : '') + sleepPromptHTML() + moodPromptHTML();
   if (hoyEdit) return html + hoyEditHTML(items, extras);
   const pending = items.filter(i => !i.done).length + extras.filter(i => !i.done).length;
+  if (on('bandeja')) html += inboxHTML();
+  const habLeft = habits.filter(h => (h.kind === 'quit' || (h.kind === 'build' && h.freq === 'daily')) && !habitDoneToday(h));
+  if (habLeft.length) { const names = habLeft.slice(0, 2).map(h => h.name).join(', ') + (habLeft.length > 2 ? ` y ${habLeft.length - 2} más` : '');
+    html += `<button class="hableft" data-act="gohabits"><span>🔥</span><span><b>${habLeft.length} ${habLeft.length === 1 ? 'hábito' : 'hábitos'} por hacer hoy</b><small>${esc(names)}</small></span><span class="go">›</span></button>`; }
   html += `<div class="hoyhead"><span>${pending ? `${pending} por hacer` : items.length + extras.length ? '¡Todo hecho! 🎉' : 'Nada para hoy'}</span><button class="btn small" data-act="hoyedit">✏️ Editar</button></div>`;
   if (items.length) html += timelineHTML(items, now, false);
-  else html += '<p class="hint" style="margin:8px 2px">No tienes nada con hora hoy. Pulsa “Editar” para ponerle hora a tus tareas.</p>';
-  const row = (x, cls) => `<button class="xrow ${cls}" data-act="${x.act || 'tltoggle'}" data-id="${x.id}"><span class="ck${x.done ? ' on' : ''}" style="--c:${x.color}" aria-hidden="true">${TICK('var(--surface)')}</span><b>${esc(x.title)}${x.sub ? `<small class="tsub">${esc(x.sub)}</small>` : ''}</b></button>`;
+  else html += `<p class="hint" style="margin:8px 2px">${extras.length ? 'No tienes nada con hora hoy. Pulsa “Editar” para ponerle hora a tus tareas.' : 'Nada apuntado para hoy. Pulsa + para añadir algo.'}</p>`;
+  const row = (it, cls) => {
+    const open = it.multi && openGroups.has(it.key);
+    return `<div class="xrow ${cls}">${ckBtn(it)}<span class="xb" data-act="${it.multi ? 'gopen' : 'details'}" data-id="${it.id}" data-key="${it.key || ''}">${itemText(it)}</span>${it.multi ? `<button class="chev${open ? ' open' : ''}" data-act="gopen" data-key="${it.key}" aria-label="Ver las partes" aria-expanded="${open}">›</button>` : ''}</div>
+      ${open ? `<div class="xsub">${it.members.map(m => `<div class="xrow sub ${m.done ? 'done' : ''}">${ckBtn({ ids: [m.id], color: it.color, done: m.done, title: m.title })}<span class="xb" data-act="details" data-id="${m.id}"><b>${esc(m.title)}</b></span></div>`).join('')}</div>` : ''}`;
+  };
   if (extras.length) html += `<h2 class="group"><span>Extra</span><span>${extras.length}</span></h2><div class="xlist">${extras.sort((a, b) => a.done - b.done).map(x => row(x, x.done ? 'done' : '')).join('')}</div>`;
-  if (late.length) html += `<h2 class="group late"><span>De otros días</span><span>${late.length}</span></h2><div class="xlist">${late.map(t => { const par = t.parentId ? tasks.find(p => p.id === t.parentId) : null; return row({ title: par ? par.title : t.title, sub: `${par ? t.title + ' · ' : ''}${friendlyDate(t.date).toLowerCase()}`, color: colorVar(catOf(t.cat).color), id: t.id }, 'late'); }).join('')}</div>`;
+  if (late.length) html += `<h2 class="group late"><span>De otros días</span><span>${late.length}</span></h2><div class="latebar"><button class="chip" data-act="mvlate" data-to="hoy">Todas a hoy</button><button class="chip" data-act="mvlate" data-to="manana">A mañana</button><button class="chip" data-act="mvlate" data-to="none">Sin fecha</button></div><div class="xlist">${late.map(t => { const par = t.parentId ? tasks.find(p => p.id === t.parentId) : null; return row({ ids: [t.id], id: t.id, title: par ? par.title : t.title, sub: `${par ? t.title + ' · ' : ''}${friendlyDate(t.date).toLowerCase()}`, color: colorVar(catOf(t.cat).color), done: false }, 'late'); }).join('')}</div>`;
   return html;
 }
-// La línea de horas: cada hora mide lo mismo. En modo editar las tareas se pueden arrastrar.
+// La línea de horas: cada hora mide lo mismo. En modo editar: tocar = cambiar la hora; mantener = arrastrar.
 let tlStartH = 7;
 function timelineHTML(items, now, edit) {
-  const startH = Math.min(7, ...items.map(i => Math.floor(i.s / 60))), endH = Math.min(26, Math.max(23, ...items.map(i => Math.ceil(i.e / 60))));
+  const nowH = Math.max(0, Math.floor(now / 60) - 1);
+  const startH = edit ? Math.min(7, ...items.map(i => Math.floor(i.s / 60))) : Math.min(nowH, ...items.map(i => Math.floor(i.s / 60)));
+  const endH = Math.min(26, Math.max(edit ? 23 : Math.max(Math.floor(now / 60) + 2, 21), ...items.map(i => Math.ceil(i.e / 60))));
   tlStartH = startH;
   const top = m => (m - startH * 60) / 60 * HOUR_PX;
   const lanes = []; items.forEach(i => { let l = lanes.findIndex(end => end <= i.s); if (l < 0) { l = lanes.length; lanes.push(0); } lanes[l] = i.e; i.lane = l; });
@@ -2301,73 +2599,85 @@ function timelineHTML(items, now, edit) {
   html += items.map(i => {
     const st = i.done ? 'done' : i.e <= now ? 'late' : i.s <= now ? 'now' : '';
     const h = Math.max(22, (i.e - i.s) / 60 * HOUR_PX - 3);
-    const drag = edit && !i.step;
     const pos = `top:${top(i.s) + 1}px;height:${h}px;left:calc(3.4em + (100% - 3.4em) * ${i.lane / nl});width:calc((100% - 3.4em) / ${nl} - 4px)`;
-    if (edit) return `<div class="tl2i ${drag ? 'drag' : 'fixed'} ${i.done ? 'done' : ''}" style="${pos}"${drag ? ` data-drag="${i.id}" data-s="${i.s}" data-e="${i.e}"` : ''}>
-      ${drag ? '<span class="hdl t" data-h="t"></span>' : ''}<span class="dot" style="background:${i.color}"></span><b>${esc(i.title)}${i.sub ? `<small class="tsub">${esc(i.sub)}</small>` : ''}</b><small class="tlt">${hhmm(i.s)}–${hhmm(i.e)}</small>${drag ? '<span class="hdl b" data-h="b"></span>' : ''}</div>`;
-    return `<button class="tl2i ${st}" style="${pos}" data-act="${i.act}" data-id="${i.id}"${i.step ? ` data-step="${i.step}"` : ''} aria-label="${esc(i.title)}${i.done ? ' (hecha)' : ''}">
-      <span class="ck${i.done ? ' on' : ''}" style="--c:${i.color}" aria-hidden="true">${TICK('var(--surface)')}</span><b>${esc(i.title)}${i.sub ? `<small class="tsub">${esc(i.sub)}</small>` : ''}</b></button>`;
+    if (edit) {
+      const drag = !i.routine;
+      return `<div class="tl2i ${drag ? 'drag' : 'fixed'}" style="${pos}"${drag ? ` data-drag="${i.ids.join(',')}" data-s="${i.s}" data-e="${i.e}"` : ''}>
+        ${drag ? '<span class="hdl t" data-h="t"></span>' : ''}<span class="dot" style="background:${i.color}"></span>${itemText(i)}<small class="tlt">${hhmm(i.s)}–${hhmm(i.e)}</small>${drag ? '<span class="hdl b" data-h="b"></span>' : ''}</div>`;
+    }
+    return `<div class="tl2i ${st}" style="${pos}">${ckBtn(i)}<span class="tlb" data-act="${i.routine ? 'rdetails' : 'details'}" data-id="${i.id}">${itemText(i)}</span></div>`;
   }).join('') + '</div>';
   return html;
 }
 const hhmm = m => { m = ((Math.round(m) % 1440) + 1440) % 1440; return pad(Math.floor(m / 60)) + ':' + pad(m % 60); };
-// Modo editar: cambiar horas, nombres, quitar y añadir tareas de hoy
+// Modo editar: solo lo que falta por hacer. Arriba, traer tareas sin fecha; las que no tienen hora, para arrastrar a la línea.
 function hoyEditHTML(items, extras) {
-  const today = todayISO(), list = tasks.filter(t => t.date === today && !children(t.id).length).sort(sortTasks);
-  const tp = (field, v, label) => `<label class="pickbtn tbtn"><span class="label">${label}</span><span>${v || '—'}</span><input type="time" data-ef="${field}" value="${v || ''}" aria-label="${label}"></label>`;
   const loose = extras.filter(x => !x.done);
   return `<div class="hoyhead"><b>Editar hoy</b><button class="btn primary small" data-act="hoysave">Guardar</button></div>
-    <p class="hint" style="margin:0 2px 8px">Arrastra una tarea para moverla. Tira de su borde de arriba o de abajo para cambiar cuándo empieza o acaba.</p>
-    ${loose.length ? `<h2 class="group"><span>Sin hora · arrástrala a la línea</span><span>${loose.length}</span></h2><div class="xchips">${loose.map(x => `<span class="xchip" data-xdrag="${x.id}"><span class="dot" style="background:${x.color}"></span>${esc(x.title)}</span>`).join('')}</div>` : ''}
-    ${timelineHTML(items, toMin(nowHM()), true)}
-    <h2 class="group"><span>Nombres y horas</span><span>${list.length}</span></h2>
-    <div class="sublist">${list.map(t => `<div class="erow ${t.done ? 'done' : ''}" data-id="${t.id}">
-      <div class="erow1"><span class="dot" style="background:${colorVar(catOf(t.cat).color)}"></span><input class="inp" type="text" data-ef="title" value="${esc(t.title)}" aria-label="Nombre"${t.parentId ? ` title="${esc(tasks.find(p => p.id === t.parentId)?.title || '')}"` : ''}><button type="button" class="x" data-ef="del" aria-label="Quitar ${esc(t.title)}">✕</button></div>
-      <div class="grid2">${tp('time', t.time, 'Empieza')}${tp('endTime', t.endTime, 'Termina')}</div></div>`).join('') || '<p class="hint">Hoy no tienes tareas. Añade una abajo.</p>'}</div>
-    <form class="box-card" id="hoyAdd" autocomplete="off">
-      <h4>Añadir a hoy</h4>
-      <input class="inp" type="text" id="haTitle" placeholder="p. ej. Estudiar Cálculo #estudio" aria-label="Nueva tarea">
-      <div class="grid2"><label class="pickbtn tbtn"><span class="label">Empieza</span><span id="haStartT">—</span><input type="time" id="haStart" aria-label="Empieza"></label><label class="pickbtn tbtn"><span class="label">Termina</span><span id="haEndT">—</span><input type="time" id="haEnd" aria-label="Termina"></label></div>
-      <button class="btn primary" type="submit">Añadir</button>
-    </form>
-    <button class="btn block" type="button" data-act="plan">📝 Traer tareas sin fecha a hoy</button>
-    <p class="hint">Los pasos de tus rutinas se cambian en Hábitos. Lo que dejes sin hora sale al final como “Extra”.</p>`;
+    <button class="btn block" type="button" data-act="plan" style="margin-bottom:8px">📝 Traer tareas sin fecha a hoy</button>
+    <p class="hint" style="margin:0 2px 8px">Toca una tarea para cambiar su hora. Mantén pulsado y arrastra para moverla; tira de su borde de arriba o de abajo para alargarla o acortarla. Para quitarle la hora, arrástrala a “Quitar hora”.</p>
+    ${loose.length ? `<h2 class="group"><span>Sin hora</span><span>${loose.length}</span></h2><div class="xchips">${loose.map(x => `<span class="xchip" data-xdrag="${x.ids.join(',')}"><span class="dot" style="background:${x.color}"></span>${esc(x.title)}${x.sub ? ` · <small>${esc(x.sub)}</small>` : ''}</span>`).join('')}</div>` : ''}
+    ${timelineHTML(items, toMin(nowHM()), true)}`;
 }
-// Arrastrar en la línea: mover, estirar por arriba o por abajo, o soltar una tarea sin hora
-let tlDrag = null;
-const SNAP = 5;
+// --- Arrastrar (manteniendo pulsado) y tocar para cambiar la hora ---
+let tlDrag = null, tlPress = null;
+const SNAP = 5, HOLD_MS = 380;
+const idsOf = s => String(s || '').split(',').filter(Boolean);
+function setTimes(ids, time, end) {
+  const list = ids.map(id => tasks.find(x => x.id === id)).filter(Boolean);
+  list.forEach(t => { t.time = time; t.endTime = time ? end : ''; });
+  if (list.length) store.putMany(list).catch(writeFailed);
+}
+function outZone(show) {
+  let z = $('#tlOut');
+  if (show && !z) { z = document.createElement('div'); z.id = 'tlOut'; z.textContent = '⤒ Suelta aquí para quitar la hora'; document.body.append(z); }
+  if (!show && z) z.remove();
+}
+const overOut = (x, y) => { const z = $('#tlOut'); if (!z) return false; const r = z.getBoundingClientRect(); return x >= r.left && x <= r.right && y >= r.top && y <= r.bottom; };
+function beginDrag(p) {
+  const line = $('#list .tl2'); if (!line) return;
+  navigator.vibrate?.(12);
+  if (p.blk) {
+    tlDrag = { el: p.blk, ids: idsOf(p.blk.dataset.drag), mode: p.mode || 'm', y0: p.y, s0: +p.blk.dataset.s, e0: +p.blk.dataset.e, line };
+    p.blk.classList.add('dragging');
+  } else {
+    const r = p.chip.getBoundingClientRect(), ghost = p.chip.cloneNode(true);
+    ghost.className = 'xchip ghost'; ghost.style.cssText = `left:${r.left}px;top:${r.top}px;width:${r.width}px`;
+    document.body.append(ghost);
+    tlDrag = { chip: p.chip, ghost, ids: idsOf(p.chip.dataset.xdrag), mode: 'new', dx: p.x - r.left, dy: p.y - r.top, line };
+    p.chip.classList.add('lifted');
+  }
+  outZone(tlDrag.mode === 'm');
+}
 $('#list').addEventListener('pointerdown', e => {
   if (!hoyEdit || e.button > 0) return;
   const blk = e.target.closest('.tl2i[data-drag]'), chip = e.target.closest('[data-xdrag]');
   if (!blk && !chip) return;
-  e.preventDefault();
-  const line = $('#list .tl2');
-  if (blk) {
-    tlDrag = { el: blk, id: blk.dataset.drag, mode: e.target.dataset.h || 'm', y0: e.clientY, s0: +blk.dataset.s, e0: +blk.dataset.e, line };
-    blk.classList.add('dragging');
-  } else {
-    const r = chip.getBoundingClientRect(), ghost = chip.cloneNode(true);
-    ghost.className = 'xchip ghost'; ghost.style.cssText = `left:${r.left}px;top:${r.top}px;width:${r.width}px`;
-    document.body.append(ghost);
-    tlDrag = { chip, ghost, id: chip.dataset.xdrag, mode: 'new', dx: e.clientX - r.left, dy: e.clientY - r.top, line };
-    chip.classList.add('lifted');
-  }
+  // Los bordes se arrastran al momento; el resto, manteniendo pulsado
+  if (blk && e.target.dataset.h) { e.preventDefault(); beginDrag({ blk, mode: e.target.dataset.h, x: e.clientX, y: e.clientY }); return; }
+  const p = { blk, chip, x: e.clientX, y: e.clientY };
+  p.timer = setTimeout(() => { if (tlPress === p) { tlPress = null; beginDrag(p); } }, HOLD_MS);
+  tlPress = p;
 });
-function tlMinuteAt(y, line = tlDrag.line) {
+function tlMinuteAt(y, line) {
   const r = line.getBoundingClientRect();
   return Math.round((tlStartH * 60 + (y - r.top) / HOUR_PX * 60) / SNAP) * SNAP;
 }
 function tlAutoScroll(y) {
-  if (y < 90) window.scrollBy(0, -12); else if (y > innerHeight - 110) window.scrollBy(0, 12);
+  const sc = $('#scroller') || document.scrollingElement;
+  if (y < 90) sc.scrollBy(0, -12); else if (y > innerHeight - 110) sc.scrollBy(0, 12);
 }
+document.addEventListener('touchmove', e => { if (tlDrag) e.preventDefault(); }, { passive: false });
 document.addEventListener('pointermove', e => {
+  if (tlPress && Math.hypot(e.clientX - tlPress.x, e.clientY - tlPress.y) > 8) { clearTimeout(tlPress.timer); tlPress = null; }
   const d = tlDrag; if (!d) return;
   e.preventDefault(); tlAutoScroll(e.clientY);
+  const out = overOut(e.clientX, e.clientY); $('#tlOut')?.classList.toggle('hot', out);
   if (d.mode === 'new') {
     d.ghost.style.left = e.clientX - d.dx + 'px'; d.ghost.style.top = e.clientY - d.dy + 'px';
     const r = d.line.getBoundingClientRect(), over = e.clientY >= r.top && e.clientY <= r.bottom;
     d.line.classList.toggle('drop', over);
-    d.ghost.dataset.t = over ? hhmm(Math.max(0, tlMinuteAt(e.clientY - d.dy))) : '';
+    d.ghost.dataset.t = over ? hhmm(Math.max(0, tlMinuteAt(e.clientY - d.dy, d.line))) : '';
     return;
   }
   const dm = Math.round((e.clientY - d.y0) / HOUR_PX * 60 / SNAP) * SNAP;
@@ -2379,60 +2689,57 @@ document.addEventListener('pointermove', e => {
   d.el.style.top = (s - tlStartH * 60) / 60 * HOUR_PX + 1 + 'px';
   d.el.style.height = Math.max(22, (en - s) / 60 * HOUR_PX - 3) + 'px';
   d.el.querySelector('.tlt').textContent = `${hhmm(s)}–${hhmm(en)}`;
+  d.el.classList.toggle('leaving', out);
 }, { passive: false });
 function tlDrop(e, cancel) {
+  if (tlPress) {
+    // Toque corto: cambiar la hora a mano
+    const p = tlPress; tlPress = null; clearTimeout(p.timer);
+    if (!cancel) openTimeSheet(idsOf((p.blk || p.chip).dataset.drag || (p.blk || p.chip).dataset.xdrag));
+    return;
+  }
   const d = tlDrag; if (!d) return; tlDrag = null;
-  const t = tasks.find(x => x.id === d.id);
+  const out = !cancel && overOut(e.clientX, e.clientY); outZone(false);
   if (d.mode === 'new') {
     d.ghost.remove(); d.chip.classList.remove('lifted'); d.line.classList.remove('drop');
     const r = d.line.getBoundingClientRect();
-    if (cancel || !t || e.clientY < r.top || e.clientY > r.bottom) return;
+    if (cancel || e.clientY < r.top || e.clientY > r.bottom) return;
     const s = Math.max(0, Math.min(1380, tlMinuteAt(e.clientY - d.dy, d.line)));
-    t.time = hhmm(s); t.endTime = hhmm(s + 60);
+    setTimes(d.ids, hhmm(s), hhmm(s + 60));
   } else {
-    d.el.classList.remove('dragging');
-    if (cancel || !t || d.s === undefined || (d.s === d.s0 && d.e === d.e0)) return;
-    t.time = hhmm(d.s); t.endTime = d.e >= 1440 ? '23:59' : hhmm(d.e);
+    d.el.classList.remove('dragging', 'leaving');
+    if (out) { setTimes(d.ids, '', ''); showToast('Hora quitada: vuelve a “Sin hora”'); render(); return; }
+    if (cancel || d.s === undefined || (d.s === d.s0 && d.e === d.e0)) return;
+    setTimes(d.ids, hhmm(d.s), d.e >= 1440 ? '23:59' : hhmm(d.e));
   }
-  store.put(t).catch(writeFailed); render();
+  render();
 }
 document.addEventListener('pointerup', e => tlDrop(e, false));
 document.addEventListener('pointercancel', e => tlDrop(e, true));
-
-// Los cambios del modo editar se guardan al momento
-$('#list').addEventListener('change', e => {
-  const el = e.target; if (!el.dataset.ef || el.dataset.ef === 'del') return;
-  const t = tasks.find(x => x.id === el.closest('.erow')?.dataset.id); if (!t) return;
-  if (el.dataset.ef === 'title') { const v = el.value.trim(); if (!v) { el.value = t.title; return; } t.title = v; }
-  else {
-    const mins = s => { const [h, m] = s.split(':').map(Number); return h * 60 + m; };
-    const hm = n => { n = Math.min(n, 23 * 60 + 59); return String(Math.floor(n / 60)).padStart(2, '0') + ':' + String(n % 60).padStart(2, '0'); };
-    // Al mover el inicio, el final se mueve con él (misma duración)
-    if (el.dataset.ef === 'time' && t.time && t.endTime && el.value) {
-      const dur = mins(t.endTime) - mins(t.time);
-      if (dur > 0) { t.endTime = hm(mins(el.value) + dur); const end = el.closest('.erow').querySelector('[data-ef=endTime]'); end.value = t.endTime; end.previousElementSibling.textContent = t.endTime; }
-    }
-    t[el.dataset.ef] = el.value; if (!t.time) t.endTime = '';
-  }
-  store.put(t).catch(writeFailed);
-  if (el.type === 'time') el.previousElementSibling.textContent = el.value || '—';
+// Hoja para la hora: solo se guarda al pulsar ✓
+let tsIds = [];
+function openTimeSheet(ids) {
+  const list = ids.map(id => tasks.find(x => x.id === id)).filter(Boolean); if (!list.length) return;
+  tsIds = ids; const t = list[0], par = t.parentId ? tasks.find(p => p.id === t.parentId) : null;
+  $('#tsTitle').textContent = par ? `${par.title} · ${list.length > 1 ? list.length + ' partes' : t.title}` : t.title;
+  $('#tsStart').value = t.time || ''; $('#tsEnd').value = t.endTime || (t.time ? hhmm(toMin(t.time) + 60) : '');
+  $('#tsOut').hidden = !t.time; renderTimeSheet(); openSheet('#timeSheet');
+}
+function renderTimeSheet() { $('#tsStartT').textContent = $('#tsStart').value || '—'; $('#tsEndT').textContent = $('#tsEnd').value || '—'; }
+let tsPrev = '';
+$('#tsStart').addEventListener('focus', () => { tsPrev = $('#tsStart').value; });
+$('#tsStart').addEventListener('change', () => {
+  const s = $('#tsStart').value, en = $('#tsEnd').value;
+  if (s && (!en || (tsPrev && toMin(en) <= toMin(tsPrev)) || toMin(en) <= toMin(s))) $('#tsEnd').value = hhmm(toMin(s) + 60);
+  else if (s && tsPrev && en) $('#tsEnd').value = hhmm(toMin(en) + toMin(s) - toMin(tsPrev));
+  tsPrev = s; renderTimeSheet();
 });
-$('#list').addEventListener('click', e => {
-  const b = e.target.closest('[data-ef=del]'); if (!b) return;
-  remove(b.closest('.erow').dataset.id);
+$('#tsEnd').addEventListener('change', renderTimeSheet);
+$('#tsOK').addEventListener('click', () => {
+  const s = $('#tsStart').value; setTimes(tsIds, s, s ? ($('#tsEnd').value || hhmm(toMin(s) + 60)) : '');
+  closeSheets(); render();
 });
-document.addEventListener('submit', e => {
-  if (e.target.id !== 'hoyAdd') return;
-  e.preventDefault();
-  const raw = $('#haTitle').value.trim(); if (!raw) { $('#haTitle').focus(); return; }
-  const p = parseQuick(raw, cats);
-  const t = { id: uid(), title: p.title, cat: p.cat || cats[cats.length - 1]?.id || '', date: todayISO(), time: $('#haStart').value || p.time || '',
-    endTime: $('#haEnd').value || p.endTime || '', prio: p.prio || 'normal', tags: (p.tags || []).map(normTag), done: false, created: Date.now() };
-  if (!t.time) t.endTime = '';
-  tasks.push(t); store.put(t).catch(writeFailed);
-  render(); $('#haTitle')?.focus();
-});
-$('#list').addEventListener('change', e => { if (e.target.id === 'haStart' || e.target.id === 'haEnd') $('#' + e.target.id + 'T').textContent = e.target.value || '—'; });
+$('#tsOut').addEventListener('click', () => { setTimes(tsIds, '', ''); closeSheets(); render(); });
 
 // "¿Qué tal hoy?" y el sueño salen en Hoy solo hasta que los rellenas
 function moodPromptHTML() {
@@ -2498,7 +2805,7 @@ $('#openFilters').addEventListener('click', () => { renderFilterSheet(); openShe
 function inboxHTML() {
   const items = tasks.filter(t => t.inbox && !t.done).sort((a, b) => (a.created || 0) - (b.created || 0));
   return `<form class="quick" id="quickForm"><input class="inp" type="text" id="quickInput" placeholder="Apuntar rápido…" aria-label="Apuntar rápido" enterkeyhint="done" autocomplete="off"><button class="btn primary" type="submit">+</button></form>
-    ${items.length ? `<section class="now"><span class="lbl">Bandeja · ${items.length}</span>${items.map(t => `<div class="nowrow"><div><div class="t" data-act="edit" data-id="${t.id}">${esc(t.title)}</div></div>
+    ${items.length ? `<section class="now"><span class="lbl">Bandeja · ${items.length}</span>${items.map(t => `<div class="nowrow"><div><div class="t" data-act="details" data-id="${t.id}">${esc(t.title)}</div></div>
       <div class="acts"><button class="chip" data-act="inbox" data-id="${t.id}" data-to="hoy">Hoy</button><button class="chip" data-act="inbox" data-id="${t.id}" data-to="manana">Mañana</button><button class="chip" data-act="inbox" data-id="${t.id}" data-to="none">Sin fecha</button></div></div>`).join('')}</section>` : ''}`;
 }
 function sortInbox(id, to) {
@@ -2513,8 +2820,12 @@ document.addEventListener('submit', e => {
   if (e.target.id !== 'quickForm') return;
   e.preventDefault();
   const title = $('#quickInput').value.trim(); if (!title) return;
-  const t = { id: uid(), title, cat: '', date: '', inbox: true, done: false, created: Date.now() };
+  const p = parseQuick(title, cats), dated = p.date || p.time || p.repeat;
+  const t = { id: uid(), title: p.title || title, cat: p.cat || (p.prio && cats.some(c => c.id === 'urgente') ? 'urgente' : '') || guessCat(p.title || title) || '', date: dated ? (p.date || todayISO()) : '', time: p.time || '', endTime: p.time ? (p.endTime || hhmm(toMin(p.time) + 60)) : '',
+    repeat: p.repeat || '', days: p.days || [], every: p.every || 1, nth: p.nth || null, nthDay: p.nthDay ?? null, tags: (p.tags || []).map(normTag), inbox: !dated, done: false, created: Date.now() };
+  alignStart(t);
   tasks.push(t); store.put(t).catch(writeFailed);
+  if (dated) showToast(`Apuntada: ${t.title} · ${friendlyDate(t.date).toLowerCase()}${t.time ? ' ' + t.time : ''}`);
   $('#quickInput').value = ''; render(); $('#quickInput')?.focus();
 });
 const doneInView = (x, v) => x.done && (v === 'hoy' ? x.doneAt && isoDate(new Date(x.doneAt)) === todayISO() : v === 'sinfecha' ? !x.date : v === 'hechas');
@@ -2550,7 +2861,6 @@ function taskHTML(x) {
     !x.date && x.minutes && !x.done ? `<span>${x.minutes} min</span>` : '',
     x.focus ? `<span>⏱ ${fmtDur(x.focus)}</span>` : '',
     x.done && x.pts ? `<span>+${x.pts} ⭐</span>` : '',
-    x.prio === 'alta' && !x.done ? `<span class="prio">Alta</span>` : '',
     ...(x.tags || []).map(t => `<span class="tagchip">@${esc(t)}</span>`),
   ].join('');
   return `<li class="task ${x.done ? 'done' : ''}" data-id="${x.id}" style="--c:${c}">
@@ -2560,13 +2870,13 @@ function taskHTML(x) {
     </div>
     <div class="row">
       <button class="check" data-act="toggle" data-id="${x.id}" aria-label="${x.done ? 'Marcar como pendiente' : 'Completar'}: ${esc(x.title)}">${TICK('var(--surface)')}</button>
-      <div class="body" data-act="edit" data-id="${x.id}"><div class="t">${parent ? `${esc(parent.title)}<small class="tsub">${esc(x.title)}</small>` : esc(x.title)}</div><div class="meta">${meta}</div>${x.notes ? `<div class="notes">${esc(x.notes)}</div>` : ''}</div>
-      <button class="more" data-act="edit" data-id="${x.id}" aria-label="Editar ${esc(x.title)}"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 6l6 6-6 6"/></svg></button>
+      <div class="body" data-act="details" data-id="${x.id}"><div class="t">${parent ? `${esc(parent.title)}<small class="tsub">${esc(x.title)}</small>` : esc(x.title)}</div><div class="meta">${meta}</div>${x.notes ? `<div class="notes">${esc(x.notes)}</div>` : ''}</div>
+      <button class="more" data-act="details" data-id="${x.id}" aria-label="Ver ${esc(x.title)}"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 6l6 6-6 6"/></svg></button>
     </div></li>`;
 }
 const groupedOrFlat = list => {
   const dated = list.filter(x => x.date), undated = list.filter(x => !x.date);
-  return (dated.length ? groupedHTML(dated) : '') + (undated.length ? `<h2 class="group"><span>Sin fecha</span><span>${undated.length}</span></h2><ul class="list">${undated.map(taskHTML).join('')}</ul>` : '');
+  return (dated.length ? groupedHTML(dated) : '') + (undated.length ? `<h2 class="group"><span>Sin fecha</span><span>${undated.length}</span></h2><ul class="list">${listItemsHTML(undated)}</ul>` : '');
 };
 const EMPTY = {
   someday: ['Nada para algún día', 'Guarda aquí ideas y cosas sin prisa: al crear una tarea, pulsa “Sin fecha” y luego “Algún día”.'],
@@ -2582,7 +2892,7 @@ const groupedHTML = list => {
   [...list].sort((a, b) => (gname(a) === 'Esta noche') - (gname(b) === 'Esta noche')).forEach(x => { const g = gname(x); if (!groups.has(g)) groups.set(g, []); groups.get(g).push(x); });
   return [...groups].map(([g, items]) => `<h2 class="group ${g === 'Atrasadas' ? 'late' : ''}"><span>${g}</span><span>${items.length}</span></h2>`
     + (g === 'Atrasadas' ? `<div class="latebar"><button class="chip" data-act="mvlate" data-to="hoy">Todas a hoy</button><button class="chip" data-act="mvlate" data-to="manana">A mañana</button><button class="chip" data-act="mvlate" data-to="none">Sin fecha</button></div>` : '')
-    + `<ul class="list">${items.map(taskHTML).join('')}</ul>`).join('');
+    + `<ul class="list">${listItemsHTML(items)}</ul>`).join('');
 };
 // ---------- Replanificar ----------
 const targetDate = to => to === 'hoy' ? todayISO() : to === 'manana' ? addDays(todayISO(), 1) : to === 'lunes' ? addDays(mondayOf(todayISO()), 7) : '';
@@ -2632,7 +2942,14 @@ function reviewBannerHTML() {
   let seen = false; try { seen = localStorage.getItem('review-' + mondayOf(todayISO())) === '1'; } catch {}
   return seen ? '' : `<div class="banner"><span>Es domingo: repasa tu semana y planea la siguiente</span><button class="btn primary small" data-act="review">Repasar</button></div>`;
 }
-function render() { renderMain(); fitSleepCharts(); }
+let hoyScrolled = '';
+function render() {
+  renderMain(); fitSleepCharts(); if (!$('#detailSheet').hidden) renderDetails();
+  // Al abrir Hoy, la línea de "ahora" queda arriba (una vez por visita)
+  const key = view + (hoyEdit ? 'e' : '');
+  if (view === 'hoy' && !hoyEdit && hoyScrolled !== key) { const n = $('#list .tl2now'); if (n) { hoyScrolled = key; const sc = $('#scroller'); sc.scrollTop += n.getBoundingClientRect().top - sc.getBoundingClientRect().top - 140; } }
+  if (view !== 'hoy' || hoyEdit) hoyScrolled = '';
+}
 function renderMain() {
   $('#todayLabel').textContent = new Date().toLocaleDateString('es-ES', { weekday: 'long', day: 'numeric', month: 'long' });
   $('#viewTitle').textContent = query ? 'Buscar' : VIEWS[view];
@@ -2697,7 +3014,7 @@ function renderMain() {
       + (on('planificar') ? `<div class="chips" style="margin:2px 0 4px"><button class="chip" data-act="plan">📝 Planificar hoy</button></div>` : '');
     if (v !== 'hechas') {
       if (!list.length) { const [h, p] = EMPTY[v]; html += `<div class="empty"><strong>${h}</strong><span>${p}</span></div>`; }
-      else html += v === 'sinfecha' || v === 'someday' ? `<ul class="list">${list.map(taskHTML).join('')}</ul>` : groupedHTML(list);
+      else html += v === 'sinfecha' || v === 'someday' ? `<ul class="list">${listItemsHTML(list)}</ul>` : groupedHTML(list);
     }
     if (showDone && done.length) html += `<h2 class="group"><span>${v === 'hoy' ? 'Hechas hoy' : 'Hechas'}</span><span>${done.length}</span></h2><ul class="list">${done.map(taskHTML).join('')}</ul>`;
     $('#clearDone').hidden = !(v === 'hechas' && showDone && done.length);
@@ -2726,6 +3043,11 @@ $('#list').addEventListener('click', e => {
   const el = e.target.closest('[data-act]'); if (!el) return;
   const { act, id } = el.dataset;
   if (act === 'toggle' || act === 'tltoggle') toggle(id);
+  else if (act === 'gtoggle') toggleMany(idsOf(el.dataset.ids));
+  else if (act === 'gopen') { const k = el.dataset.key; openGroups.has(k) ? openGroups.delete(k) : openGroups.add(k); const y = $('#scroller').scrollTop; render(); $('#scroller').scrollTop = y; }
+  else if (act === 'details') openDetails(id);
+  else if (act === 'rall') toggleRoutineAll(id);
+  else if (act === 'rdetails') openRoutineDetails(id);
   else if (act === 'hoyedit') { hoyEdit = true; $('#scroller').scrollTop = 0; render(); }
   else if (act === 'hoysave') { hoyEdit = false; $('#scroller').scrollTop = 0; render(); }
   else if (act === 'wprev' || act === 'wnext') { weekOffset += act === 'wnext' ? 1 : -1; render(); }
@@ -2757,12 +3079,14 @@ $('#list').addEventListener('click', e => {
   else if (act === 'moodday') { moodSel = moodSel === el.dataset.d ? null : el.dataset.d; render(); }
   else if (act === 'areasedit') { areasEdit = !areasEdit; render(); }
   else if (act === 'goal') openGoal();
-  else if (act === 'mvlate') moveTasks(lateTasks().filter(byCatNow), el.dataset.to);
+  else if (act === 'mvlate') moveTasks(lateTasks().filter(t => (view === 'hoy' || byCatNow(t)) && !children(t.id).length), el.dataset.to);
+  else if (act === 'gohabits') { view = 'habitos'; $('#scroller').scrollTop = 0; render(); }
+  else if (act === 'move') { const t = tasks.find(x => x.id === id); if (t) moveTasks([t], el.dataset.to); }
   else if (act === 'review') openReview();
   else if (act === 'rewards') { rwArmed = null; renderRewards(); openSheet('#rewardSheet'); }
   else if (act === 'timer') openTimer(id);
   else if (act === 'yday') { selectedDay = selectedDay === el.dataset.d ? null : el.dataset.d; const y = $('#scroller').scrollTop; render(); $('#scroller').scrollTop = y; }
-  else if (act === 'edit') openForm(id);
+  else if (act === 'edit') openDetails(id);
 });
 $('#tabs').addEventListener('click', e => {
   const b = e.target.closest('[data-view]'); if (!b) return;

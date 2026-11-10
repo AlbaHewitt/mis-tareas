@@ -318,7 +318,10 @@
   .pickbtn.static { cursor: default; font-weight: 400; }
   #repeatOpts { gap: 12px; }
   .partadd { display: grid; grid-template-columns: 1fr auto; gap: 8px; }
-  .partrow { display: grid; grid-template-columns: auto 1fr auto auto; gap: 6px; align-items: center; }
+  .partrow { display: grid; grid-template-columns: auto auto 1fr auto 3.2em auto; gap: 6px; align-items: center; }
+  .partrow .grip { cursor: grab; touch-action: none; color: var(--muted); padding: 6px 2px; letter-spacing: -2px; user-select: none; -webkit-user-select: none; }
+  .partrow.dragging { opacity: .6; }
+  .partrow .inp.pts { padding: 8px 4px; text-align: center; }
   .partrow .box { width: 26px; height: 26px; border-radius: 7px; border: 2px solid var(--border); background: transparent; display: grid; place-items: center; padding: 0; }
   .partrow .box svg { width: 14px; height: 14px; opacity: 0; }
   .partrow .box[aria-pressed="true"] { background: var(--accent); border-color: var(--accent); }
@@ -505,6 +508,60 @@
   .erow1 .inp { min-height: 40px; padding: 8px 10px; }
   .erow .pickbtn { min-height: 44px; }
   .prompt { border-color: var(--accent); }
+  .hableft { display: flex; align-items: center; gap: 10px; width: 100%; text-align: left; background: var(--surface); border: 1px solid var(--border); border-radius: 14px; padding: 10px 12px; margin: 0 0 10px; }
+  .hableft > span:nth-child(2) { flex: 1; min-width: 0; }
+  .hableft b { display: block; font-size: 15px; } .hableft small { display: block; color: var(--muted); font-size: 13px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .hableft .go { color: var(--muted); font-size: 20px; }
+  .dmove { align-items: center; } .dmove .label { margin-right: 4px; }
+  .everyrow { display: flex; align-items: center; gap: 8px; font-weight: 600; }
+  .everyrow .inp { width: 4.5em; text-align: center; min-height: 40px; padding: 6px; }
+  details.hgroup > summary { list-style: none; cursor: pointer; }
+  details.hgroup > summary::-webkit-details-marker { display: none; }
+  details.hgroup > summary span:first-child::after { content: "›"; display: inline-block; margin-left: 8px; transition: transform .2s; color: var(--muted); }
+  details.hgroup[open] > summary span:first-child::after { transform: rotate(90deg); }
+  .hab .dots.pdots i { font-size: 10px; }
+  .hab .dots.pdots i.past { background: color-mix(in srgb, var(--text) 55%, var(--sunken)); color: var(--surface); }
+  .segs { display: flex; gap: 4px; background: var(--sunken); border-radius: 12px; padding: 4px; margin: 4px 0 2px; }
+  .seg { flex: 1; border-radius: 9px; padding: 9px 4px; font-weight: 700; font-size: 14px; color: var(--muted); display: flex; justify-content: center; gap: 6px; align-items: center; }
+  .seg span { font-size: 12px; font-weight: 600; opacity: .8; }
+  .seg.on { background: var(--surface); color: var(--text); box-shadow: 0 1px 3px rgba(0,0,0,.12); }
+  .shelffab { position: sticky; bottom: calc(16px + env(safe-area-inset-bottom)); margin: 14px 0 0 auto; display: grid; place-items: center; width: 56px; height: 56px; border-radius: 50%; background: var(--accent); color: var(--accent-ink); font-size: 30px; line-height: 1; box-shadow: 0 6px 18px rgba(0,0,0,.22); z-index: 5; }
+  .tl2i .hdl { touch-action: none; }
+  .tl2i .tlb { flex: 1; min-width: 0; align-self: stretch; cursor: pointer; }
+  .tl2i.leaving { opacity: .45; }
+  #tlOut { position: fixed; left: 16px; right: 16px; top: calc(env(safe-area-inset-top) + 10px); z-index: 120; background: var(--surface); border: 2px dashed var(--danger); color: var(--danger); border-radius: 14px; padding: 14px; text-align: center; font-weight: 700; box-shadow: 0 8px 24px rgba(0,0,0,.15); }
+  #tlOut.hot { background: var(--danger); color: #fff; }
+  .xrow .xb { flex: 1; min-width: 0; cursor: pointer; }
+  .chev { width: 32px; height: 32px; flex: none; font-size: 22px; line-height: 1; color: var(--muted); transition: transform .2s; display: grid; place-items: center; }
+  .chev.open { transform: rotate(90deg); }
+  .more.chev svg { transition: transform .2s; } .more.chev.open svg { transform: rotate(90deg); }
+  .more.chev.open { transform: none; }
+  .xsub { display: grid; gap: 4px; margin: -2px 0 4px 26px; }
+  .xrow.sub { padding: 8px 10px; font-size: 14px; }
+  .gparts { list-style: none; margin: 0; padding: 0 12px 10px 52px; display: grid; gap: 8px; }
+  .gparts li { display: flex; align-items: center; gap: 10px; font-size: 15px; }
+  .gparts li > span { flex: 1; min-width: 0; cursor: pointer; }
+  .gparts .check { width: 24px; height: 24px; flex: none; }
+  .gparts li.done .check { background: var(--c); } .gparts li.done .check svg { opacity: 1; }
+  .gparts li.done > span { color: var(--muted); text-decoration: line-through; }
+  .gparts small { display: block; font-size: 12px; color: var(--muted); }
+  .dfacts { display: flex; flex-wrap: wrap; gap: 6px 14px; color: var(--muted); font-size: 14px; align-items: center; }
+  .dfacts .catn { display: inline-flex; align-items: center; gap: 6px; }
+  .dnotes { white-space: pre-wrap; margin: 0; }
+  .dprog { display: flex; align-items: center; gap: 8px; font-size: 13px; color: var(--muted); }
+  .dprog .pbar { flex: 1; height: 6px; border-radius: 99px; background: var(--sunken); overflow: hidden; }
+  .dprog .pbar i { display: block; height: 100%; background: var(--accent); }
+  .dparts { list-style: none; padding: 0; margin: 0; display: grid; gap: 6px; }
+  .dparts li { display: flex; gap: 10px; align-items: center; background: var(--sunken); border-radius: 12px; padding: 8px 10px; }
+  .dparts li > span { flex: 1; min-width: 0; }
+  .dparts li.me { box-shadow: inset 0 0 0 2px var(--c); }
+  .dparts small { display: block; color: var(--muted); font-size: 12px; }
+  .dparts .check { flex: none; }
+  .dparts li.done .check { background: var(--c); } .dparts li.done .check svg { opacity: 1; }
+  .dparts li.done b { text-decoration: line-through; color: var(--muted); }
+  #detailBody .btn svg, #detailBody .btn + .btn svg { width: 16px; height: 16px; vertical-align: -3px; }
+  .hab .n .iconbtn { width: 30px; height: 30px; vertical-align: middle; margin-left: 2px; }
+  .hab .n .iconbtn svg { width: 16px; height: 16px; }
   .smedia { margin: 2px 0 6px; font-size: 15px; color: var(--muted); } .smedia b { color: var(--text); font-size: 17px; }
   .swrap { display: grid; grid-template-columns: 30px 1fr; align-items: start; margin: 4px 0 2px; }
   .sscroll { overflow-x: auto; overflow-y: hidden; -webkit-overflow-scrolling: touch; scrollbar-width: none; overscroll-behavior-x: contain; }
@@ -551,11 +608,11 @@
   .editbox { background: var(--sunken); border-radius: 12px; padding: 10px; margin: 4px 0 12px; display: grid; gap: 8px; }
   .editbox .mood { display: grid; gap: 8px; }
   .year.mood i.mo0 { background: var(--sunken); }
-  i.mo1 { background: var(--k-violeta); }
-  i.mo2 { background: color-mix(in srgb, var(--k-violeta) 75%, var(--sunken)); }
-  i.mo3 { background: color-mix(in srgb, var(--k-violeta) 52%, var(--sunken)); }
-  i.mo4 { background: color-mix(in srgb, var(--k-violeta) 32%, var(--sunken)); }
-  i.mo5 { background: color-mix(in srgb, var(--k-violeta) 15%, var(--sunken)); outline: 1px solid color-mix(in srgb, var(--k-violeta) 30%, transparent); outline-offset: -1px; }
+  i.mo1 { background: color-mix(in srgb, var(--k-violeta) 45%, #000); }
+  i.mo2 { background: color-mix(in srgb, var(--k-violeta) 75%, #000); }
+  i.mo3 { background: var(--k-violeta); }
+  i.mo4 { background: color-mix(in srgb, var(--k-violeta) 55%, #fff); }
+  i.mo5 { background: color-mix(in srgb, var(--k-violeta) 22%, #fff); }
   .schart { width: 100%; height: auto; display: block; margin: 8px 0 2px; overflow: visible; }
   .schart .sg { stroke: var(--border); stroke-width: 1; }
   .schart .smin { stroke: var(--muted); stroke-width: 1.2; stroke-dasharray: 4 4; }
@@ -567,7 +624,7 @@
   .areapick { display: grid; gap: 2px; }
   .chk { display: flex; align-items: center; gap: 10px; min-height: 40px; font-size: 15px; }
   .chk input { width: 20px; height: 20px; accent-color: var(--accent); }
-  .tl2.editing .tl2i { cursor: grab; touch-action: none; user-select: none; -webkit-user-select: none; flex-wrap: wrap; align-content: flex-start; }
+  .tl2.editing .tl2i { cursor: grab; touch-action: pan-y; -webkit-touch-callout: none; user-select: none; -webkit-user-select: none; flex-wrap: wrap; align-content: flex-start; }
   .tl2.editing .tl2i.fixed { opacity: .5; touch-action: auto; cursor: default; }
   .tl2.editing .tl2i.drag { border-style: dashed; border-color: var(--accent); }
   .tl2i.dragging { z-index: 5; box-shadow: 0 8px 24px rgba(0,0,0,.18); border-style: solid !important; }
@@ -578,7 +635,7 @@
   .tl2i .hdl.t::after { top: 3px; } .tl2i .hdl.b::after { bottom: 3px; }
   .tl2.drop { outline: 2px dashed var(--accent); outline-offset: 4px; border-radius: 8px; }
   .xchips { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 6px; }
-  .xchip { display: inline-flex; align-items: center; gap: 6px; padding: 8px 12px; border: 1px dashed var(--accent); border-radius: 999px; background: var(--surface); font-size: 14px; touch-action: none; user-select: none; -webkit-user-select: none; cursor: grab; }
+  .xchip { display: inline-flex; align-items: center; gap: 6px; padding: 8px 12px; border: 1px dashed var(--accent); border-radius: 999px; background: var(--surface); font-size: 14px; touch-action: pan-y; -webkit-touch-callout: none; user-select: none; -webkit-user-select: none; cursor: grab; }
   .xchip.lifted { opacity: .35; }
   .xchip.ghost { position: fixed; z-index: 100; pointer-events: none; box-shadow: 0 8px 24px rgba(0,0,0,.2); border-style: solid; }
   .xchip.ghost[data-t]:not([data-t=""])::after { content: attr(data-t); font-weight: 700; color: var(--accent); margin-left: 4px; }
@@ -705,15 +762,22 @@
     </div>
     <button type="button" class="btn ghost small" id="clearTimes" hidden>Quitar las horas</button>
     <div class="grid2">
-      <label class="field" id="prioField"><span class="label">Prioridad</span>
+      <label class="field" id="prioField" hidden><span class="label">Prioridad</span>
         <select class="inp" id="prio"><option value="normal">Normal</option><option value="alta">Alta</option><option value="baja">Baja</option></select></label>
       <label class="field" id="repeatField"><span class="label">Repetir</span>
-        <select class="inp" id="repeat"><option value="">No se repite</option><option value="diario">Cada día</option><option value="dias">Días de la semana</option><option value="semanal">Cada semana</option><option value="mensual">Un día de cada mes</option></select></label>
+        <select class="inp" id="repeat"><option value="">No se repite</option><option value="diario">Cada día</option><option value="dias">Días de la semana</option><option value="semanal">Cada semana</option><option value="mensual">Cada mes</option><option value="anual">Cada año</option></select></label>
     </div>
     <div class="box-card" id="repeatOpts" hidden>
+      <div class="everyrow"><span>Cada</span><input class="inp" type="number" id="every" inputmode="numeric" min="1" max="99" value="1" aria-label="Cada cuántos"><span id="everyUnit">días</span></div>
+      <p class="hint" id="everyHint"></p>
       <div class="days" id="daysRow" hidden></div>
+      <div class="chips" id="mMode" hidden><button type="button" class="chip" data-mm="day">Un día del mes</button><button type="button" class="chip" data-mm="nth">Un día de la semana</button></div>
       <label class="field" id="monthDayField" hidden><span class="label">Qué día del mes</span>
         <select class="inp" id="monthDay"></select></label>
+      <div class="grid2" id="nthField" hidden>
+        <select class="inp" id="nth" aria-label="Cuál"><option value="1">El primer</option><option value="2">El segundo</option><option value="3">El tercer</option><option value="4">El cuarto</option><option value="-1">El último</option></select>
+        <select class="inp" id="nthDay" aria-label="Día de la semana"><option value="1">lunes</option><option value="2">martes</option><option value="3">miércoles</option><option value="4">jueves</option><option value="5">viernes</option><option value="6">sábado</option><option value="0">domingo</option></select>
+      </div>
       <div class="grid2">
         <div class="field"><span class="label">Empieza</span><div class="pickbtn static" id="startText">Hoy</div></div>
         <div class="field"><span class="label">Termina</span>
@@ -735,6 +799,7 @@
       <span class="label">Partes <span id="partsCount"></span></span>
       <p class="hint">Divide la tarea en partes: cada una sale como una tarea normal el día que le toca, y aquí ves cuántas llevas.</p>
       <div class="sublist" id="partList"></div>
+      <p class="hint" id="partsHint" hidden>⋮⋮ arrastra para ordenar. En gris, los puntos de cada parte: lo proporcional al total de ⭐ de la tarea. Escribe otro número si una parte lleva más tiempo.</p>
       <div class="partadd"><input class="inp" type="text" id="partNew" placeholder="Nueva parte" aria-label="Nueva parte" enterkeyhint="enter"><button type="button" class="btn" id="partAdd">Añadir</button></div>
       <details class="box-card" id="splitBox">
         <summary>Repartir en varias partes</summary>
@@ -786,6 +851,30 @@
     </div>
     <button class="btn block" type="button" id="tmDone" hidden>Terminar y marcar la tarea como hecha</button>
     <button class="btn ghost block" type="button" id="tmClose">Cerrar</button>
+  </div>
+</div>
+
+<!-- Hoja: detalles de una tarea -->
+<div class="sheet" id="detailSheet" hidden>
+  <div class="grab"></div>
+  <div class="inner">
+    <div class="sheet-head"><h3 id="detailTitle"></h3><button type="button" class="btn ghost" data-close>Cerrar</button></div>
+    <div id="detailBody" style="display:grid;gap:12px"></div>
+  </div>
+</div>
+
+<!-- Hoja: cambiar la hora (se guarda al pulsar ✓) -->
+<div class="sheet" id="timeSheet" hidden>
+  <div class="grab"></div>
+  <div class="inner">
+    <div class="sheet-head"><h3>Hora</h3><button type="button" class="btn ghost" data-close>Cancelar</button></div>
+    <p class="hint" id="tsTitle"></p>
+    <div class="grid2">
+      <label class="pickbtn tbtn"><span class="label">Empieza</span><span id="tsStartT">—</span><input type="time" id="tsStart" aria-label="Empieza"></label>
+      <label class="pickbtn tbtn"><span class="label">Termina</span><span id="tsEndT">—</span><input type="time" id="tsEnd" aria-label="Termina"></label>
+    </div>
+    <button class="btn primary block" type="button" id="tsOK">✓ Guardar</button>
+    <button class="btn ghost block" type="button" id="tsOut">Quitar la hora (vuelve a “Sin hora”)</button>
   </div>
 </div>
 
@@ -942,8 +1031,8 @@
       <p class="hint">Cada mañana apuntas a qué hora te acostaste y te levantaste. Se cumple si te acostaste a tu hora, te levantaste a tu hora y dormiste las horas que tocan (con el margen).</p>
     </div>
     <div class="field" id="hFreqField"><span class="label">Cada cuánto</span>
-      <div class="chips" id="hFreq"><button type="button" class="chip" data-v="daily">Todos los días</button><button type="button" class="chip" data-v="weekly">Unas veces por semana</button></div></div>
-    <label class="field" id="hTargetField"><span class="label">Veces por semana</span>
+      <div class="chips" id="hFreq"><button type="button" class="chip" data-v="daily">Todos los días</button><button type="button" class="chip" data-v="weekly">Por semana</button><button type="button" class="chip" data-v="monthly">Por mes</button><button type="button" class="chip" data-v="yearly">Por año</button></div></div>
+    <label class="field" id="hTargetField"><span class="label" id="hTargetLabel">Veces por semana</span>
       <input class="inp" type="number" id="hTarget" inputmode="numeric" min="1" max="7" value="3"></label>
     <label class="field"><span class="label" id="hMinLabel">Minutos (= puntos al cumplirlo)</span>
       <input class="inp" type="number" id="hMin" inputmode="numeric" min="1" max="240" value="10"></label>
@@ -1020,10 +1109,10 @@
     <details class="box-card" open><summary>Cómo funciona</summary>
       <ul class="steps" style="list-style:disc">
         <li><b>Apuntar:</b> pulsa <b>+</b> y escribe como hablas: “mañana de 10 a 12 estudiar #estudio @cálculo !”. La <b>!</b> es prioridad alta. Para algo rápido, usa “Apuntar rápido…” en Hoy.</li>
-        <li><b>Completar y borrar:</b> toca el círculo o desliza a la derecha; a la izquierda, borrar. Siempre puedes <b>Deshacer</b>.</li>
+        <li><b>Completar, ver y editar:</b> toca el círculo para completar; toca la tarea para ver sus detalles y pulsa el lápiz para editarla. En las listas también puedes deslizar: a la derecha, hecha; a la izquierda, borrar. Siempre puedes <b>Deshacer</b>.</li>
         <li><b>Hoy:</b> una línea con las horas y cada tarea a su hora; lo que no tiene hora sale abajo como “Extra”. Con <b>Editar</b> arrastras las tareas para moverlas o estirarlas.</li>
         <li><b>Agenda:</b> el mes; toca un día para ver lo que tienes.</li>
-        <li><b>Partes:</b> divide una tarea grande (un examen) en partes repartidas por días; cada una sale en su día y ves 3/20.</li>
+        <li><b>Partes:</b> divide una tarea grande (un examen) en partes repartidas por días. Las de un mismo día salen juntas: tócalas para desplegarlas y marcar cada una. Cada parte da su parte de los puntos.</li>
         <li><b>Hábitos:</b> para hacer, para dejar, rutina de sueño y rutinas con horario.</li>
         <li><b>Puntos y progreso:</b> cada tarea da puntos (sus minutos). En Progreso ves tu nivel, tu semana, el mes y el año en cuadraditos.</li>
         <li><b>Más:</b> temporizador al editar una tarea, libros, recompensas, plantillas, filtros, Siri, calendario y copias en ⋯.</li>
@@ -1043,10 +1132,10 @@
     <h3>¡Bienvenida a Mis Tareas!</h3>
     <div class="welcome">
       <div><span>✍️</span><p><b>Apúntalo todo</b> con el botón +. Escribe como hablas: “mañana a las 8 correr #entreno”.</p></div>
-      <div><span>☀️</span><p><b>Hoy</b> te enseña lo que toca ahora y lo que tienes pendiente. Desliza para completar.</p></div>
+      <div><span>☀️</span><p><b>Hoy</b> es tu día en una línea de horas. Toca el círculo para completar algo y la tarea para ver sus detalles.</p></div>
       <div><span>🔥</span><p><b>Hábitos</b> para cumplir, para dejar, tu sueño y tus rutinas, con rachas.</p></div>
       <div><span>⭐</span><p>Cada cosa que haces da <b>puntos</b>: subes de nivel y puedes canjearlos por premios.</p></div>
-      <div><span>⚙️</span><p>En <b>⋯ → Ayuda y secciones</b> puedes apagar lo que no uses.</p></div>
+      <div><span>⚙️</span><p>En <b>⋯ → Personalizar → Secciones</b> puedes apagar lo que no uses.</p></div>
     </div>
     <button class="btn primary block" type="button" id="welcomeDone">Empezar</button>
   </div>
@@ -1073,7 +1162,7 @@
         <label class="field"><span class="label">Categoría</span><select class="inp" id="fCat"></select></label>
         <label class="field"><span class="label">Cuándo</span><select class="inp" id="fWhen"><option value="todo">Cualquier día</option><option value="hoy">Hoy y atrasadas</option><option value="semana">Próximos 7 días</option><option value="sinfecha">Sin fecha</option></select></label>
       </div>
-      <label class="field"><span class="label">Prioridad</span><select class="inp" id="fPrio"><option value="">Cualquiera</option><option value="alta">Solo alta</option></select></label>
+      <label class="field" hidden><span class="label">Prioridad</span><select class="inp" id="fPrio"><option value="">Cualquiera</option><option value="alta">Solo alta</option></select></label>
       <button class="btn primary" type="submit">Guardar filtro</button>
     </form>
   </div>

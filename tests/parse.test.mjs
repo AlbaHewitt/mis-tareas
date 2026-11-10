@@ -39,3 +39,14 @@ test('prioridad y etiquetas', () => {
 test('un título sin nada especial no cambia', () => {
   assert.deepEqual(p('Comprar leche'), { title: 'Comprar leche' });
 });
+
+test('repeticiones flexibles', () => {
+  assert.deepEqual([p('regar cada 4 días').repeat, p('regar cada 4 días').every], ['diario', 4]);
+  assert.deepEqual([p('pagar alquiler cada quince días').repeat, p('pagar alquiler cada quince días').every], ['diario', 15]);
+  const a = p('yoga cada dos martes'); assert.equal(a.repeat, 'dias'); assert.deepEqual(a.days, [2]); assert.equal(a.every, 2); assert.equal(a.title, 'Yoga');
+  const b = p('misa el primer domingo de cada mes'); assert.equal(b.repeat, 'mensual'); assert.equal(b.nth, 1); assert.equal(b.nthDay, 0);
+  const c = p('limpiar radiadores una vez al mes'); assert.equal(c.repeat, 'mensual'); assert.equal(c.title, 'Limpiar radiadores');
+  assert.equal(p('revisión del coche una vez al año').repeat, 'anual');
+  const e = p('turno de oficina entre semana una semana sí y otra no'); assert.deepEqual(e.days, [1, 2, 3, 4, 5]); assert.equal(e.every, 2);
+  assert.equal(p('reunión el último viernes de cada mes').nth, -1);
+});

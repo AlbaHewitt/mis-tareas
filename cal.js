@@ -23,10 +23,12 @@ function parts(t) {
 
 export function rrule(t) {
   let r = '';
-  if (t.repeat === 'diario') r = 'FREQ=DAILY';
-  else if (t.repeat === 'semanal') r = 'FREQ=WEEKLY';
-  else if (t.repeat === 'mensual') r = 'FREQ=MONTHLY' + (t.monthDay ? `;BYMONTHDAY=${t.monthDay}` : '');
-  else if (t.repeat === 'dias' && t.days?.length) r = 'FREQ=WEEKLY;BYDAY=' + t.days.map(d => BYDAY[d]).join(',');
+  const n = Math.max(1, Math.round(Number(t.every)) || 1), iv = n > 1 ? `;INTERVAL=${n}` : '';
+  if (t.repeat === 'diario') r = 'FREQ=DAILY' + iv;
+  else if (t.repeat === 'semanal') r = 'FREQ=WEEKLY' + iv;
+  else if (t.repeat === 'mensual') r = 'FREQ=MONTHLY' + iv + (t.nth ? `;BYDAY=${t.nth}${BYDAY[t.nthDay ?? 0]}` : t.monthDay ? `;BYMONTHDAY=${t.monthDay}` : '');
+  else if (t.repeat === 'anual') r = 'FREQ=YEARLY' + iv;
+  else if (t.repeat === 'dias' && t.days?.length) r = 'FREQ=WEEKLY' + iv + ';BYDAY=' + t.days.map(d => BYDAY[d]).join(',');
   if (r && t.until) r += `;UNTIL=${t.until.replace(/-/g, '')}T235959`;
   return r;
 }

@@ -40,14 +40,30 @@ export function parseQuick(text, cats = [], now = new Date()) {
   // Prioridad
   if (take(/(?:^|\s)(!+|urgente|importante)(?=\s|$|[,.])/)) out.prio = 'alta';
 
-  // Repetición
-  if ((m = take(new RegExp(`\\b(?:cada|todos los|los)\\s+${WD_RE}((?:\\s*(?:,|y)\\s*${WD_RE})*)`)))) {
+  // Repetición (con "cada N…", "el primer domingo de cada mes", "una semana sí y otra no"…)
+  const NUM = { un: 1, una: 1, dos: 2, tres: 3, cuatro: 4, cinco: 5, seis: 6, siete: 7, ocho: 8, nueve: 9, diez: 10, once: 11, doce: 12, quince: 15, veinte: 20, treinta: 30 };
+  const N_RE = '(\\d{1,3}|un|una|dos|tres|cuatro|cinco|seis|siete|ocho|nueve|diez|once|doce|quince|veinte|treinta)';
+  const num = x => NUM[x] || +x;
+  const ORD_RE = '(primer|primero|primeros|primera|segundo|segundos|tercer|tercero|terceros|cuarto|cuartos|ultimo|ultimos)';
+  const ordN = o => o.startsWith('prim') ? 1 : o.startsWith('seg') ? 2 : o.startsWith('terc') ? 3 : o.startsWith('cuart') ? 4 : -1;
+  const alt = take(/\b(?:una semana si y (?:otra|la otra) no|semanas alternas)\b/);
+  if ((m = take(new RegExp(`\\b(?:el|los)\\s+${ORD_RE}\\s+${WD_RE}\\s+de\\s+(?:cada\\s+)?mes\\b`)))) {
+    out.repeat = 'mensual'; out.nth = ordN(m[1]); out.nthDay = wdNum(m[2]);
+  } else if ((m = take(new RegExp(`\\bcada\\s+${N_RE}\\s+${WD_RE}((?:\\s*(?:,|y)\\s*${WD_RE})*)`)))) {
+    out.repeat = 'dias'; out.days = [...new Set((m[0].match(new RegExp(WD_RE, 'g')) || []).map(wdNum))].sort(); out.every = num(m[1]);
+  } else if ((m = take(new RegExp(`\\bcada\\s+${N_RE}\\s+(dias|semanas|meses|anos)\\b`)))) {
+    out.repeat = { dias: 'diario', semanas: 'semanal', meses: 'mensual', anos: 'anual' }[m[2]]; out.every = num(m[1]);
+  } else if (take(/\b(?:cada ano|una vez al ano|anualmente|todos los anos)\b/)) out.repeat = 'anual';
+  else if (take(/\b(?:una vez al mes)\b/)) out.repeat = 'mensual';
+  else if ((m = take(new RegExp(`\\b(?:cada|todos los|los)\\s+${WD_RE}((?:\\s*(?:,|y)\\s*${WD_RE})*)`)))) {
     const names = (m[0].match(new RegExp(WD_RE, 'g')) || []);
     out.repeat = 'dias'; out.days = [...new Set(names.map(wdNum))].sort();
   } else if (take(/\b(?:cada dia|todos los dias|a diario|diariamente)\b/)) out.repeat = 'diario';
   else if (take(/\b(?:cada semana|semanalmente|todas las semanas)\b/)) out.repeat = 'semanal';
   else if (take(/\b(?:cada mes|mensualmente|todos los meses)\b/)) out.repeat = 'mensual';
   else if (take(/\b(?:entre semana|de lunes a viernes)\b/)) { out.repeat = 'dias'; out.days = [1, 2, 3, 4, 5]; }
+  if (alt) { if (!out.repeat) out.repeat = 'semanal'; if (out.repeat === 'dias' || out.repeat === 'semanal') out.every = 2; }
+  if (out.every === 1) delete out.every;
 
   // Franja horaria: "de 10 a 12", "de 5 a 7 de la tarde", "10:00-12:00"
   const hm = (h, mi, part) => { h = +h; mi = +(mi || 0); if ((part === 'tarde' || part === 'noche') && h < 12) h += 12; return h <= 23 && mi <= 59 ? `${pad(h)}:${pad(mi)}` : null; };

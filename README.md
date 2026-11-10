@@ -49,6 +49,17 @@ Abre la dirección en **Safari** → botón Compartir → **Añadir a pantalla d
 - **Libros**: los que quieres leer, el que estás leyendo con su página y su progreso, y los leídos (plegados) con su nota. Por defecto van por orden alfabético del título; se puede buscar y filtrar por autor, categoría y páginas, y ordenar por autor, páginas o los añadidos hace poco.
 - **Películas**: igual que Libros: quiero ver y vistas (plegadas) con su nota; se busca y filtra por dirección, categoría y año (por décadas).
 - **Partes**: en las listas y en Hoy, el título es la tarea grande y la parte sale en pequeño. La categoría se ve solo por su color.
+- **Tocar y completar**: el círculo completa; tocar la tarea abre sus detalles (con sus partes para marcarlas una a una) y el lápiz la edita.
+- **Partes agrupadas**: las partes de una misma tarea en un mismo día salen como una sola fila que se despliega. Cada parte da su parte proporcional de los puntos de la tarea (se puede cambiar) y se ordenan arrastrando ⋮⋮.
+- **Urgente**: en vez de prioridad hay una categoría Urgente (también con “!” al escribir). Si no eliges categoría, se adivina por las palabras (gym → Entreno, estudiar → Estudio, limpiar → Casa…).
+- **Repeticiones flexibles**: cada N días, semanas, meses o años; días de la semana cada N semanas (“una semana sí y otra no”); el primer/segundo/tercer/cuarto/último lunes… de cada mes; y una vez al año. También escritas: “cada 15 días”, “cada dos martes”, “el primer domingo de cada mes”, “una vez al mes”, “entre semana una semana sí y otra no”.
+- **Bandeja rápida**: arriba en Hoy. Si escribes una fecha u hora va directa a su día; si no, a la bandeja para ordenarla luego.
+- **Hábitos por mes y por año** (p. ej. limpiar radiadores una vez al mes), y los grupos de Hábitos se pliegan y despliegan.
+- **Repetir**: si una tarea que se repite se queda sin hacer, pasa sola al siguiente día que le toca. La hora de fin es, por defecto, una hora después del inicio.
+- **Editar Hoy**: tocar una tarea cambia su hora (se guarda con ✓); mantener pulsado la arrastra; “Quitar hora” la devuelve a Sin hora. Las rutinas salen como un solo bloque; sus pasos se ven al tocarlas.
+- **Libros y películas**: pestañas por estado, botón + para añadir y búsqueda automática de lo que falte (autor o dirección, año, categoría y páginas) en Open Library y Wikidata (solo se envía el título).
+- **En Hoy**: cuántos hábitos de hoy te quedan (toca para ir a Hábitos) y, en “De otros días”, mover todas las atrasadas a hoy, a mañana o a sin fecha. En los detalles de una tarea, moverla a hoy, mañana, el lunes o sin fecha.
+- **Agenda**: el + apunta la tarea en el día que tienes seleccionado.
 - **Tareas sin fecha**: no llevan prioridad, repetición ni aviso; esas casillas salen al ponerles un día.
 - **Puntos**: cada tarea da su duración (hora de inicio a fin) o sus minutos, o los puntos que le pongas a mano; objetivo diario en ⋯ → Puntos.
 - **Progreso**: resumen de la semana, gráfico del mes, el año en cuadraditos (una fila por mes) y cuadraditos por apartado.

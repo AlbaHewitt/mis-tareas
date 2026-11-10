@@ -25,3 +25,10 @@ test('enlace de Google Calendar', () => {
   assert.equal(u.searchParams.get('dates'), '20261110/20261111');
   assert.equal(u.searchParams.get('recur'), 'RRULE:FREQ=DAILY');
 });
+
+test('repeticiones flexibles en el calendario', () => {
+  assert.equal(rrule({ repeat: 'diario', every: 4 }), 'FREQ=DAILY;INTERVAL=4');
+  assert.equal(rrule({ repeat: 'mensual', nth: 1, nthDay: 0 }), 'FREQ=MONTHLY;BYDAY=1SU');
+  assert.equal(rrule({ repeat: 'dias', days: [2], every: 2 }), 'FREQ=WEEKLY;INTERVAL=2;BYDAY=TU');
+  assert.equal(rrule({ repeat: 'anual' }), 'FREQ=YEARLY');
+});
