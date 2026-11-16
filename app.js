@@ -50,7 +50,7 @@ let selectedDay = null;
 // Estado del formulario de tarea
 let editingId = null, formCat = 'personal', formDays = [], formParts = [], formNoDate = false, splitDays = [1, 2, 3, 4, 5], formSomeday = false, formTonight = false;
 
-document.documentElement.dataset.v = '19';
+document.documentElement.dataset.v = '21';
 // ---------- Registro de errores (se ve en ⋯ → Ayuda) ----------
 const EKEY = 'mis-tareas-errores';
 function logError(msg, where) {
@@ -93,7 +93,7 @@ darkMQ.addEventListener?.('change', applyLook);
 
 // ---------- Utilidades ----------
 const catOf = id => cats.find(c => c.id === id) || NO_CAT;
-const colorVar = c => `var(--k-${COLORS.includes(c) ? c : 'gris'})`;
+const colorVar = c => /^#[0-9a-f]{6}$/i.test(c || '') ? c : `var(--k-${COLORS.includes(c) ? c : 'gris'})`;
 const children = id => tasks.filter(x => x.parentId === id);
 const progressOf = id => { const ch = children(id); return { done: ch.filter(c => c.done).length, total: ch.length }; };
 
@@ -1387,12 +1387,25 @@ function toggleStep(hid, sid) {
   render();
 }
 const rtOpen = id => { try { return localStorage.getItem('rt-' + id) === '1'; } catch { return false; } };
+let habOrdering = false;
+const habGroup = h => h.kind === 'build' ? 'b:' + h.freq : h.kind;
+const moveBtns = h => `<span class="hmove"><button type="button" class="iconbtn sm" data-act="hmove" data-id="${h.id}" data-dir="-1" aria-label="Subir ${esc(h.name)}">↑</button><button type="button" class="iconbtn sm" data-act="hmove" data-id="${h.id}" data-dir="1" aria-label="Bajar ${esc(h.name)}">↓</button></span>`;
+function moveHabit(id, dir) {
+  const h = habits.find(x => x.id === id); if (!h) return;
+  const group = sortedHabits().filter(x => habGroup(x) === habGroup(h)), i = group.indexOf(h), j = i + dir;
+  if (j < 0 || j >= group.length) return;
+  [group[i], group[j]] = [group[j], group[i]];
+  // Reparte los números de orden del grupo en el nuevo orden y guarda los que cambian
+  const slots = group.map(x => x.order).sort((p, q) => p - q);
+  group.forEach((x, k) => { const o = slots[k] === slots[k - 1] ? slots[k - 1] + 1 : slots[k]; slots[k] = o; if (x.order !== o) { x.order = o; store.putHabit(x).catch(writeFailed); } });
+  render();
+}
 function routineRowHTML(h) {
   const today = todayISO(), done = new Set(stepsToday(h)), s = habitStreak(h), b = habitBest(h), now = toMin(nowHM());
   const on = applies(h, today);
   const daysTxt = h.days?.length && h.days.length < 7 ? DAY_ORDER.filter(d => h.days.includes(d)).map(d => DAY_LETTER[d]).join(' ') : 'Todos los días';
   return `<div class="hab routine" style="--c:var(--accent)">
-    <div class="hb"><div class="n">🕘 ${esc(h.name)} <span class="m">· ${done.size}/${h.steps.length}</span>${editBtn('hedit', 'Editar rutina', h.id)}</div>
+    <div class="hb"><div class="n">🕘 ${esc(h.name)} <span class="m">· ${done.size}/${h.steps.length}</span>${habOrdering ? moveBtns(h) : editBtn('hedit', 'Editar rutina', h.id)}</div>
       <div class="m">${daysTxt} · ${h.steps[0]?.time || ''}–${h.steps[h.steps.length - 1]?.time || ''} · ${s ? `🔥 ${s} ${s === 1 ? 'día' : 'días'}` : 'Sin racha todavía'}${b > s ? ` · récord ${b}` : ''}</div>
       ${on ? `<details class="rsteps" data-r="${h.id}"${rtOpen(h.id) ? ' open' : ''}><summary>${rtOpen(h.id) ? 'Ocultar pasos' : `Ver los ${h.steps.length} pasos`}</summary><ul class="steps-list">${h.steps.map((st, i) => {
         const next = h.steps[i + 1], cur = toMin(st.time) <= now && (!next || now < toMin(next.time));
@@ -1475,7 +1488,7 @@ function habitRowHTML(h) {
     ? `<div class="qbtns"><button class="qb ok ${v === 1 ? 'on' : ''}" data-act="hok" data-id="${h.id}" aria-label="Lo he evitado hoy">✓</button><button class="qb bad ${v === -1 ? 'on' : ''}" data-act="hbad" data-id="${h.id}" aria-label="Hoy he caído">✗</button></div>`
     : `<button class="hcheck ${v === 1 ? 'on' : ''}" data-act="hok" data-id="${h.id}" aria-label="Hecho hoy: ${esc(h.name)}">${TICK('var(--surface)')}</button>`;
   return `<div class="hab ${h.kind}" style="--c:${h.kind === 'quit' ? 'var(--k-turquesa)' : 'var(--k-verde)'}">
-    <div class="hb"><div class="n">${esc(h.name)}${editBtn('hedit', 'Editar hábito', h.id)}</div><div class="m">${meta}</div>${h.freq === 'monthly' || h.freq === 'yearly' ? periodDotsHTML(h) : dotsHTML(h)}</div>${actions}</div>`;
+    <div class="hb"><div class="n">${esc(h.name)}${habOrdering ? moveBtns(h) : editBtn('hedit', 'Editar hábito', h.id)}</div><div class="m">${meta}</div>${h.freq === 'monthly' || h.freq === 'yearly' ? periodDotsHTML(h) : dotsHTML(h)}</div>${actions}</div>`;
 }
 function habitsViewHTML() {
   const today = todayISO(), all = sortedHabits(), pts = pointsOn(today), goal = stats.goal;
@@ -1492,14 +1505,15 @@ function habitsViewHTML() {
   const fold2 = (k, title, n, inner) => `<details class="hgroup" data-g="${k}"${gOpen(k) ? ' open' : ''}><summary class="group"><span>${title}</span><span>${n}</span></summary>${inner}</details>`;
   let showHabDone = false; try { showHabDone = localStorage.getItem('hab-done') === '1'; } catch {}
   const isDone = h => h.kind === 'routine' ? applies(h, today) && h.steps.length && stepsToday(h).length === h.steps.length : (h.kind === 'build' || h.kind === 'quit') && habitDoneToday(h);
-  const nDone = all.filter(isDone).length, vis = l => showHabDone ? l : l.filter(h => !isDone(h));
-  if (nDone) html += `<button class="btn ghost small hdonebtn" data-act="habdone">${showHabDone ? `Ocultar los hechos (${nDone})` : `👁 Mostrar los hechos (${nDone})`}</button>`;
+  const nDone = all.filter(isDone).length, vis = l => showHabDone || habOrdering ? l : l.filter(h => !isDone(h));
+  html += `<div class="hbar"><button class="btn ${habOrdering ? 'primary' : 'ghost'} small" data-act="horder">${habOrdering ? 'Listo' : '↕ Ordenar'}</button>${nDone && !habOrdering ? `<button class="btn ghost small" data-act="habdone">${showHabDone ? `Ocultar los hechos (${nDone})` : `👁 Mostrar los hechos (${nDone})`}</button>` : ''}</div>`;
+  if (habOrdering) html += '<p class="hint" style="margin:0 2px 6px">Usa las flechas para cambiar el orden dentro de cada grupo.</p>';
   const sec = (title, list, k) => (list = vis(list)).length ? fold2(k, title, list.length, `<div class="habs">${list.map(habitRowHTML).join('')}</div>`) : '';
   const routines = vis(all.filter(h => h.kind === 'routine'));
   if (routines.length) html += fold2('rutinas', 'Rutinas', routines.length, `<div class="habs">${routines.map(routineRowHTML).join('')}</div>`);
   const sleep = all.filter(h => h.kind === 'sleep');
   // Aquí solo se configura; se apunta en Hoy y se ve y corrige en Progreso
-  html += sleep.length ? fold2('sueno', 'Sueño', sleep.length, `<div class="habs">${sleep.map(h => { const s = habitStreak(h); return `<div class="hab sleep" style="--c:var(--k-violeta)"><div class="hb"><div class="n">🌙 ${esc(h.name)}${editBtn('hedit', 'Editar rutina de sueño', h.id)}</div>
+  html += sleep.length ? fold2('sueno', 'Sueño', sleep.length, `<div class="habs">${sleep.map(h => { const s = habitStreak(h); return `<div class="hab sleep" style="--c:var(--k-violeta)"><div class="hb"><div class="n">🌙 ${esc(h.name)}${habOrdering ? moveBtns(h) : editBtn('hedit', 'Editar rutina de sueño', h.id)}</div>
       <div class="m">Luz apagada ${h.bed} · despertar ${h.wakeWk} (L–V), ${h.wakeWe} (S–D) · ${fmtDur(h.hours * 60)}${s ? ` · 🔥 ${s} ${s === 1 ? 'noche' : 'noches'}` : ''}</div>${dotsHTML(h)}</div></div>`; }).join('')}</div>`)
     : `<button class="btn block" data-act="hsleep" style="margin-top:10px">🌙 Añadir mi rutina de sueño (23:30 · 7:15)</button>`;
   html += sec('Cada día', all.filter(h => h.kind === 'build' && h.freq === 'daily'), 'dia');
@@ -1570,7 +1584,7 @@ function openHabit(id) {
   const have = new Set(habits.map(x => fold(x.name)));
   const sug = SEED_HABITS.map((s, i) => [s, i]).filter(([s]) => !have.has(fold(s.name)));
   $('#hSuggest').innerHTML = sug.map(([s, i]) => `<button type="button" class="chip" data-i="${i}">${s.kind === 'quit' ? '🚫 ' : ''}${esc(s.name)}</button>`).join('');
-  $('#hSuggest').hidden = !!h || !sug.length;
+  $('#hSuggest').hidden = true; // sin sugerencias: cada uno apunta sus propios hábitos
   document.querySelector('#hKind [data-v=sleep]').hidden = !h && habits.some(x => x.kind === 'sleep');
   renderHabitChips(); openSheet('#habitSheet');
   if (!h) setTimeout(() => $('#hName').focus(), 60);
@@ -1608,24 +1622,30 @@ function buildProgress() {
   const add = (key, d, due, done) => { for (const m of [tot, (area[key] ||= {})]) { const e = (m[d] ||= { due: 0, done: 0 }); e.due += due; e.done += done; } };
   tasks.forEach(t => {
     if (children(t.id).length) return; // la tarea grande cuenta a través de sus partes
-    const key = 'c:' + (t.cat || '');
-    if (t.date && t.date <= today) add(key, t.date, 1, t.done ? 1 : 0);
-    else if (t.done && t.doneAt) add(key, isoDate(new Date(t.doneAt)), 1, 1);
+    const key = 'c:' + (t.cat || ''), w = Math.max(1, t.parentId ? partPoints(t) : taskPoints(t));
+    if (t.date && t.date <= today) add(key, t.date, w, t.done ? w : 0);
+    else if (t.done && t.doneAt) add(key, isoDate(new Date(t.doneAt)), w, w);
   });
   habits.forEach(h => {
     const key = 'h:' + h.id;
-    if (PERIODIC.includes(h.freq)) { Object.keys(h.log).forEach(d => { if (h.log[d] === 1 && d <= today) add(key, d, 1, 1); }); return; }
+    const w = Math.max(1, habitPoints(h));
+    if (PERIODIC.includes(h.freq)) { Object.keys(h.log).forEach(d => { if (h.log[d] === 1 && d <= today) add(key, d, w, w); }); return; }
     if (h.kind === 'routine') {
       // Cada paso cuenta: hacer 6 de 8 pasos ese día = 75 %
       let d = isoDate(new Date(h.order)), n = 0;
-      while (d <= today && n++ < 800) { if (applies(h, d) && h.steps.length) add(key, d, h.steps.length, (h.stepsDone[d] || []).length); d = addDays(d, 1); }
+      const sp = h.steps.map((_, i) => stepPoints(h, i)), tot = sp.reduce((s, v) => s + v, 0);
+      while (d <= today && n++ < 800) { if (applies(h, d) && h.steps.length) { const dn = new Set(h.stepsDone[d] || []); add(key, d, tot, h.steps.reduce((s, st, i) => s + (dn.has(st.id) ? sp[i] : 0), 0)); } d = addDays(d, 1); }
       return;
     }
     const start = isoDate(new Date(h.order)), first = Object.keys(h.log).sort()[0];
     let d = first && first < start ? first : start, n = 0;
-    while (d <= today && n++ < 800) { add(key, d, 1, h.log[d] === 1 ? 1 : 0); d = addDays(d, 1); }
+    while (d <= today && n++ < 800) { add(key, d, w, h.log[d] === 1 ? w : 0); d = addDays(d, 1); }
   });
-  return { tot, area };
+  // El mes y el año van por tu objetivo de puntos diario: cada día, los puntos que ganaste frente al objetivo
+  const goalD = {}, goal = Math.max(1, stats.goal || 100);
+  const first = [...Object.keys(stats.days || {}).filter(d => stats.days[d] > 0), ...tasks.map(t => t.created ? isoDate(new Date(t.created)) : '').filter(Boolean), ...habits.map(h => isoDate(new Date(h.order)))].sort()[0];
+  if (first) for (let d = first, g = 0; d <= today && g < 800; d = addDays(d, 1), g++) goalD[d] = { due: goal, done: Math.min(goal, pointsOn(d)) };
+  return { tot, area, goalD };
 }
 const level = e => { if (!e || !e.due) return -1; const r = Math.min(1, e.done / e.due); return r === 0 ? 0 : r <= .25 ? 1 : r <= .5 ? 2 : r < 1 ? 3 : 4; };
 const cell = (e, d, today) => `<i class="lv${level(e)}${d > today ? ' fut' : ''}${d === selectedDay ? ' sel' : ''}" data-act="yday" data-d="${d}"></i>`;
@@ -1660,13 +1680,13 @@ function summaryHTML() {
 function monthHTML(p) {
   const today = todayISO(), now = parseISO(today), y = now.getFullYear(), m = now.getMonth(), n = dim(y, m);
   const days = [...Array(n)].map((_, i) => `${y}-${pad(m + 1)}-${pad(i + 1)}`);
-  const past = days.filter(d => d <= today && p.tot[d]?.due);
-  const full = past.filter(d => level(p.tot[d]) === 4).length;
-  const avg = past.length ? Math.round(past.reduce((s, d) => s + Math.min(1, p.tot[d].done / p.tot[d].due), 0) / past.length * 100) : 0;
-  let streak = 0; for (let d = level(p.tot[today]) === 4 ? today : addDays(today, -1); level(p.tot[d]) === 4 && streak < 400; d = addDays(d, -1)) streak++;
-  return `<section class="summary"><div class="rato-head"><h2>${cap(now.toLocaleDateString('es-ES', { month: 'long' }))}</h2><span class="hint">${avg}% de media</span></div>
-    <div class="kpis"><div class="kpi"><b>${full}</b><span>días al 100%</span></div><div class="kpi"><b>${streak}</b><span>días seguidos al 100%</span></div><div class="kpi"><b>${days.reduce((s, d) => s + pointsOn(d), 0)}</b><span>puntos del mes</span></div></div>
-    <div class="mchart" style="--n:${n}">${days.map(d => { const e = p.tot[d], r = e && e.due ? Math.min(1, e.done / e.due) : 0;
+  const G = p.goalD, past = days.filter(d => d <= today && G[d]?.due);
+  const full = past.filter(d => level(G[d]) === 4).length;
+  const avg = past.length ? Math.round(past.reduce((s, d) => s + Math.min(1, G[d].done / G[d].due), 0) / past.length * 100) : 0;
+  let streak = 0; for (let d = level(G[today]) === 4 ? today : addDays(today, -1); level(G[d]) === 4 && streak < 400; d = addDays(d, -1)) streak++;
+  return `<section class="summary"><div class="rato-head"><h2>${cap(now.toLocaleDateString('es-ES', { month: 'long' }))}</h2><span class="hint">${avg}% del objetivo de media</span></div>
+    <div class="kpis"><div class="kpi"><b>${full}</b><span>días con tu objetivo</span></div><div class="kpi"><b>${streak}</b><span>días seguidos con él</span></div><div class="kpi"><b>${days.reduce((s, d) => s + pointsOn(d), 0)}</b><span>puntos del mes</span></div></div>
+    <div class="mchart" style="--n:${n}">${days.map(d => { const e = G[d], r = e && e.due ? Math.min(1, e.done / e.due) : 0;
       return `<div class="mc ${d === today ? 'today' : ''} ${d > today ? 'fut' : ''}" data-act="yday" data-d="${d}"><i class="lv${level(e)}" style="height:${d > today ? 0 : Math.max(e?.due ? 6 : 0, r * 100)}%"></i></div>`; }).join('')}</div>
     <div class="mticks"><span>1</span><span>${Math.ceil(n / 2)}</span><span>${n}</span></div></section>`;
 }
@@ -1675,11 +1695,11 @@ function yearHTML(p) {
   let rows = '';
   for (let m = 0; m < 12; m++) {
     rows += `<span class="ml">${MONTHS_SHORT[m]}</span>`;
-    for (let day = 1; day <= 31; day++) { if (day > dim(y, m)) { rows += '<i class="na"></i>'; continue; } const d = `${y}-${pad(m + 1)}-${pad(day)}`; rows += cell(p.tot[d], d, today); }
+    for (let day = 1; day <= 31; day++) { if (day > dim(y, m)) { rows += '<i class="na"></i>'; continue; } const d = `${y}-${pad(m + 1)}-${pad(day)}`; rows += cell(p.goalD[d], d, today); }
   }
   let detail = 'Toca un cuadrado para ver ese día.';
-  if (selectedDay) { const e = p.tot[selectedDay]; detail = `${cap(parseISO(selectedDay).toLocaleDateString('es-ES', { weekday: 'long', day: 'numeric', month: 'long' }))}: ${e && e.due ? `${e.done} de ${e.due} cosas cumplidas` : 'nada que hacer'} · ⭐ ${pointsOn(selectedDay)}`; }
-  return `<section class="summary"><div class="rato-head"><h2>${y}</h2><span class="legend">Menos <i class="lv0"></i><i class="lv1"></i><i class="lv2"></i><i class="lv3"></i><i class="lv4"></i> Todo</span></div>
+  if (selectedDay) { const pts = pointsOn(selectedDay), g = stats.goal || 100; detail = `${cap(parseISO(selectedDay).toLocaleDateString('es-ES', { weekday: 'long', day: 'numeric', month: 'long' }))}: ⭐ ${pts} de ${g}${pts >= g ? ' · ¡objetivo cumplido!' : ` · ${Math.round(pts / g * 100)}% del objetivo`}`; }
+  return `<section class="summary"><div class="rato-head"><h2>${y}</h2><span class="legend">0 <i class="lv0"></i><i class="lv1"></i><i class="lv2"></i><i class="lv3"></i><i class="lv4"></i> Objetivo</span></div>
     <div class="year">${rows}</div><p class="hint" id="dayDetail">${detail}</p></section>`;
 }
 let areasEdit = false;
@@ -1698,8 +1718,7 @@ function areasHTML(p) {
   const allH = {};
   habits.forEach(h => Object.entries(p.area['h:' + h.id] || {}).forEach(([d, e]) => { const a = (allH[d] ||= { due: 0, done: 0 }); a.due += e.due; a.done += e.done; }));
   const rows = [['all', 'Todos los hábitos', 'var(--k-verde)', allH],
-    ...cats.map(c => ['c:' + c.id, c.name, colorVar(c.color), p.area['c:' + c.id]]),
-    ...sortedHabits().map(h => ['h:' + h.id, h.name, h.kind === 'quit' ? 'var(--k-turquesa)' : 'var(--k-verde)', p.area['h:' + h.id]])];
+    ...cats.map(c => ['c:' + c.id, c.name, colorVar(c.color), p.area['c:' + c.id]])];
   const html = rows.map(r => row(...r)).join('');
   const pick = areasEdit ? `<div class="editbox"><span class="label">Qué apartados ver</span><div class="areapick">${rows.map(([key, label, color]) => `<label class="chk"><input type="checkbox" data-area="${esc(key)}" ${off.has(key) ? '' : 'checked'}><span class="dot" style="background:${color}"></span>${esc(label)}</label>`).join('')}</div></div>` : '';
   return `<section class="summary"><div class="rato-head"><div class="ttl"><h2>Por apartado</h2>${editBtn('areasedit', 'Elegir qué apartados ver', '', areasEdit)}</div><span class="hint">este mes</span></div>${pick}<div class="areas">${html || '<p class="hint">Nada que mostrar todavía. Con el lápiz eliges qué apartados ver.</p>'}</div></section>`;
@@ -1738,9 +1757,13 @@ const PCARDS = [
   ['ano', 'El año en cuadraditos', null, p => yearHTML(p)],
   ['apartados', 'Por apartado', null, p => areasHTML(p)],
 ];
-const progPrefs = () => ({ order: [], off: [], color: {}, mode: {}, areaColor: {}, ...(extra.prefs?.prog || {}) });
+const progPrefs = () => ({ order: [], off: [], color: {}, mode: {}, areaColor: {}, levels: {}, ...(extra.prefs?.prog || {}) });
 // Qué apartados tienen escala de colores (pueden ir en tonos o en arcoíris)
 const PMODES = ['semana', 'animo', 'mes', 'ano', 'apartados'];
+const RAINBOW = ['#e03131', '#f76707', '#f59f00', '#37b24d', '#1c7ed6', '#4263eb', '#ae3ec9'];
+// Qué es cada nivel en cada apartado (para elegir su color uno a uno)
+const LEVELS = { semana: ['L', 'M', 'X', 'J', 'V', 'S', 'D'], animo: ['Muy mal', 'Regular', 'Normal', 'Bien', 'Genial'], mes: ['Nada', 'Poco', 'La mitad', 'Casi todo', 'Todo'], ano: ['Nada', 'Poco', 'La mitad', 'Casi todo', 'Todo'], apartados: ['Nada', 'Poco', 'La mitad', 'Casi todo', 'Todo'] };
+const levelCols = (P, id) => LEVELS[id].map((_, i) => (P.levels?.[id] || [])[i] || RAINBOW[i]);
 function progOrder() {
   const o = progPrefs().order.filter(id => PCARDS.some(c => c[0] === id));
   return [...o, ...PCARDS.map(c => c[0]).filter(id => !o.includes(id))].map(id => PCARDS.find(c => c[0] === id));
@@ -1751,27 +1774,31 @@ function progresoHTML() {
   const P = progPrefs(), p = buildProgress();
   return progOrder().filter(cardOn).map(c => {
     const col = c[0] === 'apartados' ? '' : P.color[c[0]], mode = P.mode[c[0]] || 'shade', inner = c[3](p); if (!inner) return '';
-    return `<div class="pcard" data-pc="${c[0]}" data-mode="${mode}"${col ? ` style="--pc:${colorVar(col)};--g:${colorVar(col)};--accent:${colorVar(col)}"` : ''}>${inner}</div>`;
+    const vars = [col ? `--pc:${colorVar(col)};--g:${colorVar(col)};--accent:${colorVar(col)}` : '', mode === 'custom' && LEVELS[c[0]] ? levelCols(P, c[0]).map((v, i) => `--l${i}:${v}`).join(';') : ''].filter(Boolean).join(';');
+    return `<div class="pcard" data-pc="${c[0]}" data-mode="${mode}"${vars ? ` style="${vars}"` : ''}>${inner}</div>`;
   }).join('');
 }
-const palette = (sel, attr) => `<div class="pcols"><button type="button" class="pcol auto${sel ? '' : ' on'}" ${attr}="" aria-label="Color normal">A</button>${COLORS.map(k => `<button type="button" class="pcol${sel === k ? ' on' : ''}" ${attr}="${k}" style="background:${colorVar(k)}" aria-label="${k}"></button>`).join('')}</div>`;
+const MORE_COLORS = ['#000000', '#495057', '#adb5bd', '#ffc9c9', '#ff8787', '#c92a2a', '#ffd8a8', '#e8590c', '#ffec99', '#f08c00', '#d8f5a2', '#5c940d', '#96f2d7', '#087f5b', '#a5d8ff', '#1864ab', '#bac8ff', '#364fc7', '#eebefa', '#862e9c', '#fcc2d7', '#a61e4d'];
+const palette = (sel, attr) => `<div class="pcols"><button type="button" class="pcol auto${sel ? '' : ' on'}" ${attr}="" aria-label="Color normal">A</button>${[...COLORS, ...MORE_COLORS].map(k => `<button type="button" class="pcol${sel === k ? ' on' : ''}" ${attr}="${k}" style="background:${colorVar(k)}" aria-label="${k}"></button>`).join('')}<label class="pcol pick${sel && /^#/.test(sel) && !MORE_COLORS.includes(sel) ? ' on' : ''}" title="Otro color" style="${sel && /^#/.test(sel) ? `background:${sel}` : ''}">＋<input type="color" ${attr}-x value="${/^#/.test(sel || '') ? sel : '#4263eb'}" aria-label="Elegir otro color"></label></div>`;
 // Las filas de "Por apartado" (todos los hábitos, cada categoría y cada hábito), cada una con su color
-const areaRows = () => [['all', 'Todos los hábitos', 'verde'], ...cats.map(c => ['c:' + c.id, c.name, c.color]), ...sortedHabits().filter(h => h.kind === 'build' || h.kind === 'quit' || h.kind === 'routine' || h.kind === 'sleep').map(h => ['h:' + h.id, h.name, h.kind === 'quit' ? 'turquesa' : 'verde'])];
+const areaRows = () => [['all', 'Todos los hábitos', 'verde'], ...cats.map(c => ['c:' + c.id, c.name, c.color])];
 function renderProgSheet() {
   const P = progPrefs(), list = progOrder();
   $('#progBody').innerHTML = `<p class="hint">Arrastra ⋮⋮ para ordenar, apaga lo que no quieras ver y elige cómo se colorea cada apartado.</p>
     <div class="plist">${list.map(c => { const id = c[0], mode = P.mode[id] || 'shade';
       return `<div class="prow${cardOn(c) ? '' : ' off'}" data-pc="${id}">
-        <div class="prow1"><span class="grip" data-pgrip aria-label="Arrastra para ordenar">⋮⋮</span><b>${c[1]}</b><button type="button" class="switch" role="switch" aria-checked="${cardOn(c)}" data-ptog="${id}" aria-label="Ver ${c[1]}"></button></div>
-        ${PMODES.includes(id) ? `<div class="chips pmodes">${[['shade', 'Claro → oscuro'], ['rev', 'Oscuro → claro'], ['rainbow', '🌈 Arcoíris']].map(([v, l]) => `<button type="button" class="chip${mode === v ? ' on' : ''}" data-pmode="${v}">${l}</button>`).join('')}</div>` : ''}
+        <div class="prow1"><span class="grip" data-pgrip aria-label="Arrastra para ordenar">⋮⋮</span><b>${c[1]}</b><button type="button" class="iconbtn sm" data-pmove="-1" aria-label="Subir">↑</button><button type="button" class="iconbtn sm" data-pmove="1" aria-label="Bajar">↓</button><button type="button" class="switch" role="switch" aria-checked="${cardOn(c)}" data-ptog="${id}" aria-label="Ver ${c[1]}"></button></div>
+        ${PMODES.includes(id) ? `<div class="chips pmodes">${[['shade', 'Claro → oscuro'], ['rev', 'Oscuro → claro'], ['rainbow', '🌈 Arcoíris'], ['custom', '🎨 A mi gusto']].map(([v, l]) => `<button type="button" class="chip" aria-pressed="${mode === v}" data-pmode="${v}">${l}</button>`).join('')}</div>
+          ${mode === 'custom' ? `<div class="plevels">${LEVELS[id].map((l, i) => `<label class="plev"><input type="color" data-plev="${i}" value="${levelCols(P, id)[i]}" aria-label="Color de ${l}"><span>${l}</span></label>`).join('')}</div>` : ''}` : ''}
         ${id === 'apartados' ? `<details class="arow-cols"><summary>Color de cada apartado</summary>${areaRows().map(([k, label, def]) => `<div class="arowc" data-ak="${esc(k)}"><span class="dot" style="background:${colorVar(P.areaColor[k] || def)}"></span><span>${esc(label)}</span>${palette(P.areaColor[k] || '', 'data-acol')}</div>`).join('')}</details>`
-          : mode === 'rainbow' && PMODES.includes(id) ? '' : palette(P.color[id] || '', 'data-pcol')}</div>`; }).join('')}</div>`;
+          : (mode === 'rainbow' || mode === 'custom') && PMODES.includes(id) ? '' : palette(P.color[id] || '', 'data-pcol')}</div>`; }).join('')}</div>`;
 }
 $('#openProg').addEventListener('click', () => { renderProgSheet(); openSheet('#progSheet'); });
 $('#progBody').addEventListener('click', e => {
-  const t = e.target.closest('[data-ptog]'), c = e.target.closest('[data-pcol]'), m = e.target.closest('[data-pmode]'), ac = e.target.closest('[data-acol]');
-  if (!t && !c && !m && !ac) return;
+  const t = e.target.closest('[data-ptog]'), c = e.target.closest('button[data-pcol]'), m = e.target.closest('[data-pmode]'), ac = e.target.closest('button[data-acol]'), mv = e.target.closest('[data-pmove]');
+  if (!t && !c && !m && !ac && !mv) return;
   const P = progPrefs(), id = e.target.closest('[data-pc]').dataset.pc;
+  if (mv) { const ids = progOrder().map(x => x[0]), i = ids.indexOf(id), j = Math.max(0, Math.min(ids.length - 1, i + Number(mv.dataset.pmove))); ids.splice(i, 1); ids.splice(j, 0, id); P.order = ids; saveProg(P); return; }
   if (t) {
     const card = PCARDS.find(x => x[0] === id), vis = cardOn(card);
     P.off = vis ? [...new Set([...P.off, id])] : P.off.filter(x => x !== id);
@@ -1787,6 +1814,16 @@ $('#progBody').addEventListener('click', e => {
 });
 // Ordenar arrastrando el asa
 let progDrag = null;
+// Colores elegidos con el selector del sistema (cualquier color) y colores de cada nivel
+$('#progBody').addEventListener('change', e => {
+  const el = e.target, row = el.closest('[data-pc]'); if (!row) return;
+  const P = progPrefs(), id = row.dataset.pc;
+  if (el.dataset.plev !== undefined) { const l = levelCols(P, id); l[+el.dataset.plev] = el.value; P.levels = { ...P.levels, [id]: l }; }
+  else if (el.hasAttribute('data-pcol-x')) P.color = { ...P.color, [id]: el.value };
+  else if (el.hasAttribute('data-acol-x')) { const k = el.closest('[data-ak]').dataset.ak; P.areaColor = { ...P.areaColor, [k]: el.value }; }
+  else return;
+  const open = !!$('#progBody .arow-cols')?.open; saveProg(P); if (open) $('#progBody .arow-cols').open = true;
+});
 $('#progBody').addEventListener('pointerdown', e => {
   const g = e.target.closest('[data-pgrip]'); if (!g) return;
   e.preventDefault(); progDrag = { id: g.closest('[data-pc]').dataset.pc };
@@ -1852,7 +1889,7 @@ function moodProgHTML() {
   const pairs = days.length < 3 ? [] : [
     ['Durmiendo bien', sleepH ? d => sleepH.log[d] === 1 : null],
     ['Con entreno', d => trained(d)],
-    ['Días al 80 % o más', d => p.tot[d]?.due && p.tot[d].done / p.tot[d].due >= .8],
+    ['Días con tu objetivo', d => pointsOn(d) >= (stats.goal || 100)],
   ].filter(([, f]) => f).map(([label, f]) => {
     const yes = days.filter(f), no = days.filter(d => !f(d));
     return yes.length >= 2 && no.length >= 2 ? { label, a: avg(yes, 'm'), b: avg(no, 'm') } : null;
@@ -2775,7 +2812,7 @@ function tlAutoScroll(y) {
   const sc = $('#scroller') || document.scrollingElement;
   if (y < 90) sc.scrollBy(0, -12); else if (y > innerHeight - 110) sc.scrollBy(0, 12);
 }
-document.addEventListener('touchmove', e => { if (tlDrag) e.preventDefault(); }, { passive: false });
+document.addEventListener('touchmove', e => { if (tlDrag || progDrag || partDrag) e.preventDefault(); }, { passive: false });
 document.addEventListener('pointermove', e => {
   if (tlPress && Math.hypot(e.clientX - tlPress.x, e.clientY - tlPress.y) > 8) { clearTimeout(tlPress.timer); tlPress = null; }
   const d = tlDrag; if (!d) return;
@@ -3185,6 +3222,8 @@ $('#list').addEventListener('click', e => {
   else if (act === 'areasedit') { areasEdit = !areasEdit; render(); }
   else if (act === 'goal') openGoal();
   else if (act === 'mvlate') moveTasks(lateTasks().filter(t => (view === 'hoy' || byCatNow(t)) && !children(t.id).length), el.dataset.to);
+  else if (act === 'horder') { habOrdering = !habOrdering; render(); }
+  else if (act === 'hmove') moveHabit(id, Number(el.dataset.dir));
   else if (act === 'habdone') { try { localStorage.setItem('hab-done', localStorage.getItem('hab-done') === '1' ? '0' : '1'); } catch {} render(); }
   else if (act === 'gohabits') { view = 'habitos'; $('#scroller').scrollTop = 0; render(); }
   else if (act === 'move') { const t = tasks.find(x => x.id === id); if (t) moveTasks([t], el.dataset.to); }

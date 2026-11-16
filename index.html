@@ -119,7 +119,7 @@
   .filters { display: flex; gap: 6px; overflow-x: auto; scrollbar-width: none; margin: 0 calc(-1 * max(16px, var(--safe-l))) 4px; padding: 2px max(16px, var(--safe-l)) 6px; }
   .filters::-webkit-scrollbar { display: none; }
   .chip { font-size: 14px; padding: 7px 12px; border-radius: 999px; border: 1px solid var(--border); background: var(--surface); display: inline-flex; align-items: center; gap: 6px; white-space: nowrap; flex: none; }
-  .chip[aria-pressed="true"] { background: var(--accent-soft); border-color: var(--accent); font-weight: 700; }
+  .chip[aria-pressed="true"], .chip.on { background: var(--accent-soft); border-color: var(--accent); font-weight: 700; }
   .chip.edit { border-style: dashed; color: var(--muted); }
   .dot { width: 9px; height: 9px; border-radius: 50%; flex: none; }
 
@@ -509,6 +509,31 @@
   .erow1 .inp { min-height: 40px; padding: 8px 10px; }
   .erow .pickbtn { min-height: 44px; }
   .prompt { border-color: var(--accent); }
+  .hbar { display: flex; justify-content: flex-end; gap: 6px; margin: 6px 0 0; flex-wrap: wrap; }
+  .hmove { display: inline-flex; gap: 2px; vertical-align: middle; margin-left: 4px; }
+  .hmove .iconbtn.sm { width: 30px; height: 30px; font-size: 16px; background: var(--sunken); }
+  .pcol.pick { position: relative; display: grid; place-items: center; font-size: 13px; color: var(--muted); background: var(--sunken); overflow: hidden; cursor: pointer; }
+  .pcol.pick input { position: absolute; inset: 0; opacity: 0; width: 100%; height: 100%; cursor: pointer; }
+  .plevels { display: flex; flex-wrap: wrap; gap: 8px; padding-left: 26px; }
+  .plev { display: grid; justify-items: center; gap: 2px; font-size: 11px; color: var(--muted); }
+  .plev input { width: 34px; height: 34px; padding: 0; border: 0; border-radius: 8px; background: none; cursor: pointer; }
+  .pcard[data-mode=custom] i.lv0 { background: var(--l0); }
+  .pcard[data-mode=custom] i.lv1 { background: var(--l1); }
+  .pcard[data-mode=custom] i.lv2 { background: var(--l2); }
+  .pcard[data-mode=custom] i.lv3 { background: var(--l3); }
+  .pcard[data-mode=custom] i.lv4 { background: var(--l4); }
+  .pcard[data-mode=custom] i.mo1 { background: var(--l0); }
+  .pcard[data-mode=custom] i.mo2 { background: var(--l1); }
+  .pcard[data-mode=custom] i.mo3 { background: var(--l2); }
+  .pcard[data-mode=custom] i.mo4 { background: var(--l3); }
+  .pcard[data-mode=custom] i.mo5 { background: var(--l4); }
+  .pcard[data-mode=custom] .wb:nth-child(1) .col i { background: var(--l0); }
+  .pcard[data-mode=custom] .wb:nth-child(2) .col i { background: var(--l1); }
+  .pcard[data-mode=custom] .wb:nth-child(3) .col i { background: var(--l2); }
+  .pcard[data-mode=custom] .wb:nth-child(4) .col i { background: var(--l3); }
+  .pcard[data-mode=custom] .wb:nth-child(5) .col i { background: var(--l4); }
+  .pcard[data-mode=custom] .wb:nth-child(6) .col i { background: var(--l5); }
+  .pcard[data-mode=custom] .wb:nth-child(7) .col i { background: var(--l6); }
   .pmodes { gap: 6px; padding-left: 26px; } .pmodes .chip { font-size: 13px; padding: 6px 10px; }
   .arow-cols { padding-left: 26px; } .arow-cols > summary { cursor: pointer; font-weight: 700; color: var(--accent); font-size: 14px; padding: 4px 0; }
   .arowc { display: grid; grid-template-columns: auto 1fr; gap: 4px 8px; align-items: center; padding: 6px 0; border-top: 1px solid var(--border); font-size: 14px; }
@@ -555,7 +580,8 @@
   .prow.dragging { box-shadow: 0 8px 24px rgba(0,0,0,.18); }
   .prow1 { display: flex; align-items: center; gap: 10px; }
   .prow1 b { flex: 1; }
-  .prow .grip { cursor: grab; touch-action: none; color: var(--muted); padding: 4px 2px; letter-spacing: -2px; user-select: none; -webkit-user-select: none; }
+  .prow .grip { cursor: grab; touch-action: none; color: var(--muted); padding: 10px 8px; margin: -10px -4px -10px -8px; letter-spacing: -2px; user-select: none; -webkit-user-select: none; font-size: 18px; }
+  .prow1 .iconbtn.sm { width: 30px; height: 30px; font-size: 16px; }
   .pcols { display: flex; flex-wrap: wrap; gap: 6px; padding-left: 26px; }
   .pcol { width: 24px; height: 24px; border-radius: 50%; border: 2px solid transparent; padding: 0; }
   .pcol.on { border-color: var(--text); box-shadow: inset 0 0 0 2px var(--surface); }
