@@ -248,11 +248,12 @@
   .login .logo { width: 72px; height: 72px; border-radius: 18px; }
   .login h1 { font-size: 32px; }
 
-  .toast { position: fixed; left: 50%; transform: translateX(-50%); z-index: 40;
-    bottom: calc(var(--tabbar) + var(--safe-b) + 88px);
-    background: var(--text); color: var(--bg); padding: 10px 10px 10px 16px; border-radius: 14px; display: flex; gap: 12px; align-items: center;
-    max-width: calc(100% - 32px); box-shadow: 0 6px 20px rgb(0 0 0 / .2); }
-  .toast button { border: 0; background: transparent; color: var(--bg); font-weight: 700; padding: 6px 8px; text-decoration: underline; }
+  /* Aviso pequeño abajo a la izquierda (al lado del +): no tapa las tareas y los toques lo atraviesan salvo "Deshacer" */
+  .toast { position: fixed; left: 12px; z-index: 40; bottom: calc(var(--tabbar) + var(--safe-b) + 14px);
+    background: var(--text); color: var(--bg); padding: 4px 4px 4px 12px; border-radius: 999px; display: flex; gap: 6px; align-items: center;
+    max-width: calc(100% - 100px); font-size: 13px; line-height: 1.25; box-shadow: 0 4px 14px rgb(0 0 0 / .18); pointer-events: none; }
+  .toast span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
+  .toast button { border: 0; background: color-mix(in srgb, var(--bg) 18%, transparent); color: var(--bg); font-weight: 700; font-size: 13px; padding: 5px 10px; border-radius: 999px; flex: none; pointer-events: auto; }
   /* Rato de casa */
   .rato { background: var(--surface); border: 1px solid var(--border); border-radius: 16px; padding: 14px; display: grid; gap: 12px; margin: 6px 0 4px; }
   .rato-head { display: flex; justify-content: space-between; align-items: flex-end; gap: 10px; flex-wrap: wrap; }
@@ -508,6 +509,25 @@
   .erow1 .inp { min-height: 40px; padding: 8px 10px; }
   .erow .pickbtn { min-height: 44px; }
   .prompt { border-color: var(--accent); }
+  .pcard .wb .col i { background: var(--pc, var(--k-amarillo)); }
+  .pcard[style] .area { --g: var(--pc) !important; }
+  .pcard[style] .schart .sl { stroke: var(--pc); stroke-opacity: .8; }
+  .plist { display: grid; gap: 8px; }
+  .prow { background: var(--surface); border: 1px solid var(--border); border-radius: 14px; padding: 10px 12px; display: grid; gap: 8px; }
+  .prow.off { opacity: .5; }
+  .prow.dragging { box-shadow: 0 8px 24px rgba(0,0,0,.18); }
+  .prow1 { display: flex; align-items: center; gap: 10px; }
+  .prow1 b { flex: 1; }
+  .prow .grip { cursor: grab; touch-action: none; color: var(--muted); padding: 4px 2px; letter-spacing: -2px; user-select: none; -webkit-user-select: none; }
+  .pcols { display: flex; flex-wrap: wrap; gap: 6px; padding-left: 26px; }
+  .pcol { width: 24px; height: 24px; border-radius: 50%; border: 2px solid transparent; padding: 0; }
+  .pcol.on { border-color: var(--text); box-shadow: inset 0 0 0 2px var(--surface); }
+  .pcol.auto { background: var(--sunken); font-size: 11px; font-weight: 700; color: var(--muted); }
+  details.rsteps > summary { list-style: none; cursor: pointer; color: var(--accent); font-weight: 700; font-size: 14px; padding: 6px 0 2px; }
+  details.rsteps > summary::-webkit-details-marker { display: none; }
+  details.rsteps > summary::after { content: " ›"; display: inline-block; transition: transform .2s; }
+  details.rsteps[open] > summary::after { transform: rotate(90deg); }
+  .hdonebtn { margin: 6px 0 0 auto; display: block; }
   .hableft { display: flex; align-items: center; gap: 10px; width: 100%; text-align: left; background: var(--surface); border: 1px solid var(--border); border-radius: 14px; padding: 10px 12px; margin: 0 0 10px; }
   .hableft > span:nth-child(2) { flex: 1; min-width: 0; }
   .hableft b { display: block; font-size: 15px; } .hableft small { display: block; color: var(--muted); font-size: 13px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
@@ -608,11 +628,11 @@
   .editbox { background: var(--sunken); border-radius: 12px; padding: 10px; margin: 4px 0 12px; display: grid; gap: 8px; }
   .editbox .mood { display: grid; gap: 8px; }
   .year.mood i.mo0 { background: var(--sunken); }
-  i.mo1 { background: color-mix(in srgb, var(--k-violeta) 45%, #000); }
-  i.mo2 { background: color-mix(in srgb, var(--k-violeta) 75%, #000); }
-  i.mo3 { background: var(--k-violeta); }
-  i.mo4 { background: color-mix(in srgb, var(--k-violeta) 55%, #fff); }
-  i.mo5 { background: color-mix(in srgb, var(--k-violeta) 22%, #fff); }
+  i.mo1 { background: color-mix(in srgb, var(--pc, var(--k-violeta)) 45%, #000); }
+  i.mo2 { background: color-mix(in srgb, var(--pc, var(--k-violeta)) 75%, #000); }
+  i.mo3 { background: var(--pc, var(--k-violeta)); }
+  i.mo4 { background: color-mix(in srgb, var(--pc, var(--k-violeta)) 55%, #fff); }
+  i.mo5 { background: color-mix(in srgb, var(--pc, var(--k-violeta)) 22%, #fff); }
   .schart { width: 100%; height: auto; display: block; margin: 8px 0 2px; overflow: visible; }
   .schart .sg { stroke: var(--border); stroke-width: 1; }
   .schart .smin { stroke: var(--muted); stroke-width: 1.2; stroke-dasharray: 4 4; }

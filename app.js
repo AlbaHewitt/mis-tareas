@@ -50,7 +50,7 @@ let selectedDay = null;
 // Estado del formulario de tarea
 let editingId = null, formCat = 'personal', formDays = [], formParts = [], formNoDate = false, splitDays = [1, 2, 3, 4, 5], formSomeday = false, formTonight = false;
 
-document.documentElement.dataset.v = '16';
+document.documentElement.dataset.v = '18';
 // ---------- Registro de errores (se ve en ⋯ → Ayuda) ----------
 const EKEY = 'mis-tareas-errores';
 function logError(msg, where) {
@@ -342,6 +342,7 @@ function rollRepeats() {
   const today = todayISO(), fixes = [];
   tasks.forEach(t => {
     if (!t.repeat || t.done || !t.date || t.date >= today || t.parentId || t.siriKey !== undefined) return;
+    if (t.date === addDays(today, -1) && new Date().getHours() < 6) return; // de madrugada aún puedes marcar lo de ayer
     let d = t.date, g = 0;
     while (d < today && g++ < 2000) d = stepDate(t, d);
     if (t.until && d > t.until) return;
@@ -349,6 +350,7 @@ function rollRepeats() {
   });
   if (fixes.length) store.putMany(fixes).catch(writeFailed);
 }
+setInterval(() => { if (loaded) rollRepeats(); }, 10 * 60000);
 // Arreglos automáticos de datos antiguos (solo tocan lo que lo necesita)
 const migrated = new Set();
 function migrate() {
@@ -1088,10 +1090,17 @@ const timerBannerHTML = () => tm && tm.phase !== 'idle' && $('#timer').hidden
 
 // ---------- Completar, deshacer y borrar ----------
 // Marca una tarea como hecha o pendiente y suma/resta sus puntos
+// Una tarea de un día pasado (p. ej. de ayer, marcada pasada la medianoche) cuenta como hecha en su día.
+// Si la hiciste de verdad hoy, muévela antes a hoy.
+const doneDayOf = t => t.date && t.date < todayISO() ? t.date : todayISO();
+// Para deshacer: los puntos de los días que puede tocar (hoy y los de las tareas) antes del cambio
+const ptsSnap = list => { const days = new Set([todayISO()]); list.forEach(t => { days.add(doneDayOf(t)); if (t.ptsDay) days.add(t.ptsDay); }); return Object.fromEntries([...days].map(d => [d, pointsOn(d)])); };
+const ptsRestore = snap => Object.entries(snap).forEach(([d, v]) => { const diff = pointsOn(d) - v; if (diff) addPoints(-diff, d); });
 function setDone(t, done) {
   if (!!t.done === done) return;
-  t.done = done; t.doneAt = done ? Date.now() : null;
-  if (done) { t.pts = t.parentId ? partPoints(t) : children(t.id).length ? 0 : taskPoints(t); t.ptsDay = todayISO(); addPoints(t.pts); }
+  const day = doneDayOf(t);
+  t.done = done; t.doneAt = done ? (day === todayISO() ? Date.now() : parseISO(day).getTime() + (23 * 60 + 59) * 60000) : null;
+  if (done) { t.pts = t.parentId ? partPoints(t) : children(t.id).length ? 0 : taskPoints(t); t.ptsDay = day; addPoints(t.pts, day); }
   else if (t.pts) { addPoints(-t.pts, t.ptsDay || todayISO()); t.pts = 0; t.ptsDay = ''; }
 }
 let undoAction = null, toastTimer = null;
@@ -1101,7 +1110,7 @@ function showToast(text, action) {
   $('#toastUndo').hidden = !action;
   $('#toast').hidden = false;
   clearTimeout(toastTimer);
-  toastTimer = setTimeout(() => { $('#toast').hidden = true; undoAction = null; }, 6000);
+  toastTimer = setTimeout(() => { $('#toast').hidden = true; undoAction = null; }, 4500);
 }
 $('#toastUndo').addEventListener('click', () => { const a = undoAction; undoAction = null; $('#toast').hidden = true; a?.(); render(); });
 const snapshot = list => list.map(t => structuredClone(t));
@@ -1116,16 +1125,15 @@ function toggle(id) {
   const t = tasks.find(x => x.id === id); if (!t) return;
   const parent = t.parentId ? tasks.find(x => x.id === t.parentId) : null;
   const before = snapshot([t, ...(parent ? [parent] : [])]);
-  const ptsBefore = pointsOn(todayISO());
+  const ptsBefore = ptsSnap([t, ...(parent ? [parent] : [])]);
   const created = [];
   const nowDone = !t.done;
   setDone(t, nowDone);
-  let msg = nowDone ? `Hecha: ${t.title} · +${t.pts} ⭐` : `Pendiente otra vez: ${t.title}`;
+  let msg = nowDone ? `Hecha${t.ptsDay && t.ptsDay !== todayISO() ? ` (${friendlyDate(t.ptsDay).toLowerCase()})` : ''}: ${t.title} · +${t.pts} ⭐` : `Pendiente otra vez: ${t.title}`;
   if (nowDone && t.repeat && !t.spawned) {
     t.spawned = true;
-    const onTime = !t.date || t.date >= todayISO();
-    t.streak = onTime ? (t.streak || 0) + 1 : 1; t.best = Math.max(t.best || 0, t.streak);
-    t.history = [...(t.history || []), todayISO()].slice(-120);
+    t.streak = (t.streak || 0) + 1; t.best = Math.max(t.best || 0, t.streak);
+    t.history = [...(t.history || []), t.ptsDay || todayISO()].slice(-120);
     const nd = nextDate(t);
     if (nd) {
       const { id: _i, done, doneAt, spawned, pts, ptsDay, ...rest } = t;
@@ -1145,10 +1153,9 @@ function toggle(id) {
   navigator.vibrate?.(10);
   showToast(msg, () => {
     // Deshacer: vuelve todo como estaba (incluida la siguiente repetición y los puntos)
-    const diff = pointsOn(todayISO()) - ptsBefore;
     created.forEach(cid => { tasks = tasks.filter(x => x.id !== cid); store.remove(cid).catch(writeFailed); });
     restore(before);
-    if (diff) addPoints(-diff);
+    ptsRestore(ptsBefore);
   });
   render();
 }
@@ -1316,6 +1323,7 @@ function sleepMedia(sc) {
   const out = sc.closest('.summary')?.querySelector('[data-smedia]');
   if (out && v.length) out.textContent = hm2(Math.round(v.reduce((t, x) => t + x, 0) / v.length));
 }
+$('#list').addEventListener('toggle', e => { const r = e.target.dataset?.r; if (r && e.target.classList.contains('rsteps')) { try { localStorage.setItem('rt-' + r, e.target.open ? '1' : '0'); } catch {} const sm = e.target.querySelector('summary'); if (sm) sm.textContent = e.target.open ? 'Ocultar pasos' : `Ver los ${e.target.querySelectorAll('li').length} pasos`; } }, true);
 $('#list').addEventListener('toggle', e => { const g = e.target.dataset?.g; if (g && e.target.classList.contains('hgroup')) { try { localStorage.setItem('hg-' + g, e.target.open ? '1' : '0'); } catch {} } }, true);
 $('#list').addEventListener('scroll', e => { const sc = e.target; if (!sc.classList?.contains('sscroll')) return; sFromRight = sc.scrollWidth - sc.clientWidth - sc.scrollLeft; sleepMedia(sc); }, true);
 function sleepProgHTML(h) {
@@ -1375,6 +1383,7 @@ function toggleStep(hid, sid) {
   }
   render();
 }
+const rtOpen = id => { try { return localStorage.getItem('rt-' + id) === '1'; } catch { return false; } };
 function routineRowHTML(h) {
   const today = todayISO(), done = new Set(stepsToday(h)), s = habitStreak(h), b = habitBest(h), now = toMin(nowHM());
   const on = applies(h, today);
@@ -1382,10 +1391,10 @@ function routineRowHTML(h) {
   return `<div class="hab routine" style="--c:var(--accent)">
     <div class="hb"><div class="n">🕘 ${esc(h.name)} <span class="m">· ${done.size}/${h.steps.length}</span>${editBtn('hedit', 'Editar rutina', h.id)}</div>
       <div class="m">${daysTxt} · ${h.steps[0]?.time || ''}–${h.steps[h.steps.length - 1]?.time || ''} · ${s ? `🔥 ${s} ${s === 1 ? 'día' : 'días'}` : 'Sin racha todavía'}${b > s ? ` · récord ${b}` : ''}</div>
-      ${on ? `<ul class="steps-list">${h.steps.map((st, i) => {
+      ${on ? `<details class="rsteps" data-r="${h.id}"${rtOpen(h.id) ? ' open' : ''}><summary>${rtOpen(h.id) ? 'Ocultar pasos' : `Ver los ${h.steps.length} pasos`}</summary><ul class="steps-list">${h.steps.map((st, i) => {
         const next = h.steps[i + 1], cur = toMin(st.time) <= now && (!next || now < toMin(next.time));
         return `<li><button class="${done.has(st.id) ? 'on' : ''} ${cur ? 'cur' : ''}" data-act="rstep" data-id="${h.id}" data-step="${st.id}"><span class="box">${TICK('var(--surface)')}</span><span class="tm">${st.time}</span><span>${esc(st.text)}</span></button></li>`;
-      }).join('')}</ul>` : '<p class="hint">Hoy no toca.</p>'}
+      }).join('')}</ul></details>` : '<p class="hint">Hoy no toca.</p>'}
     </div></div>`;
 }
 // --- Ahora toca: lo que está pasando según las horas, y lo siguiente ---
@@ -1478,8 +1487,12 @@ function habitsViewHTML() {
   }
   const gOpen = k => { try { return localStorage.getItem('hg-' + k) !== '0'; } catch { return true; } };
   const fold2 = (k, title, n, inner) => `<details class="hgroup" data-g="${k}"${gOpen(k) ? ' open' : ''}><summary class="group"><span>${title}</span><span>${n}</span></summary>${inner}</details>`;
-  const sec = (title, list, k) => list.length ? fold2(k, title, list.length, `<div class="habs">${list.map(habitRowHTML).join('')}</div>`) : '';
-  const routines = all.filter(h => h.kind === 'routine');
+  let showHabDone = false; try { showHabDone = localStorage.getItem('hab-done') === '1'; } catch {}
+  const isDone = h => h.kind === 'routine' ? applies(h, today) && h.steps.length && stepsToday(h).length === h.steps.length : (h.kind === 'build' || h.kind === 'quit') && habitDoneToday(h);
+  const nDone = all.filter(isDone).length, vis = l => showHabDone ? l : l.filter(h => !isDone(h));
+  if (nDone) html += `<button class="btn ghost small hdonebtn" data-act="habdone">${showHabDone ? `Ocultar los hechos (${nDone})` : `👁 Mostrar los hechos (${nDone})`}</button>`;
+  const sec = (title, list, k) => (list = vis(list)).length ? fold2(k, title, list.length, `<div class="habs">${list.map(habitRowHTML).join('')}</div>`) : '';
+  const routines = vis(all.filter(h => h.kind === 'routine'));
   if (routines.length) html += fold2('rutinas', 'Rutinas', routines.length, `<div class="habs">${routines.map(routineRowHTML).join('')}</div>`);
   const sleep = all.filter(h => h.kind === 'sleep');
   // Aquí solo se configura; se apunta en Hoy y se ve y corrige en Progreso
@@ -1694,6 +1707,68 @@ function focusHTML() {
   return `<section class="summary"><div class="rato-head"><h2>Concentración</h2><span class="hint">semana · mes</span></div>
     <div class="focusrows">${list.map(g => `<div class="focusrow"><span>${esc(g.name)}</span><span>${fmtDur(g.week)} · ${fmtDur(g.month)}</span><div class="bar"><i style="width:${g.month / max * 100}%;background:${colorVar(catOf(g.cat).color)}"></i></div></div>`).join('')}</div></section>`;
 }
+// ---------- Progreso a tu gusto: orden, qué apartados se ven y su color ----------
+const PCARDS = [
+  ['nivel', 'Nivel y logros', 'logros', () => levelHTML()],
+  ['semana', 'Esta semana', null, () => summaryHTML()],
+  ['animo', '¿Qué tal hoy?', 'animo', () => moodProgHTML()],
+  ['sueno', 'Rutina de sueño', null, () => habits.filter(h => h.kind === 'sleep').map(sleepProgHTML).join('')],
+  ['concentracion', 'Concentración', 'concentracion', () => focusHTML()],
+  ['estimado', 'Estimado vs real', 'estimado', () => estimateHTML()],
+  ['jardin', 'Tu jardín', 'jardin', () => gardenHTML()],
+  ['mes', 'El mes', null, p => monthHTML(p)],
+  ['ano', 'El año en cuadraditos', null, p => yearHTML(p)],
+  ['apartados', 'Por apartado', null, p => areasHTML(p)],
+];
+let progEdit = false;
+const progPrefs = () => ({ order: [], off: [], color: {}, ...(extra.prefs?.prog || {}) });
+function progOrder() {
+  const o = progPrefs().order.filter(id => PCARDS.some(c => c[0] === id));
+  return [...o, ...PCARDS.map(c => c[0]).filter(id => !o.includes(id))].map(id => PCARDS.find(c => c[0] === id));
+}
+const cardOn = c => !progPrefs().off.includes(c[0]) && (!c[2] || on(c[2]));
+function saveProg(p) { extra.prefs = { ...extra.prefs, prog: p }; store.saveExtra('prefs').catch(writeFailed); }
+function progresoHTML() {
+  const P = progPrefs(), list = progOrder();
+  const head = `<div class="hoyhead"><span></span><button class="btn small${progEdit ? ' primary' : ''}" data-act="progedit">${progEdit ? 'Listo' : '✏️ Editar'}</button></div>`;
+  if (progEdit) {
+    return head + `<p class="hint" style="margin:0 2px 8px">Arrastra ⋮⋮ para ordenar, apaga lo que no quieras ver y elige el color de cada apartado.</p>
+      <div class="plist">${list.map(c => { const col = P.color[c[0]] || ''; return `<div class="prow${cardOn(c) ? '' : ' off'}" data-pc="${c[0]}">
+        <div class="prow1"><span class="grip" data-pgrip aria-label="Arrastra para ordenar">⋮⋮</span><b>${c[1]}</b><button type="button" class="switch" role="switch" aria-checked="${cardOn(c)}" data-ptog="${c[0]}" aria-label="Ver ${c[1]}"></button></div>
+        <div class="pcols"><button type="button" class="pcol auto${col ? '' : ' on'}" data-pcol="" aria-label="Color normal">A</button>${COLORS.map(k => `<button type="button" class="pcol${col === k ? ' on' : ''}" data-pcol="${k}" style="background:${colorVar(k)}" aria-label="${k}"></button>`).join('')}</div></div>`; }).join('')}</div>`;
+  }
+  const p = buildProgress();
+  return head + list.filter(cardOn).map(c => { const col = P.color[c[0]], inner = c[3](p); if (!inner) return '';
+    return `<div class="pcard" data-pc="${c[0]}"${col ? ` style="--pc:${colorVar(col)};--g:${colorVar(col)};--accent:${colorVar(col)}"` : ''}>${inner}</div>`; }).join('');
+}
+$('#list').addEventListener('click', e => {
+  const t = e.target.closest('[data-ptog]'), c = e.target.closest('[data-pcol]'); if (!t && !c) return;
+  const P = progPrefs(), id = (t || c).closest('[data-pc]').dataset.pc;
+  if (t) {
+    const card = PCARDS.find(x => x[0] === id), vis = cardOn(card);
+    P.off = vis ? [...new Set([...P.off, id])] : P.off.filter(x => x !== id);
+    // Si estaba apagado en Secciones, encenderlo aquí también lo enciende allí
+    if (!vis && card[2] && !on(card[2])) extra.prefs = { ...extra.prefs, off: (extra.prefs.off || []).filter(x => x !== card[2]) };
+  } else { P.color = { ...P.color }; if (c.dataset.pcol) P.color[id] = c.dataset.pcol; else delete P.color[id]; }
+  P.order = progOrder().map(x => x[0]); saveProg(P); render();
+});
+// Ordenar arrastrando el asa
+let progDrag = null;
+$('#list').addEventListener('pointerdown', e => {
+  const g = e.target.closest('[data-pgrip]'); if (!g) return;
+  e.preventDefault(); progDrag = { id: g.closest('[data-pc]').dataset.pc };
+  g.closest('.prow').classList.add('dragging');
+  try { $('#list').setPointerCapture(e.pointerId); } catch {}
+});
+$('#list').addEventListener('pointermove', e => {
+  if (!progDrag) return; e.preventDefault();
+  const rows = [...$('#list').querySelectorAll('.prow')], me = rows.find(r => r.dataset.pc === progDrag.id);
+  const j = rows.filter(r => r !== me && e.clientY > r.getBoundingClientRect().top + r.offsetHeight / 2).length, i = rows.indexOf(me);
+  if (j !== i) { const ids = rows.map(r => r.dataset.pc); ids.splice(i, 1); ids.splice(j, 0, progDrag.id); const box = $('#list .plist'); ids.forEach(id => box.append(rows.find(r => r.dataset.pc === id))); }
+});
+const endProgDrag = () => { if (!progDrag) return; progDrag = null; const P = progPrefs(); P.order = [...$('#list').querySelectorAll('.prow')].map(r => r.dataset.pc); saveProg(P); render(); };
+$('#list').addEventListener('pointerup', endProgDrag);
+$('#list').addEventListener('pointercancel', endProgDrag);
 // ---------- Ánimo y energía ----------
 const MOODS = ['😞', '😕', '😐', '🙂', '😄'], MOOD_TXT = ['Muy mal', 'Regular', 'Normal', 'Bien', 'Genial'];
 function moodCardHTML() {
@@ -2474,7 +2549,7 @@ function toggleMany(ids) {
   const list = ids.map(id => tasks.find(x => x.id === id)).filter(Boolean); if (!list.length) return;
   if (list.length === 1) return toggle(list[0].id);
   const parent = list[0].parentId ? tasks.find(x => x.id === list[0].parentId) : null;
-  const before = snapshot([...list, ...(parent ? [parent] : [])]), ptsBefore = pointsOn(todayISO());
+  const before = snapshot([...list, ...(parent ? [parent] : [])]), ptsBefore = ptsSnap([...list, ...(parent ? [parent] : [])]);
   const allDone = list.every(t => t.done);
   list.forEach(t => setDone(t, !allDone));
   let msg = allDone ? `${list.length} partes pendientes otra vez` : `Hechas ${list.length} partes · +${list.reduce((s, t) => s + (t.pts || 0), 0)} ⭐`;
@@ -2485,7 +2560,7 @@ function toggleMany(ids) {
   }
   store.putMany([...list, ...(parent ? [parent] : [])]).catch(writeFailed);
   navigator.vibrate?.(10);
-  showToast(msg, () => { const diff = pointsOn(todayISO()) - ptsBefore; restore(before); if (diff) addPoints(-diff); });
+  showToast(msg, () => { restore(before); ptsRestore(ptsBefore); });
   render();
 }
 // Rutina: el círculo marca todos los pasos (o los desmarca si ya estaban todos)
@@ -3004,10 +3079,7 @@ function renderMain() {
     const list = tasks.filter(x => byCat(x) && inView(x, v) && v !== 'hechas').sort(sortTasks);
     const done = tasks.filter(x => byCat(x) && doneInView(x, v)).sort((a, b) => (b.doneAt || 0) - (a.doneAt || 0));
     count = list.length; doneCount = v === 'proximas' ? 0 : done.length;
-    if (v === 'hechas') html += (on('logros') ? levelHTML() : '') + summaryHTML()
-      // Ánimo y sueño: aquí se corrigen los valores de hoy y se ven las estadísticas
-      + (on('animo') ? moodProgHTML() : '') + habits.filter(h => h.kind === 'sleep').map(sleepProgHTML).join('') + (on('concentracion') ? focusHTML() : '')
-      + (on('estimado') ? estimateHTML() : '') + (on('jardin') ? gardenHTML() : '') + (() => { const p = buildProgress(); return monthHTML(p) + yearHTML(p) + areasHTML(p); })();
+    if (v === 'hechas') html += progresoHTML();
     if (v === 'hoy') html += (on('bandeja') ? inboxHTML() : '') + (on('ahora') ? nowHTML() : '');
     if (view === 'semana') html += agendaSwitchHTML();
     if (v === 'hoy') html += timerBannerHTML() + (on('planificar') ? planBannerHTML() : '') + (on('animo') ? moodBannerHTML() : '') + (on('repaso') ? reviewBannerHTML() : '') + backupBannerHTML()
@@ -3080,6 +3152,8 @@ $('#list').addEventListener('click', e => {
   else if (act === 'areasedit') { areasEdit = !areasEdit; render(); }
   else if (act === 'goal') openGoal();
   else if (act === 'mvlate') moveTasks(lateTasks().filter(t => (view === 'hoy' || byCatNow(t)) && !children(t.id).length), el.dataset.to);
+  else if (act === 'habdone') { try { localStorage.setItem('hab-done', localStorage.getItem('hab-done') === '1' ? '0' : '1'); } catch {} render(); }
+  else if (act === 'progedit') { progEdit = !progEdit; $('#scroller').scrollTop = 0; render(); }
   else if (act === 'gohabits') { view = 'habitos'; $('#scroller').scrollTop = 0; render(); }
   else if (act === 'move') { const t = tasks.find(x => x.id === id); if (t) moveTasks([t], el.dataset.to); }
   else if (act === 'review') openReview();
