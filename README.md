@@ -62,7 +62,7 @@ Abre la dirección en **Safari** → botón Compartir → **Añadir a pantalla d
 - **Agenda**: el + apunta la tarea en el día que tienes seleccionado.
 - **Hecha en su día**: una tarea de un día pasado (p. ej. de ayer, marcada pasada la medianoche) cuenta como hecha ese día, con sus puntos. Si la hiciste hoy, muévela antes a hoy. Las que se repiten no se mueven solas hasta las 6 de la mañana.
 - **Hábitos hechos ocultos**: al cumplir un hábito desaparece de la lista; “Mostrar los hechos” los enseña. Cada rutina se pliega y despliega.
-- **Progreso a tu gusto**: con ✏️ Editar ordenas los apartados arrastrando ⋮⋮, apagas o enciendes cada uno y eliges su color.
+- **Progreso a tu gusto**: en ⋯ → Personalizar → Progreso ordenas los apartados arrastrando ⋮⋮, apagas o enciendes cada uno, eliges su color y si va en tonos (claro → oscuro u oscuro → claro) o en arcoíris. En “Por apartado”, cada fila puede tener su color. “Esta semana” se desliza para ver las semanas anteriores.
 - **Tareas sin fecha**: no llevan prioridad, repetición ni aviso; esas casillas salen al ponerles un día.
 - **Puntos**: cada tarea da su duración (hora de inicio a fin) o sus minutos, o los puntos que le pongas a mano; objetivo diario en ⋯ → Puntos.
 - **Progreso**: resumen de la semana, gráfico del mes, el año en cuadraditos (una fila por mes) y cuadraditos por apartado.

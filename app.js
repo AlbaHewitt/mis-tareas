@@ -50,7 +50,7 @@ let selectedDay = null;
 // Estado del formulario de tarea
 let editingId = null, formCat = 'personal', formDays = [], formParts = [], formNoDate = false, splitDays = [1, 2, 3, 4, 5], formSomeday = false, formTonight = false;
 
-document.documentElement.dataset.v = '18';
+document.documentElement.dataset.v = '19';
 // ---------- Registro de errores (se ve en ⋯ → Ayuda) ----------
 const EKEY = 'mis-tareas-errores';
 function logError(msg, where) {
@@ -1314,8 +1314,10 @@ let sleepEdit = null;
 const hm2 = m => m == null ? '—' : `${Math.floor(m / 60)}h${pad(m % 60)}m`;
 // El gráfico del sueño empieza mostrando lo último; al deslizar, la media es la de las noches que se ven
 let sFromRight = 0; // se mantiene dónde lo dejaste al volver a pintar
+let wFromRight = 0;
 function fitSleepCharts() {
   document.querySelectorAll('#list .sscroll').forEach(sc => { sc.scrollLeft = sc.scrollWidth - sc.clientWidth - sFromRight; sleepMedia(sc); });
+  document.querySelectorAll('#list .wkscroll').forEach(sc => { sc.style.scrollSnapType = 'none'; sc.scrollLeft = sc.scrollWidth - sc.clientWidth - wFromRight; sc.style.scrollSnapType = ''; });
 }
 function sleepMedia(sc) {
   const a = sc.scrollLeft - 6, b = sc.scrollLeft + sc.clientWidth + 6;
@@ -1325,6 +1327,7 @@ function sleepMedia(sc) {
 }
 $('#list').addEventListener('toggle', e => { const r = e.target.dataset?.r; if (r && e.target.classList.contains('rsteps')) { try { localStorage.setItem('rt-' + r, e.target.open ? '1' : '0'); } catch {} const sm = e.target.querySelector('summary'); if (sm) sm.textContent = e.target.open ? 'Ocultar pasos' : `Ver los ${e.target.querySelectorAll('li').length} pasos`; } }, true);
 $('#list').addEventListener('toggle', e => { const g = e.target.dataset?.g; if (g && e.target.classList.contains('hgroup')) { try { localStorage.setItem('hg-' + g, e.target.open ? '1' : '0'); } catch {} } }, true);
+$('#list').addEventListener('scroll', e => { if (e.target.classList?.contains('wkscroll')) wFromRight = e.target.scrollWidth - e.target.clientWidth - e.target.scrollLeft; }, true);
 $('#list').addEventListener('scroll', e => { const sc = e.target; if (!sc.classList?.contains('sscroll')) return; sFromRight = sc.scrollWidth - sc.clientWidth - sc.scrollLeft; sleepMedia(sc); }, true);
 function sleepProgHTML(h) {
   const d = todayISO(), n = h.nights[d], s = habitStreak(h), b = habitBest(h);
@@ -1626,19 +1629,32 @@ function buildProgress() {
 }
 const level = e => { if (!e || !e.due) return -1; const r = Math.min(1, e.done / e.due); return r === 0 ? 0 : r <= .25 ? 1 : r <= .5 ? 2 : r < 1 ? 3 : 4; };
 const cell = (e, d, today) => `<i class="lv${level(e)}${d > today ? ' fut' : ''}${d === selectedDay ? ' sel' : ''}" data-act="yday" data-d="${d}"></i>`;
-function summaryHTML() {
-  const today = todayISO(), mon = mondayOf(today), week = [...Array(7)].map((_, i) => addDays(mon, i));
+function weekPanelHTML(mon) {
+  const today = todayISO(), week = [...Array(7)].map((_, i) => addDays(mon, i)), sun = addDays(mon, 6), cur = mon === mondayOf(today);
   const ptsWeek = week.reduce((s, d) => s + pointsOn(d), 0);
-  const doneWeek = tasks.filter(t => t.done && t.doneAt && isoDate(new Date(t.doneAt)) >= mon);
+  const doneWeek = tasks.filter(t => t.done && t.doneAt && (d => d >= mon && d <= sun)(isoDate(new Date(t.doneAt))));
   const maxP = Math.max(stats.goal, ...week.map(pointsOn));
   const byCatCount = {}; doneWeek.forEach(t => { byCatCount[t.cat || ''] = (byCatCount[t.cat || ''] || 0) + 1; });
   const maxC = Math.max(1, ...Object.values(byCatCount));
-  return `<section class="summary">
-    <div class="rato-head"><h2>Esta semana</h2><span>${on('recompensas') ? `<button class="btn ghost small" data-act="rewards">🎁 ${balance()} ⭐</button>` : ''}<button class="btn ghost small" data-act="goal">Objetivo: ${stats.goal}/día</button></span></div>
-    <div class="kpis"><div class="kpi"><b>${pointsOn(today)}</b><span>puntos hoy</span></div><div class="kpi"><b>${ptsWeek}</b><span>puntos semana</span></div><div class="kpi"><b>${doneWeek.length}</b><span>tareas hechas</span></div></div>
+  const f = d => parseISO(d).toLocaleDateString('es-ES', { day: 'numeric', month: 'short' });
+  const focus = week.reduce((s, d) => s + (Number(stats.focus?.[d]) || 0), 0);
+  return `<div class="wkpanel"><p class="wktitle">${cur ? 'Esta semana' : `Semana del ${f(mon)} al ${f(sun)}`}</p>
+    <div class="kpis"><div class="kpi"><b>${cur ? pointsOn(today) : Math.round(ptsWeek / 7)}</b><span>${cur ? 'puntos hoy' : 'media al día'}</span></div><div class="kpi"><b>${ptsWeek}</b><span>puntos semana</span></div><div class="kpi"><b>${doneWeek.length}</b><span>tareas hechas</span></div></div>
     <div class="weekbars">${week.map((d, i) => { const p = pointsOn(d); return `<div class="wb ${d === today ? 'today' : ''}"><span class="v">${p || ''}</span><div class="col"><i style="height:${p / maxP * 100}%"></i><b style="bottom:${stats.goal / maxP * 100}%"></b></div><span>${DAY_LETTER[DAY_ORDER[i]]}</span></div>`; }).join('')}</div>
-    ${(() => { const f = week.reduce((s, d) => s + (Number(stats.focus?.[d]) || 0), 0); return f ? `<p class="hint">⏱ ${fmtDur(f)} de concentración esta semana</p>` : ''; })()}
+    ${focus ? `<p class="hint">⏱ ${fmtDur(focus)} de concentración</p>` : ''}
     ${Object.keys(byCatCount).length ? `<div class="catbars">${Object.entries(byCatCount).sort((a, b) => b[1] - a[1]).map(([id, n]) => { const c = catOf(id); return `<div class="catbar" style="--c:${colorVar(c.color)}"><span>${esc(c.name)}</span><div class="bar"><i style="width:${n / maxC * 100}%"></i></div><span>${n}</span></div>`; }).join('')}</div>` : ''}
+  </div>`;
+}
+function summaryHTML() {
+  // Desde la primera semana con puntos o tareas hechas (como mucho un año); la última, a la vista
+  const today = todayISO(), mon = mondayOf(today);
+  const first = [...Object.keys(stats.days || {}).filter(d => stats.days[d] > 0), ...tasks.filter(t => t.done && t.doneAt).map(t => isoDate(new Date(t.doneAt)))].sort()[0] || today;
+  const n = Math.min(52, Math.max(0, Math.round((parseISO(mon) - parseISO(mondayOf(first))) / 6048e5)));
+  const weeks = [...Array(n + 1)].map((_, i) => addDays(mon, (i - n) * 7));
+  return `<section class="summary">
+    <div class="rato-head"><h2>Semana</h2><span>${on('recompensas') ? `<button class="btn ghost small" data-act="rewards">🎁 ${balance()} ⭐</button>` : ''}<button class="btn ghost small" data-act="goal">Objetivo: ${stats.goal}/día</button></span></div>
+    <div class="wkscroll">${weeks.map(weekPanelHTML).join('')}</div>
+    ${n ? '<p class="hint wkhint">← Desliza para ver las semanas anteriores</p>' : ''}
   </section>`;
 }
 function monthHTML(p) {
@@ -1671,8 +1687,10 @@ function areasHTML(p) {
   const today = todayISO(), now = parseISO(today), y = now.getFullYear(), m = now.getMonth(), n = dim(y, m);
   const days = [...Array(n)].map((_, i) => `${y}-${pad(m + 1)}-${pad(i + 1)}`);
   const off = new Set(extra.prefs?.areasOff || []);
+  const AC = progPrefs().areaColor;
   const row = (key, label, color, map) => {
     if (off.has(key)) return '';
+    if (AC[key]) color = colorVar(AC[key]);
     const past = days.filter(d => d <= today && map?.[d]?.due); if (!past.length) return '';
     const pct = Math.round(past.reduce((s, d) => s + Math.min(1, map[d].done / map[d].due), 0) / past.length * 100);
     return `<div class="area" style="--g:${color}"><div class="an"><span>${esc(label)}</span><span>${pct}%</span></div><div class="acells" style="--n:${n}">${days.map(d => cell(map?.[d], d, today)).join('')}</div></div>`;
@@ -1720,55 +1738,70 @@ const PCARDS = [
   ['ano', 'El año en cuadraditos', null, p => yearHTML(p)],
   ['apartados', 'Por apartado', null, p => areasHTML(p)],
 ];
-let progEdit = false;
-const progPrefs = () => ({ order: [], off: [], color: {}, ...(extra.prefs?.prog || {}) });
+const progPrefs = () => ({ order: [], off: [], color: {}, mode: {}, areaColor: {}, ...(extra.prefs?.prog || {}) });
+// Qué apartados tienen escala de colores (pueden ir en tonos o en arcoíris)
+const PMODES = ['semana', 'animo', 'mes', 'ano', 'apartados'];
 function progOrder() {
   const o = progPrefs().order.filter(id => PCARDS.some(c => c[0] === id));
   return [...o, ...PCARDS.map(c => c[0]).filter(id => !o.includes(id))].map(id => PCARDS.find(c => c[0] === id));
 }
 const cardOn = c => !progPrefs().off.includes(c[0]) && (!c[2] || on(c[2]));
-function saveProg(p) { extra.prefs = { ...extra.prefs, prog: p }; store.saveExtra('prefs').catch(writeFailed); }
+function saveProg(p) { extra.prefs = { ...extra.prefs, prog: p }; store.saveExtra('prefs').catch(writeFailed); render(); if (!$('#progSheet').hidden) renderProgSheet(); }
 function progresoHTML() {
-  const P = progPrefs(), list = progOrder();
-  const head = `<div class="hoyhead"><span></span><button class="btn small${progEdit ? ' primary' : ''}" data-act="progedit">${progEdit ? 'Listo' : '✏️ Editar'}</button></div>`;
-  if (progEdit) {
-    return head + `<p class="hint" style="margin:0 2px 8px">Arrastra ⋮⋮ para ordenar, apaga lo que no quieras ver y elige el color de cada apartado.</p>
-      <div class="plist">${list.map(c => { const col = P.color[c[0]] || ''; return `<div class="prow${cardOn(c) ? '' : ' off'}" data-pc="${c[0]}">
-        <div class="prow1"><span class="grip" data-pgrip aria-label="Arrastra para ordenar">⋮⋮</span><b>${c[1]}</b><button type="button" class="switch" role="switch" aria-checked="${cardOn(c)}" data-ptog="${c[0]}" aria-label="Ver ${c[1]}"></button></div>
-        <div class="pcols"><button type="button" class="pcol auto${col ? '' : ' on'}" data-pcol="" aria-label="Color normal">A</button>${COLORS.map(k => `<button type="button" class="pcol${col === k ? ' on' : ''}" data-pcol="${k}" style="background:${colorVar(k)}" aria-label="${k}"></button>`).join('')}</div></div>`; }).join('')}</div>`;
-  }
-  const p = buildProgress();
-  return head + list.filter(cardOn).map(c => { const col = P.color[c[0]], inner = c[3](p); if (!inner) return '';
-    return `<div class="pcard" data-pc="${c[0]}"${col ? ` style="--pc:${colorVar(col)};--g:${colorVar(col)};--accent:${colorVar(col)}"` : ''}>${inner}</div>`; }).join('');
+  const P = progPrefs(), p = buildProgress();
+  return progOrder().filter(cardOn).map(c => {
+    const col = c[0] === 'apartados' ? '' : P.color[c[0]], mode = P.mode[c[0]] || 'shade', inner = c[3](p); if (!inner) return '';
+    return `<div class="pcard" data-pc="${c[0]}" data-mode="${mode}"${col ? ` style="--pc:${colorVar(col)};--g:${colorVar(col)};--accent:${colorVar(col)}"` : ''}>${inner}</div>`;
+  }).join('');
 }
-$('#list').addEventListener('click', e => {
-  const t = e.target.closest('[data-ptog]'), c = e.target.closest('[data-pcol]'); if (!t && !c) return;
-  const P = progPrefs(), id = (t || c).closest('[data-pc]').dataset.pc;
+const palette = (sel, attr) => `<div class="pcols"><button type="button" class="pcol auto${sel ? '' : ' on'}" ${attr}="" aria-label="Color normal">A</button>${COLORS.map(k => `<button type="button" class="pcol${sel === k ? ' on' : ''}" ${attr}="${k}" style="background:${colorVar(k)}" aria-label="${k}"></button>`).join('')}</div>`;
+// Las filas de "Por apartado" (todos los hábitos, cada categoría y cada hábito), cada una con su color
+const areaRows = () => [['all', 'Todos los hábitos', 'verde'], ...cats.map(c => ['c:' + c.id, c.name, c.color]), ...sortedHabits().filter(h => h.kind === 'build' || h.kind === 'quit' || h.kind === 'routine' || h.kind === 'sleep').map(h => ['h:' + h.id, h.name, h.kind === 'quit' ? 'turquesa' : 'verde'])];
+function renderProgSheet() {
+  const P = progPrefs(), list = progOrder();
+  $('#progBody').innerHTML = `<p class="hint">Arrastra ⋮⋮ para ordenar, apaga lo que no quieras ver y elige cómo se colorea cada apartado.</p>
+    <div class="plist">${list.map(c => { const id = c[0], mode = P.mode[id] || 'shade';
+      return `<div class="prow${cardOn(c) ? '' : ' off'}" data-pc="${id}">
+        <div class="prow1"><span class="grip" data-pgrip aria-label="Arrastra para ordenar">⋮⋮</span><b>${c[1]}</b><button type="button" class="switch" role="switch" aria-checked="${cardOn(c)}" data-ptog="${id}" aria-label="Ver ${c[1]}"></button></div>
+        ${PMODES.includes(id) ? `<div class="chips pmodes">${[['shade', 'Claro → oscuro'], ['rev', 'Oscuro → claro'], ['rainbow', '🌈 Arcoíris']].map(([v, l]) => `<button type="button" class="chip${mode === v ? ' on' : ''}" data-pmode="${v}">${l}</button>`).join('')}</div>` : ''}
+        ${id === 'apartados' ? `<details class="arow-cols"><summary>Color de cada apartado</summary>${areaRows().map(([k, label, def]) => `<div class="arowc" data-ak="${esc(k)}"><span class="dot" style="background:${colorVar(P.areaColor[k] || def)}"></span><span>${esc(label)}</span>${palette(P.areaColor[k] || '', 'data-acol')}</div>`).join('')}</details>`
+          : mode === 'rainbow' && PMODES.includes(id) ? '' : palette(P.color[id] || '', 'data-pcol')}</div>`; }).join('')}</div>`;
+}
+$('#openProg').addEventListener('click', () => { renderProgSheet(); openSheet('#progSheet'); });
+$('#progBody').addEventListener('click', e => {
+  const t = e.target.closest('[data-ptog]'), c = e.target.closest('[data-pcol]'), m = e.target.closest('[data-pmode]'), ac = e.target.closest('[data-acol]');
+  if (!t && !c && !m && !ac) return;
+  const P = progPrefs(), id = e.target.closest('[data-pc]').dataset.pc;
   if (t) {
     const card = PCARDS.find(x => x[0] === id), vis = cardOn(card);
     P.off = vis ? [...new Set([...P.off, id])] : P.off.filter(x => x !== id);
     // Si estaba apagado en Secciones, encenderlo aquí también lo enciende allí
     if (!vis && card[2] && !on(card[2])) extra.prefs = { ...extra.prefs, off: (extra.prefs.off || []).filter(x => x !== card[2]) };
-  } else { P.color = { ...P.color }; if (c.dataset.pcol) P.color[id] = c.dataset.pcol; else delete P.color[id]; }
-  P.order = progOrder().map(x => x[0]); saveProg(P); render();
+  } else if (m) P.mode = { ...P.mode, [id]: m.dataset.pmode };
+  else if (ac) { const k = ac.closest('[data-ak]').dataset.ak; P.areaColor = { ...P.areaColor }; if (ac.dataset.acol) P.areaColor[k] = ac.dataset.acol; else delete P.areaColor[k]; }
+  else { P.color = { ...P.color }; if (c.dataset.pcol) P.color[id] = c.dataset.pcol; else delete P.color[id]; }
+  P.order = progOrder().map(x => x[0]);
+  const open = !!$('#progBody .arow-cols')?.open;
+  saveProg(P);
+  if (open) $('#progBody .arow-cols').open = true;
 });
 // Ordenar arrastrando el asa
 let progDrag = null;
-$('#list').addEventListener('pointerdown', e => {
+$('#progBody').addEventListener('pointerdown', e => {
   const g = e.target.closest('[data-pgrip]'); if (!g) return;
   e.preventDefault(); progDrag = { id: g.closest('[data-pc]').dataset.pc };
   g.closest('.prow').classList.add('dragging');
-  try { $('#list').setPointerCapture(e.pointerId); } catch {}
+  try { $('#progBody').setPointerCapture(e.pointerId); } catch {}
 });
-$('#list').addEventListener('pointermove', e => {
+$('#progBody').addEventListener('pointermove', e => {
   if (!progDrag) return; e.preventDefault();
-  const rows = [...$('#list').querySelectorAll('.prow')], me = rows.find(r => r.dataset.pc === progDrag.id);
+  const rows = [...$('#progBody').querySelectorAll('.prow')], me = rows.find(r => r.dataset.pc === progDrag.id);
   const j = rows.filter(r => r !== me && e.clientY > r.getBoundingClientRect().top + r.offsetHeight / 2).length, i = rows.indexOf(me);
-  if (j !== i) { const ids = rows.map(r => r.dataset.pc); ids.splice(i, 1); ids.splice(j, 0, progDrag.id); const box = $('#list .plist'); ids.forEach(id => box.append(rows.find(r => r.dataset.pc === id))); }
+  if (j !== i) { const ids = rows.map(r => r.dataset.pc); ids.splice(i, 1); ids.splice(j, 0, progDrag.id); const box = $('#progBody .plist'); ids.forEach(id => box.append(rows.find(r => r.dataset.pc === id))); }
 });
-const endProgDrag = () => { if (!progDrag) return; progDrag = null; const P = progPrefs(); P.order = [...$('#list').querySelectorAll('.prow')].map(r => r.dataset.pc); saveProg(P); render(); };
-$('#list').addEventListener('pointerup', endProgDrag);
-$('#list').addEventListener('pointercancel', endProgDrag);
+const endProgDrag = () => { if (!progDrag) return; progDrag = null; const P = progPrefs(); P.order = [...$('#progBody').querySelectorAll('.prow')].map(r => r.dataset.pc); saveProg(P); };
+$('#progBody').addEventListener('pointerup', endProgDrag);
+$('#progBody').addEventListener('pointercancel', endProgDrag);
 // ---------- Ánimo y energía ----------
 const MOODS = ['😞', '😕', '😐', '🙂', '😄'], MOOD_TXT = ['Muy mal', 'Regular', 'Normal', 'Bien', 'Genial'];
 function moodCardHTML() {
@@ -3153,7 +3186,6 @@ $('#list').addEventListener('click', e => {
   else if (act === 'goal') openGoal();
   else if (act === 'mvlate') moveTasks(lateTasks().filter(t => (view === 'hoy' || byCatNow(t)) && !children(t.id).length), el.dataset.to);
   else if (act === 'habdone') { try { localStorage.setItem('hab-done', localStorage.getItem('hab-done') === '1' ? '0' : '1'); } catch {} render(); }
-  else if (act === 'progedit') { progEdit = !progEdit; $('#scroller').scrollTop = 0; render(); }
   else if (act === 'gohabits') { view = 'habitos'; $('#scroller').scrollTop = 0; render(); }
   else if (act === 'move') { const t = tasks.find(x => x.id === id); if (t) moveTasks([t], el.dataset.to); }
   else if (act === 'review') openReview();

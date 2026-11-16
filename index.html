@@ -509,8 +509,45 @@
   .erow1 .inp { min-height: 40px; padding: 8px 10px; }
   .erow .pickbtn { min-height: 44px; }
   .prompt { border-color: var(--accent); }
+  .pmodes { gap: 6px; padding-left: 26px; } .pmodes .chip { font-size: 13px; padding: 6px 10px; }
+  .arow-cols { padding-left: 26px; } .arow-cols > summary { cursor: pointer; font-weight: 700; color: var(--accent); font-size: 14px; padding: 4px 0; }
+  .arowc { display: grid; grid-template-columns: auto 1fr; gap: 4px 8px; align-items: center; padding: 6px 0; border-top: 1px solid var(--border); font-size: 14px; }
+  .arowc .pcols { grid-column: 1 / -1; padding-left: 0; }
+  /* Tonos al revés: más hecho = más claro */
+  .pcard[data-mode=rev] i.lv0 { background: var(--g, var(--k-verde)); }
+  .pcard[data-mode=rev] i.lv1 { background: color-mix(in srgb, var(--g, var(--k-verde)) 75%, var(--sunken)); }
+  .pcard[data-mode=rev] i.lv2 { background: color-mix(in srgb, var(--g, var(--k-verde)) 52%, var(--sunken)); }
+  .pcard[data-mode=rev] i.lv3 { background: color-mix(in srgb, var(--g, var(--k-verde)) 30%, var(--sunken)); }
+  .pcard[data-mode=rev] i.lv4 { background: color-mix(in srgb, var(--g, var(--k-verde)) 12%, var(--sunken)); outline: 1px solid color-mix(in srgb, var(--g, var(--k-verde)) 40%, transparent); outline-offset: -1px; }
+  .pcard[data-mode=rev] i.mo1 { background: color-mix(in srgb, var(--pc, var(--k-violeta)) 22%, #fff); }
+  .pcard[data-mode=rev] i.mo2 { background: color-mix(in srgb, var(--pc, var(--k-violeta)) 55%, #fff); }
+  .pcard[data-mode=rev] i.mo4 { background: color-mix(in srgb, var(--pc, var(--k-violeta)) 75%, #000); }
+  .pcard[data-mode=rev] i.mo5 { background: color-mix(in srgb, var(--pc, var(--k-violeta)) 45%, #000); }
+  .pcard[data-mode=rev] .wb .col i { background: color-mix(in srgb, var(--pc, var(--k-amarillo)) 45%, #000); }
+  /* Arcoíris: cada nivel (o cada día de la semana) con un color distinto */
+  .pcard[data-mode=rainbow] i.lv0 { background: #e03131; }
+  .pcard[data-mode=rainbow] i.lv1 { background: #f76707; }
+  .pcard[data-mode=rainbow] i.lv2 { background: #f59f00; }
+  .pcard[data-mode=rainbow] i.lv3 { background: #37b24d; }
+  .pcard[data-mode=rainbow] i.lv4 { background: #1c7ed6; }
+  .pcard[data-mode=rainbow] i.mo1 { background: #e03131; }
+  .pcard[data-mode=rainbow] i.mo2 { background: #f76707; }
+  .pcard[data-mode=rainbow] i.mo3 { background: #f59f00; }
+  .pcard[data-mode=rainbow] i.mo4 { background: #37b24d; }
+  .pcard[data-mode=rainbow] i.mo5 { background: #1c7ed6; }
+  .pcard[data-mode=rainbow] .wb:nth-child(1) .col i { background: #e03131; }
+  .pcard[data-mode=rainbow] .wb:nth-child(2) .col i { background: #f76707; }
+  .pcard[data-mode=rainbow] .wb:nth-child(3) .col i { background: #f59f00; }
+  .pcard[data-mode=rainbow] .wb:nth-child(4) .col i { background: #37b24d; }
+  .pcard[data-mode=rainbow] .wb:nth-child(5) .col i { background: #1c7ed6; }
+  .pcard[data-mode=rainbow] .wb:nth-child(6) .col i { background: #4263eb; }
+  .pcard[data-mode=rainbow] .wb:nth-child(7) .col i { background: #ae3ec9; }
+  .wkscroll { display: flex; overflow-x: auto; scroll-snap-type: x mandatory; -webkit-overflow-scrolling: touch; scrollbar-width: none; overscroll-behavior-x: contain; gap: 16px; }
+  .wkscroll::-webkit-scrollbar { display: none; }
+  .wkpanel { flex: 0 0 100%; scroll-snap-align: start; display: grid; gap: 10px; }
+  .wktitle { margin: 0; font-weight: 700; color: var(--muted); font-size: 14px; }
+  .wkhint { margin: 2px 0 0; text-align: center; font-size: 12px; }
   .pcard .wb .col i { background: var(--pc, var(--k-amarillo)); }
-  .pcard[style] .area { --g: var(--pc) !important; }
   .pcard[style] .schart .sl { stroke: var(--pc); stroke-opacity: .8; }
   .plist { display: grid; gap: 8px; }
   .prow { background: var(--surface); border: 1px solid var(--border); border-radius: 14px; padding: 10px 12px; display: grid; gap: 8px; }
@@ -929,10 +966,20 @@
       <button type="button" id="openGoal"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3l2.7 5.6 6.1.9-4.4 4.3 1 6.1L12 17l-5.4 2.9 1-6.1-4.4-4.3 6.1-.9z"/></svg>Puntos y objetivos<span class="go">›</span></button>
       <button type="button" id="openCats"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7h4l2-3h6l2 3h4v13H3z"/><circle cx="12" cy="13" r="3"/></svg>Categorías<span class="go">›</span></button>
       <button type="button" id="openSections"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/><path d="M14 17.5h7M17.5 14v7"/></svg>Secciones<span class="go">›</span></button>
+      <button type="button" id="openProg"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 20V10M10 20V4M16 20v-7M22 20H2"/></svg>Progreso<span class="go">›</span></button>
       <button type="button" id="openFilters"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 5h16l-6 8v6l-4-2v-4z"/></svg>Filtros<span class="go">›</span></button>
       <button type="button" id="openTpl"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="3" width="16" height="18" rx="2"/><path d="M8 8h8M8 12h8M8 16h5"/></svg>Plantillas<span class="go">›</span></button>
       <button type="button" id="openRewards"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="8" width="18" height="13" rx="2"/><path d="M12 8v13M3 12h18M12 8c-2-4-6-4-6-1.5S9 8 12 8zm0 0c2-4 6-4 6-1.5S15 8 12 8z"/></svg>Recompensas<span class="go">›</span></button>
     </div>
+  </div>
+</div>
+
+<!-- Hoja: progreso -->
+<div class="sheet" id="progSheet" hidden>
+  <div class="grab"></div>
+  <div class="inner">
+    <div class="sheet-head"><h3>Progreso</h3><button type="button" class="btn ghost" data-back="#prefSheet">Atrás</button></div>
+    <div id="progBody" style="display:grid;gap:10px"></div>
   </div>
 </div>
 
