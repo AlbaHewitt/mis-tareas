@@ -50,7 +50,7 @@ let selectedDay = null;
 // Estado del formulario de tarea
 let editingId = null, formCat = 'personal', formDays = [], formParts = [], formNoDate = false, splitDays = [1, 2, 3, 4, 5], formSomeday = false, formTonight = false;
 
-document.documentElement.dataset.v = '21';
+document.documentElement.dataset.v = '22';
 // ---------- Registro de errores (se ve en ⋯ → Ayuda) ----------
 const EKEY = 'mis-tareas-errores';
 function logError(msg, where) {
@@ -1672,7 +1672,7 @@ function summaryHTML() {
   const n = Math.min(52, Math.max(0, Math.round((parseISO(mon) - parseISO(mondayOf(first))) / 6048e5)));
   const weeks = [...Array(n + 1)].map((_, i) => addDays(mon, (i - n) * 7));
   return `<section class="summary">
-    <div class="rato-head"><h2>Semana</h2><span>${on('recompensas') ? `<button class="btn ghost small" data-act="rewards">🎁 ${balance()} ⭐</button>` : ''}<button class="btn ghost small" data-act="goal">Objetivo: ${stats.goal}/día</button></span></div>
+    <div class="rato-head wkhead"><h2>Semana</h2>${on('recompensas') ? `<button class="btn ghost small" data-act="rewards">🎁 ${balance()} ⭐</button>` : ''}</div>
     <div class="wkscroll">${weeks.map(weekPanelHTML).join('')}</div>
     ${n ? '<p class="hint wkhint">← Desliza para ver las semanas anteriores</p>' : ''}
   </section>`;
