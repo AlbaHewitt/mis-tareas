@@ -1,11 +1,11 @@
 // Guarda la app para que abra al instante y sin conexión.
 // Sube VERSION cada vez que publiques cambios.
-const VERSION = 'v25';
+const VERSION = 'v26';
 const CACHE = 'mis-tareas-' + VERSION;
 const SHELL = ['./', 'index.html', 'app.js', 'logic.js', 'parse.js', 'cal.js', 'config.js', 'manifest.webmanifest', 'icons/icon-180.png', 'icons/icon-192.png', 'icons/icon-512.png'];
 
 self.addEventListener('install', e => {
-  e.waitUntil(caches.open(CACHE).then(c => c.addAll(SHELL)).then(() => self.skipWaiting()));
+  e.waitUntil(caches.open(CACHE).then(c => c.addAll(SHELL.map(u => new Request(u, { cache: 'no-cache' })))).then(() => self.skipWaiting()));
 });
 self.addEventListener('activate', e => {
   e.waitUntil(caches.keys().then(keys => Promise.all(keys.filter(k => k !== CACHE).map(k => caches.delete(k)))).then(() => self.clients.claim()));
@@ -19,7 +19,9 @@ self.addEventListener('fetch', e => {
   if (!ours && !lib) return; // Firebase (datos y acceso) va directo a la red
   // Primero la red (para recibir actualizaciones); si no hay conexión, la copia guardada.
   e.respondWith(
-    fetch(req).then(res => {
+    // Lo nuestro se pide siempre comprobando si hay versión nueva (sin usar la caché del navegador),
+    // para que nunca se mezcle la página nueva con el código viejo
+    (ours && req.mode !== 'navigate' ? fetch(req.url, { cache: 'no-cache', credentials: 'same-origin' }) : fetch(req)).then(res => {
       if (res.ok) { const copy = res.clone(); caches.open(CACHE).then(c => c.put(req, copy)); }
       return res;
     }).catch(() => caches.match(req, { ignoreSearch: true }).then(r => r || caches.match('index.html')))
