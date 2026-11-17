@@ -67,6 +67,16 @@ Abre la dirección en **Safari** → botón Compartir → **Añadir a pantalla d
 - **Compra**: escribe varias cosas separadas por comas y se ordenan solas por secciones del súper; tocando una se cambia de sección (y lo recuerda). Al marcarla va al carro; “Vaciar” limpia el carro.
 - **Notas**: con carpetas, fijadas arriba, búsqueda, listas con casillas, fotos, dibujos (con el Apple Pencil la mano no pinta; la goma borra trazos enteros) y enlaces. El **Diario** es una nota por día con unas preguntas (botón en Hoy y en Notas).
 - **Enlaces**: una tarea o una nota se puede enlazar con notas, tareas, proyectos, libros o películas; en cada cosa se ve también lo que la enlaza.
+- **Organizar mi día**: en Hoy, ✨ Organizar coloca lo que no tiene hora en tus huecos libres (primero lo que lleva 🚩 y lo atrasado), sin pisar lo que ya tiene hora ni las rutinas. Si ya es tarde, organiza mañana desde que te levantas. Lo que no cabe puede pasar al día siguiente.
+- **Cerrar el día**: por la noche (o con 🌙 en Hoy): lo que has hecho, lo que queda (hecha, mañana, otro día o sin fecha), los hábitos que faltan, el ánimo y el diario.
+- **Papelera**: ⋯ → Borrado recientemente. Las tareas, notas, proyectos y hábitos borrados se guardan 30 días.
+- **Hábitos que se cuentan**: “Cuántos al día” (8 vasos, 10.000 pasos…) con + y −, o escribiendo el número; se cumple al llegar.
+- **Metas del año**: en Progreso. A mano (con + y −) o automáticas: libros leídos, películas vistas, días de un hábito, tareas con una etiqueta o proyectos terminados. La rayita marca dónde deberías ir.
+- **Cuentas atrás**: en una tarea con fecha futura (o un proyecto con fecha límite), “⏳ Cuenta atrás en Hoy”.
+- **Tiempo dedicado**: en Progreso, por categoría y por proyecto (semana o mes), con las horas de lo que completas y el temporizador.
+- **Búsqueda en todo**: la lupa busca en tareas, notas, proyectos, libros, películas, la compra y los hábitos.
+- **Notas privadas**: el candado 🔓 de una nota hace que solo se abra con Face ID (o Touch ID o el código del dispositivo). Es un candado en el dispositivo: la nota sigue guardada en tu cuenta y en la copia de seguridad.
+- **Listas reutilizables**: en una nota con casillas, “↺ Desmarcar todo” o “⧉ Hacer una copia”. En la Compra, “Añadir desde una lista de Notas”.
 - **Fotos en las tareas**: en los detalles, 📷 Foto o ✏️ Dibujo. Las fotos se guardan achicadas y aparte (no van en la copia de seguridad).
 - **iPad**: el menú pasa a la izquierda con un mini calendario del mes debajo, la Agenda empieza en Semana y Hoy se ve en dos columnas (la línea de horas y, al lado, Extra y lo atrasado). Con teclado: T hoy, ← → antes/después, N nueva, D S M A L vistas, + − tamaño de las horas, 1–6 pestañas, / buscar, Esc cerrar.
 - **Libros y películas en portadas**: “▦ Portadas” los enseña como una galería; las portadas se buscan solas (Open Library y Wikipedia).
@@ -89,7 +99,7 @@ Abre la dirección en **Safari** → botón Compartir → **Añadir a pantalla d
 - **Bandeja rápida**: arriba en Hoy, “Apuntar rápido…”; luego cada cosa se manda a hoy, mañana o sin fecha.
 - **Plantillas**: al editar una tarea, “Guardar como plantilla” (con sus partes en días relativos); al crear una tarea, se elige arriba. Se gestionan en ⋯ → Plantillas.
 - **Estadísticas de sueño**: en Progreso, la media de lo que duermes (la de las noches que se ven en el gráfico) y el gráfico de cada noche.
-- **Copia de seguridad**: ⋯ → Guardar copia guarda todo (tareas, hábitos, categorías, recompensas, plantillas, libros, películas, proyectos, compra y notas; las fotos no). Si pasan 7 días sin copia, Hoy lo recuerda. En el iPhone se puede guardar en Archivos o en Google Drive desde el menú Compartir.
+- **Copia de seguridad**: ⋯ → Guardar copia guarda todo (tareas, hábitos, categorías, recompensas, plantillas, libros, películas, proyectos, compra, notas y metas; las fotos no). Si pasan 7 días sin copia, Hoy lo recuerda. En el iPhone se puede guardar en Archivos o en Google Drive desde el menú Compartir.
 - **Planificar mi día**: por la mañana eliges qué harás hoy y ves si cabe en tus horas libres; lo que no elijas pasa a mañana.
 - **Etiquetas y listas inteligentes**: escribe @etiqueta en el título o en el campo Etiquetas (salen las que ya usas para tocarlas); tocar una etiqueta busca todo lo que la lleva; las listas inteligentes se crean en Listas → Mis listas.
 - **Algún día y Esta noche**: ideas sin prisa en Listas → Algún día; las tareas de hoy marcadas “Esta noche” salen aparte.

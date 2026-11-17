@@ -18,7 +18,7 @@ const $ = s => document.querySelector(s);
 
 let tasks = [];
 // Proyectos, lista de la compra y notas
-let projects = [], shop = [], notes = [];
+let projects = [], shop = [], notes = [], trash = [], goals = [];
 let cats = DEFAULT_CATS;
 let habits = [];
 let stats = { goal: 100, days: {}, focus: {} };
@@ -51,10 +51,10 @@ let query = '';
 let showDone = false;
 let selectedDay = null;
 // Estado del formulario de tarea
-let formFlag = false;
+let formFlag = false, formCd = false;
 let editingId = null, formCat = 'personal', formDays = [], formParts = [], formNoDate = false, splitDays = [1, 2, 3, 4, 5], formSomeday = false, formTonight = false;
 
-document.documentElement.dataset.v = '26';
+document.documentElement.dataset.v = '27';
 // ---------- Registro de errores (se ve en ⋯ → Ayuda) ----------
 const EKEY = 'mis-tareas-errores';
 function logError(msg, where) {
@@ -117,7 +117,7 @@ function clean(t) {
     parentId: t.parentId || '', order: Number(t.order) || 0, loc: String(t.loc || '').slice(0, 200), inbox: !!t.inbox && !t.date,
     someday: !!t.someday && !t.date, tonight: !!t.tonight && !!t.date,
     tags: Array.isArray(t.tags) ? [...new Set(t.tags.map(normTag).filter(Boolean))].slice(0, 10) : [],
-    flag: !!t.flag, project: String(t.project || '').slice(0, 60), status: t.status === 'doing' && !t.done ? 'doing' : '',
+    cd: !!t.cd && !!t.date, flag: !!t.flag, project: String(t.project || '').slice(0, 60), status: t.status === 'doing' && !t.done ? 'doing' : '',
     born: Number(t.born) >= 1900 && Number(t.born) <= 2100 ? Math.round(Number(t.born)) : null,
     links: cleanLinks(t.links), photos: Array.isArray(t.photos) ? t.photos.map(String).slice(0, 20) : [],
     streak: Number(t.streak) || 0, best: Number(t.best) || 0,
@@ -139,6 +139,10 @@ function cleanHabit(h) {
     minutes: Number(h.minutes) > 0 ? Math.min(240, Math.round(Number(h.minutes))) : 10,
     order: Number(h.order) || Date.now(), log,
   };
+  if (kind === 'build' && out.freq === 'daily' && Number(h.qty) > 1) {
+    const counts = {}; Object.entries(h.counts || {}).sort().slice(-400).forEach(([k, v]) => { if (/^\d{4}-\d{2}-\d{2}$/.test(k) && Number(v) >= 0) counts[k] = Math.round(Number(v)); });
+    Object.assign(out, { qty: Math.min(1e6, Math.round(Number(h.qty))), unit: String(h.unit || '').slice(0, 20), counts });
+  }
   if (kind === 'sleep') {
     const nights = {};
     Object.entries(h.nights || {}).sort().slice(-400).forEach(([k, v]) => { if (log[k] !== undefined && v && hm(v.bed) && hm(v.wake)) nights[k] = { bed: v.bed, wake: v.wake }; });
@@ -188,12 +192,16 @@ function cleanItem(kind, b) {
 const LINK_KINDS = ['note', 'task', 'proj', 'books', 'movies'];
 function cleanLinks(l) { return (Array.isArray(l) ? l : []).filter(x => x && LINK_KINDS.includes(x.k) && x.id).map(x => ({ k: x.k, id: String(x.id).slice(0, 80) })).slice(0, 30); }
 const isDay = v => /^\d{4}-\d{2}-\d{2}$/.test(v || '');
-const cleanProject = p => ({ name: String(p.name || '').slice(0, 80), color: COLORS.includes(p.color) ? p.color : 'azul', notes: String(p.notes || '').slice(0, 4000), due: isDay(p.due) ? p.due : '', done: !!p.done, order: Number(p.order) || Date.now(), created: Number(p.created) || Date.now() });
+const cleanProject = p => ({ name: String(p.name || '').slice(0, 80), color: COLORS.includes(p.color) ? p.color : 'azul', notes: String(p.notes || '').slice(0, 4000), due: isDay(p.due) ? p.due : '', cd: !!p.cd && isDay(p.due), done: !!p.done, order: Number(p.order) || Date.now(), created: Number(p.created) || Date.now() });
 const cleanShop = s => ({ name: String(s.name || '').slice(0, 100), sec: SHOP_SECS.some(x => x[0] === s.sec) ? s.sec : 'otros', done: !!s.done, order: Number(s.order) || Date.now() });
 const cleanNote = n => ({ title: String(n.title || '').slice(0, 200), body: String(n.body || '').slice(0, 20000), folder: String(n.folder || '').slice(0, 40), pinned: !!n.pinned,
   created: Number(n.created) || Date.now(), updated: Number(n.updated) || Date.now(), photos: (Array.isArray(n.photos) ? n.photos : []).map(String).slice(0, 30),
-  project: String(n.project || '').slice(0, 60), links: cleanLinks(n.links), journal: isDay(n.journal) ? n.journal : '' });
-const ROWS = { projects: [() => projects, v => { projects = v; }, cleanProject], shop: [() => shop, v => { shop = v; }, cleanShop], notes: [() => notes, v => { notes = v; }, cleanNote] };
+  project: String(n.project || '').slice(0, 60), links: cleanLinks(n.links), journal: isDay(n.journal) ? n.journal : '', locked: !!n.locked });
+const cleanTrash = r => ({ kind: ['task', 'note', 'proj', 'habit'].includes(r.kind) ? r.kind : 'task', title: String(r.title || '').slice(0, 200), at: Number(r.at) || Date.now(), data: String(r.data || '').slice(0, 900000) });
+const cleanGoal = g => ({ title: String(g.title || '').slice(0, 120), kind: ['manual', 'books', 'movies', 'habit', 'tag', 'projects'].includes(g.kind) ? g.kind : 'manual', target: Math.max(1, Math.min(1e7, Number(g.target) || 1)),
+  unit: String(g.unit || '').slice(0, 20), cur: Math.max(0, Math.min(1e7, Number(g.cur) || 0)), ref: String(g.ref || '').slice(0, 80), projects: (Array.isArray(g.projects) ? g.projects : []).map(String).slice(0, 30),
+  year: Number(g.year) || new Date().getFullYear(), order: Number(g.order) || Date.now() });
+const ROWS = { projects: [() => projects, v => { projects = v; }, cleanProject], shop: [() => shop, v => { shop = v; }, cleanShop], notes: [() => notes, v => { notes = v; }, cleanNote], trash: [() => trash, v => { trash = v; }, cleanTrash], goals: [() => goals, v => { goals = v; }, cleanGoal] };
 function saveRow(coll, row) {
   const [get, , cl] = ROWS[coll], l = get(), i = l.findIndex(x => x.id === row.id), { id, ...rest } = row, clean = { id, ...cl(rest) };
   if (i >= 0) l[i] = clean; else l.push(clean);
@@ -232,6 +240,10 @@ const store = {
   async setRoutineDay(h, day, ids, val) {
     if (!this.fb) return local(LHAB, habits);
     return this.fb.setDoc(this.ref('habits', h.id), { stepsDone: { [day]: ids }, log: { [day]: val === null ? this.fb.deleteField() : val } }, { merge: true });
+  },
+  async setHabitCount(h, day, n, val) {
+    if (!this.fb) return local(LHAB, habits);
+    return this.fb.setDoc(this.ref('habits', h.id), { counts: { [day]: n }, log: { [day]: val === null ? this.fb.deleteField() : val } }, { merge: true });
   },
   async setSleep(h, day, val, night) {
     if (!this.fb) return local(LHAB, habits);
@@ -296,7 +308,7 @@ async function initStore() {
   auth.onAuthStateChanged(a, user => {
     unsubs.forEach(u => u()); unsubs = [];
     if (!user) {
-      store.fb = null; store.user = null; tasks = []; for (const k in shelf) shelf[k].items = []; cats = DEFAULT_CATS; habits = []; stats = { goal: 100, days: {}, focus: {} }; rewards = { list: [], redeemed: [] }; extra = { mood: {}, filters: [], garden: [], prefs: {} }; projects = []; shop = []; notes = []; fileCache.clear(); loaded = false;
+      store.fb = null; store.user = null; tasks = []; for (const k in shelf) shelf[k].items = []; cats = DEFAULT_CATS; habits = []; stats = { goal: 100, days: {}, focus: {} }; rewards = { list: [], redeemed: [] }; extra = { mood: {}, filters: [], garden: [], prefs: {} }; projects = []; shop = []; notes = []; trash = []; goals = []; trashChecked = false; fileCache.clear(); loaded = false;
       $('#login').hidden = false; $('#logoutBtn').hidden = true;
       render(); return;
     }
@@ -345,6 +357,7 @@ async function initStore() {
     }, () => {}));
     for (const k in ROWS) unsubs.push(fs.onSnapshot(fs.collection(db, 'users', user.uid, k), snap => {
       ROWS[k][1](snap.docs.map(d => ({ id: d.id, ...ROWS[k][2](d.data()) })));
+      if (k === 'trash' && !snap.metadata.fromCache) autoPurge();
       if (k !== 'notes' || !$('#noteSheet').classList.contains('show')) render();
     }, () => {}));
     unsubs.push(fs.onSnapshot(store.ref('settings', 'templates'), snap => {
@@ -413,6 +426,11 @@ function migrate() {
       ch = { ...(ch || {}), subtasks: [] };
     }
     if (t.rota) ch = { ...(ch || {}), rota: '' };
+    // Arreglo de la v25: sin elegir categoría, las tareas nuevas caían en Cumpleaños (y se repetían cada año)
+    if (t.cat === 'cumple' && !t.born && (t.created || 0) >= 1794945600000 && !/cumple|aniversario|santo/i.test(t.title || '')) {
+      const par = t.parentId ? tasks.find(p => p.id === t.parentId) : null;
+      ch = { ...(ch || {}), cat: guessCat(par ? par.title : t.title) || (cats.some(c => c.id === 'personal') ? 'personal' : ''), ...(t.repeat === 'anual' && (t.every || 1) === 1 ? { repeat: '' } : {}) };
+    }
     if (t.cat === 'urgente') { const par = t.parentId ? tasks.find(p => p.id === t.parentId) : null; ch = { ...(ch || {}), flag: !t.parentId, cat: guessCat(par ? par.title : t.title) || '' }; }
     if (ch) { Object.assign(t, ch); delete t.subtasks; delete t.rota; fixes.push(t); }
   });
@@ -689,6 +707,7 @@ function renderWhen() {
   $('#minutesField').hidden = !formNoDate;
   $('#somedayBtn').hidden = !formNoDate; $('#somedayBtn').setAttribute('aria-pressed', formSomeday);
   $('#tonightBtn').hidden = formNoDate || date !== todayISO(); $('#tonightBtn').setAttribute('aria-pressed', formTonight);
+  $('#cdBtn').hidden = formNoDate || !date || date <= todayISO(); $('#cdBtn').setAttribute('aria-pressed', formCd);
   // Sin fecha no hay prioridad, repetición ni aviso: salen al ponerle un día
   ['#repeatField', '#remindField'].forEach(x => $(x).hidden = formNoDate);
   $('#repeat').disabled = formNoDate || formParts.length > 0;
@@ -761,6 +780,7 @@ $('#time').addEventListener('change', () => {
 });
 $('#somedayBtn').addEventListener('click', () => { formSomeday = !formSomeday; renderWhen(); });
 $('#tonightBtn').addEventListener('click', () => { formTonight = !formTonight; renderWhen(); });
+$('#cdBtn').addEventListener('click', () => { formCd = !formCd; renderWhen(); });
 const readTags = () => $('#tags').value.split(/[,\s]+/).map(normTag).filter(Boolean);
 $('#tags').addEventListener('input', renderTagSugs);
 $('#tagSugs').addEventListener('click', e => { const b = e.target.closest('[data-tagadd]'); if (!b) return; $('#tags').value = [...readTags(), b.dataset.tagadd].join(', '); renderTagSugs(); });
@@ -875,12 +895,14 @@ function openForm(id, preset) {
   const t = id ? tasks.find(x => x.id === id) : null;
   editingId = t ? t.id : null; tplParts = null; formCatTouched = !!t;
   $('#title').value = t ? t.title : '';
-  formCat = t ? (t.cat ?? '') : (catFilter || cats[cats.length - 1]?.id || '');
+  // Por defecto, la última categoría que no sea Cumpleaños (Cumpleaños solo si la eliges)
+  formCat = t ? (t.cat ?? '') : (catFilter || [...cats].reverse().find(c => c.id !== 'cumple')?.id || '');
   if (!t && !cats.some(c => c.id === formCat)) formCat = cats[0]?.id || '';
   const inLists = !t && view === 'sinfecha' && !query, lk = inLists ? (listSel || '') : '';
   formNoDate = t ? !t.date : inLists;
   formSomeday = t ? !!t.someday : lk === 'someday';
   formFlag = t ? !!t.flag : (lk === 'flag' || !!preset?.flag);
+  formCd = t ? !!t.cd : false;
   formTonight = t ? !!t.tonight : false;
   $('#tags').value = t ? (t.tags || []).join(', ') : lk.startsWith('t:') ? lk.slice(2) : '';
   $('#proj').innerHTML = projOptions(t ? t.project : lk.startsWith('p:') ? lk.slice(2) : (preset?.project || ''));
@@ -944,7 +966,7 @@ $('#taskSheet').addEventListener('submit', e => {
     points: $('#points').value === '' ? null : Number($('#points').value),
     remind: formNoDate || $('#remind').value === '' ? null : Number($('#remind').value), notes: $('#notes').value.trim(), inbox: false, loc: $('#loc').value.trim(),
     tags: readTags(), someday: formNoDate && formSomeday, tonight: !formNoDate && formTonight,
-    flag: formFlag, project: $('#proj').value, born: formCat === 'cumple' && $('#born').value ? Number($('#born').value) : null,
+    flag: formFlag, cd: formCd, project: $('#proj').value, born: formCat === 'cumple' && $('#born').value ? Number($('#born').value) : null,
   };
   if (!editingId) {
     const p = parseQuick(title, cats);
@@ -1228,8 +1250,8 @@ function remove(id) {
   const gone = [t, ...children(t.id)];
   tasks = tasks.filter(x => !gone.includes(x));
   gone.forEach(g => store.remove(g.id).catch(writeFailed));
-  const snaps = snapshot(gone);
-  showToast(gone.length > 1 ? `Borrada: ${t.title} y sus ${gone.length - 1} partes` : `Borrada: ${t.title}`, () => restore(snaps));
+  const snaps = snapshot(gone), tid = toTrash('task', t.title, snaps);
+  showToast(gone.length > 1 ? `Borrada: ${t.title} y sus ${gone.length - 1} partes` : `Borrada: ${t.title}`, () => { restore(snaps); dropRow('trash', tid); });
   render();
 }
 let clearArmed = null;
@@ -1241,8 +1263,8 @@ $('#clearDone').addEventListener('click', () => {
   const gone = done.flatMap(t => [t, ...children(t.id)]);
   tasks = tasks.filter(x => !gone.includes(x));
   gone.forEach(t => store.remove(t.id).catch(writeFailed));
-  const snaps = snapshot(gone);
-  showToast(`${done.length} borrada${done.length === 1 ? '' : 's'}`, () => restore(snaps));
+  const snaps = snapshot(gone), tid = toTrash('task', `${done.length} tarea${done.length === 1 ? '' : 's'} hecha${done.length === 1 ? '' : 's'}`, snaps);
+  showToast(`${done.length} borrada${done.length === 1 ? '' : 's'}`, () => { restore(snaps); dropRow('trash', tid); });
   render();
 });
 
@@ -1296,7 +1318,7 @@ const matches = (t, q) => q.startsWith('@') ? (t.tags || []).some(g => g.startsW
 async function exportBackup() {
   const name = `mis-tareas-copia-${todayISO()}.json`;
   const data = { app: 'mis-tareas', version: 2, exported: new Date().toISOString(),
-    tasks: tasks.map(t => ({ id: t.id, ...clean(t) })), habits, cats, stats, rewards, templates, books: shelf.books.items, movies: shelf.movies.items, projects, shop, notes };
+    tasks: tasks.map(t => ({ id: t.id, ...clean(t) })), habits, cats, stats, rewards, templates, books: shelf.books.items, movies: shelf.movies.items, projects, shop, notes, goals };
   const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
   const file = new File([blob], name, { type: 'application/json' });
   const done = () => { try { localStorage.setItem('last-backup', String(Date.now())); } catch {} render(); };
@@ -1549,6 +1571,8 @@ function habitRowHTML(h) {
     : (s ? `🔥 ${s} ${unit}` : 'Sin racha todavía');
   const b = habitBest(h); if (b > s && !PUNIT[h.freq]) meta += ` · récord ${b}`;
   meta += ` · +${habitPoints(h)} ⭐`;
+  if (h.qty > 1) return `<div class="hab build counted${v === 1 ? ' done' : ''}" style="--c:var(--k-verde)">
+    <div class="hb"><div class="n">${esc(h.name)}${habOrdering ? moveBtns(h) : editBtn('hedit', 'Editar hábito', h.id)}</div><div class="m">${meta}</div>${countHTML(h)}${dotsHTML(h)}</div></div>`;
   const actions = h.kind === 'quit'
     ? `<div class="qbtns"><button class="qb ok ${v === 1 ? 'on' : ''}" data-act="hok" data-id="${h.id}" aria-label="Lo he evitado hoy">✓</button><button class="qb bad ${v === -1 ? 'on' : ''}" data-act="hbad" data-id="${h.id}" aria-label="Hoy he caído">✗</button></div>`
     : `<button class="hcheck ${v === 1 ? 'on' : ''}" data-act="hok" data-id="${h.id}" aria-label="Hecho hoy: ${esc(h.name)}">${TICK('var(--surface)')}</button>`;
@@ -1612,6 +1636,7 @@ function renderHabitChips() {
   $('#hSleepFields').hidden = hKind !== 'sleep';
   $('#hRoutineFields').hidden = hKind !== 'routine';
   if (hKind === 'routine') renderSteps();
+  $('#hQtyField').hidden = hKind !== 'build' || hFreq !== 'daily';
   $('#hMinLabel').textContent = hKind === 'quit' ? 'Puntos por cada día que lo evitas' : hKind === 'sleep' ? 'Puntos por cada noche cumplida' : 'Minutos (= puntos al cumplirlo)';
   ['hBed', 'hWakeWk', 'hWakeWe'].forEach(k => { $('#' + k + 'Text').textContent = $('#' + k).value || '—'; });
 }
@@ -1638,6 +1663,7 @@ function openHabit(id) {
   const h = id ? habits.find(x => x.id === id) : null;
   editingHabit = h ? h.id : null; hKind = h ? h.kind : 'build'; hFreq = h ? h.freq : 'daily';
   $('#hName').value = h ? h.name : ''; $('#hTarget').value = h ? h.target : 3; $('#hMin').value = h ? h.minutes : 10;
+  $('#hQty').value = h && h.qty > 1 ? h.qty : ''; $('#hUnit').value = h && h.unit ? h.unit : '';
   const sl = h && h.kind === 'sleep' ? h : SLEEP_DEFAULT;
   $('#hBed').value = sl.bed; $('#hWakeWk').value = sl.wakeWk; $('#hWakeWe').value = sl.wakeWe; $('#hHours').value = sl.hours; $('#hTol').value = sl.tol;
   hSteps = h && h.kind === 'routine' ? h.steps.map(s => ({ ...s })) : [];
@@ -1663,7 +1689,7 @@ $('#hSuggest').addEventListener('click', e => {
 $('#habitSheet').addEventListener('submit', e => {
   e.preventDefault();
   const name = $('#hName').value.trim(); if (!name) { $('#hName').focus(); return; }
-  const data = { name, kind: hKind, freq: hFreq, target: Number($('#hTarget').value) || (hFreq === 'weekly' ? 3 : 1), minutes: Number($('#hMin').value) || 10 };
+  const data = { name, kind: hKind, freq: hFreq, target: Number($('#hTarget').value) || (hFreq === 'weekly' ? 3 : 1), minutes: Number($('#hMin').value) || 10, qty: Number($('#hQty').value) || 0, unit: $('#hUnit').value.trim() };
   if (hKind === 'routine') {
     const steps = hSteps.filter(s => s.text.trim() && s.time).map(s => ({ ...s, text: s.text.trim() }));
     if (!steps.length) { $('#hStepAdd').focus(); return; }
@@ -1671,14 +1697,15 @@ $('#habitSheet').addEventListener('submit', e => {
   }
   if (hKind === 'sleep') Object.assign(data, { bed: $('#hBed').value, wakeWk: $('#hWakeWk').value, wakeWe: $('#hWakeWe').value, hours: Number($('#hHours').value), tol: Number($('#hTol').value) });
   let h = editingHabit ? habits.find(x => x.id === editingHabit) : null;
-  if (h) Object.assign(h, cleanHabit({ ...h, ...data }));
+  if (h) { const c = cleanHabit({ ...h, ...data }); if (!(c.qty > 1)) { delete h.qty; delete h.unit; delete h.counts; } Object.assign(h, c); }
   else { h = { id: 'h' + uid(), ...cleanHabit({ ...data, order: Date.now() }) }; habits.push(h); }
   store.putHabit(h).catch(writeFailed); closeSheets(); render();
 });
 $('#hDelete').addEventListener('click', () => {
   if (!hDelArmed) { hDelArmed = true; $('#hDelete').textContent = 'Toca otra vez: se borra con todo su historial'; return; }
-  const id = editingHabit; habits = habits.filter(x => x.id !== id);
-  store.removeHabit(id).catch(writeFailed); closeSheets(); render();
+  const id = editingHabit, h = habits.find(x => x.id === id); habits = habits.filter(x => x.id !== id);
+  if (h) toTrash('habit', h.name, h);
+  store.removeHabit(id).catch(writeFailed); closeSheets(); render(); if (h) showToast(`Hábito borrado: ${h.name} (está en la papelera 30 días)`);
 });
 
 // ---------- Progreso ----------
@@ -1811,6 +1838,8 @@ function focusHTML() {
 }
 // ---------- Progreso a tu gusto: orden, qué apartados se ven y su color ----------
 const PCARDS = [
+  ['metas', 'Metas del año', null, () => goalsHTML()],
+  ['tiempo', 'Tiempo dedicado', null, () => timeHTML()],
   ['nivel', 'Nivel y logros', 'logros', () => levelHTML()],
   ['semana', 'Esta semana', null, () => summaryHTML()],
   ['animo', '¿Qué tal hoy?', 'animo', () => moodProgHTML()],
@@ -1830,8 +1859,8 @@ const RAINBOW = ['#e03131', '#f76707', '#f59f00', '#37b24d', '#1c7ed6', '#4263eb
 const LEVELS = { semana: ['L', 'M', 'X', 'J', 'V', 'S', 'D'], animo: ['Muy mal', 'Regular', 'Normal', 'Bien', 'Genial'], mes: ['Nada', 'Poco', 'La mitad', 'Casi todo', 'Todo'], ano: ['Nada', 'Poco', 'La mitad', 'Casi todo', 'Todo'], apartados: ['Nada', 'Poco', 'La mitad', 'Casi todo', 'Todo'] };
 const levelCols = (P, id) => LEVELS[id].map((_, i) => (P.levels?.[id] || [])[i] || RAINBOW[i]);
 function progOrder() {
-  const o = progPrefs().order.filter(id => PCARDS.some(c => c[0] === id));
-  return [...o, ...PCARDS.map(c => c[0]).filter(id => !o.includes(id))].map(id => PCARDS.find(c => c[0] === id));
+  const o = progPrefs().order.filter(id => PCARDS.some(c => c[0] === id)), first = o.includes('metas') ? [] : ['metas'];
+  return [...first, ...o, ...PCARDS.map(c => c[0]).filter(id => !o.includes(id) && !first.includes(id))].map(id => PCARDS.find(c => c[0] === id));
 }
 const cardOn = c => !progPrefs().off.includes(c[0]) && (!c[2] || on(c[2]));
 function saveProg(p) { extra.prefs = { ...extra.prefs, prog: p }; store.saveExtra('prefs').catch(writeFailed); render(); if (!$('#progSheet').hidden) renderProgSheet(); }
@@ -3113,7 +3142,7 @@ const itemText = it => `<b>${esc(it.title)}${it.sub ? `<small class="tsub">${esc
 function hoyHTML() {
   const now = toMin(nowHM()), { items, extras, late } = hoyItems(hoyEdit);
   const w = wxOf(todayISO());
-  let html = (w && !hoyEdit ? `<div class="wxline">${w.i} <b>${w.max}°</b> / ${w.min}° · ${esc(calPrefs().wx.name)}</div>` : '') + timerBannerHTML() + backupBannerHTML() + (hoyEdit ? '' : birthdayHTML()) + (on('repaso') ? reviewBannerHTML() : '') + (on('planificar') && !hoyEdit ? planBannerHTML() : '') + sleepPromptHTML() + moodPromptHTML();
+  let html = (w && !hoyEdit ? `<div class="wxline">${w.i} <b>${w.max}°</b> / ${w.min}° · ${esc(calPrefs().wx.name)}</div>` : '') + (hoyEdit ? '' : countdownHTML()) + timerBannerHTML() + backupBannerHTML() + (hoyEdit ? '' : birthdayHTML() + closeBannerHTML()) + (on('repaso') ? reviewBannerHTML() : '') + (on('planificar') && !hoyEdit ? planBannerHTML() : '') + sleepPromptHTML() + moodPromptHTML();
   if (hoyEdit) return html + hoyEditHTML(items, extras);
   const pending = items.filter(i => !i.done).length + extras.filter(i => !i.done).length;
   if (on('bandeja')) html += inboxHTML();
@@ -3121,7 +3150,7 @@ function hoyHTML() {
   if (habLeft.length) { const names = habLeft.slice(0, 2).map(h => h.name).join(', ') + (habLeft.length > 2 ? ` y ${habLeft.length - 2} más` : '');
     html += `<button class="hableft" data-act="gohabits"><span>🔥</span><span><b>${habLeft.length} ${habLeft.length === 1 ? 'hábito' : 'hábitos'} por hacer hoy</b><small>${esc(names)}</small></span><span class="go">›</span></button>`; }
   let side = '';
-  html += `<div class="hoygrid"><div class="hoymain"><div class="hoyhead"><span>${pending ? `${pending} por hacer` : items.length + extras.length ? '¡Todo hecho! 🎉' : 'Nada para hoy'}</span><button class="btn small" data-act="hoyedit">✏️ Editar</button></div>`;
+  html += `<div class="hoygrid"><div class="hoymain"><div class="hoyhead"><span>${pending ? `${pending} por hacer` : items.length + extras.length ? '¡Todo hecho! 🎉' : 'Nada para hoy'}</span><span class="hoyacts"><button class="btn small" data-act="organize">✨ Organizar</button><button class="btn small" data-act="closeday">🌙</button><button class="btn small" data-act="hoyedit">✏️ Editar</button></span></div>`;
   if (items.length) html += timelineHTML(items, now, false);
   else html += `<p class="hint" style="margin:8px 2px">${extras.length ? 'No tienes nada con hora hoy. Pulsa “Editar” para ponerle hora a tus tareas.' : 'Nada apuntado para hoy. Pulsa + para añadir algo.'}</p>`;
   const row = (it, cls) => {
@@ -3641,7 +3670,7 @@ function openProject(id) {
   const p = id ? projects.find(x => x.id === id) : null;
   projId = p ? p.id : null; projColor = p ? p.color : COLORS[projects.length % COLORS.length]; projDelArmed = false;
   $('#projTitle').textContent = p ? 'Editar proyecto' : 'Nuevo proyecto';
-  $('#projName').value = p ? p.name : ''; $('#projDue').value = p ? p.due : ''; $('#projNotes').value = p ? p.notes : '';
+  $('#projName').value = p ? p.name : ''; $('#projDue').value = p ? p.due : ''; $('#projNotes').value = p ? p.notes : ''; $('#projCd').checked = !!p?.cd;
   $('#projDone').hidden = !p; $('#projDone').textContent = p?.done ? 'Volver a abrirlo' : '✓ Proyecto terminado';
   $('#projDel').hidden = !p; $('#projDel').textContent = 'Borrar proyecto';
   renderProjForm(); openSheet('#projSheet');
@@ -3657,7 +3686,7 @@ $('#projSheet').addEventListener('submit', e => {
   e.preventDefault();
   const name = $('#projName').value.trim(); if (!name) { $('#projName').focus(); return; }
   const old = projId ? projects.find(x => x.id === projId) : null;
-  const p = { ...(old || { id: 'p' + uid(), created: Date.now(), order: Date.now(), done: false }), name, color: projColor, due: $('#projDue').value, notes: $('#projNotes').value.trim() };
+  const p = { ...(old || { id: 'p' + uid(), created: Date.now(), order: Date.now(), done: false }), name, color: projColor, due: $('#projDue').value, notes: $('#projNotes').value.trim(), cd: $('#projCd').checked };
   saveRow('projects', p); closeSheets();
   if (!old) { view = 'sinfecha'; listSel = 'p:' + p.id; $('#scroller').scrollTop = 0; }
   render();
@@ -3670,7 +3699,8 @@ $('#projDel').addEventListener('click', () => {
   tl.forEach(t => { t.project = ''; }); if (tl.length) store.putMany(tl).catch(writeFailed);
   nl.forEach(n => saveRow('notes', { ...n, project: '' }));
   dropRow('projects', p.id); closeSheets(); if (listSel === 'p:' + p.id) listSel = null;
-  showToast(`Proyecto borrado: ${p.name}`, () => { saveRow('projects', p); restore(ts); nl.forEach(n => saveRow('notes', n)); });
+  const tid = toTrash('proj', p.name, { p, tasks: tl.map(t => t.id), notes: nl.map(n => n.id) });
+  showToast(`Proyecto borrado: ${p.name}`, () => { saveRow('projects', p); restore(ts); nl.forEach(n => saveRow('notes', n)); dropRow('trash', tid); });
   render();
 });
 function projOptions(sel) { return `<option value="">Sin proyecto</option>` + projects.filter(p => !p.done || p.id === sel).map(p => `<option value="${p.id}"${p.id === sel ? ' selected' : ''}>📁 ${esc(p.name)}</option>`).join(''); }
@@ -3681,7 +3711,7 @@ const shopRowHTML = s => `<div class="shoprow${s.done ? ' done' : ''}" style="--
   + (shopEdit === s.id ? `<div class="shopedit"><span class="label">¿En qué sección va?</span><div class="chips wrap">${SHOP_SECS.map(([k, i, n]) => `<button type="button" class="chip ${s.sec === k ? 'on' : ''}" data-act="shopsec" data-id="${s.id}" data-sec="${k}">${i} ${n}</button>`).join('')}</div><button type="button" class="btn danger small" data-act="shopdel" data-id="${s.id}">Quitar de la lista</button></div>` : '');
 function shopHTML() {
   const pend = shop.filter(s => !s.done), done = shop.filter(s => s.done);
-  let h = `<form class="quick" id="shopForm"><input class="inp" type="text" id="shopInput" placeholder="Añadir… (varias con comas: leche, pan, huevos)" aria-label="Añadir a la compra" autocomplete="off" enterkeyhint="done"><button class="btn primary" type="submit">+</button></form>`;
+  let h = `<div class="chips" style="margin:0 0 8px"><button class="chip" data-act="shopfrom">📋 Añadir desde una lista de Notas</button></div><form class="quick" id="shopForm"><input class="inp" type="text" id="shopInput" placeholder="Añadir… (varias con comas: leche, pan, huevos)" aria-label="Añadir a la compra" autocomplete="off" enterkeyhint="done"><button class="btn primary" type="submit">+</button></form>`;
   if (!shop.length) return h + '<div class="empty"><strong>La lista está vacía</strong><span>Escribe lo que necesitas y lo ordeno por secciones del súper. Toca una cosa para cambiarla de sección.</span></div>';
   SHOP_SECS.forEach(([sec, icon, name]) => {
     const l = pend.filter(s => s.sec === sec).sort((a, b) => a.order - b.order); if (!l.length) return;
@@ -3708,8 +3738,10 @@ document.addEventListener('submit', e => {
 
 // ---------- Tarjeta de nota (en Notas y en los proyectos) ----------
 const noteLines = body => String(body || '').split('\n').map(l => l.replace(/^\[ \] ?/, '☐ ').replace(/^\[x\] ?/i, '☑ ')).filter(l => l.trim());
-const noteName = n => n.journal ? `Diario · ${cap(parseISO(n.journal).toLocaleDateString('es-ES', { weekday: 'long', day: 'numeric', month: 'long' }))}` : (n.title || noteLines(n.body)[0] || 'Nota sin título');
+const noteName0 = n => n.journal ? `Diario · ${cap(parseISO(n.journal).toLocaleDateString('es-ES', { weekday: 'long', day: 'numeric', month: 'long' }))}` : (n.title || noteLines(n.body)[0] || 'Nota sin título');
+const noteName = n => noteName0(n);
 function noteCardHTML(n) {
+  if (n.locked) return `<button class="ncard locked" data-act="nopen" data-id="${n.id}"><b>🔒 ${esc(noteName(n))}</b><span class="nprev">Nota privada · se abre con Face ID</span><small>${new Date(n.updated).toLocaleDateString('es-ES', { day: 'numeric', month: 'short' })}${n.folder ? ' · 📁 ' + esc(n.folder) : ''}</small></button>`;
   const lines = noteLines(n.body).slice(n.title || n.journal ? 0 : 1, (n.title || n.journal ? 0 : 1) + 4), p = n.project ? projects.find(x => x.id === n.project) : null;
   const when = new Date(n.updated).toLocaleDateString('es-ES', { day: 'numeric', month: 'short' });
   return `<button class="ncard${n.journal ? ' journal' : ''}" data-act="nopen" data-id="${n.id}">${n.photos[0] ? `<img data-file="${n.photos[0]}" alt="">` : ''}
@@ -3884,7 +3916,7 @@ function notesViewHTML() {
   h += `<div class="chips nfold">${[['', 'Todas'], ['📌', '📌 Fijadas'], ...(on('diario') ? [['📓', '📓 Diario']] : []), ...folders.map(f => [f, '📁 ' + f])].map(([v, l]) => `<button class="chip" data-act="nfolder" data-v="${esc(v)}" aria-pressed="${noteFolder === v}">${esc(l)}</button>`).join('')}<button class="chip edit" data-act="nnewfolder">+ Carpeta</button></div>`;
   if (folderAdding) h += `<form class="partadd" id="folderForm"><input class="inp" type="text" id="folderInput" placeholder="Nombre de la carpeta" maxlength="40" autocomplete="off"><button class="btn primary" type="submit">Crear</button></form>`;
   let list = notes.filter(n => noteFolder === '📓' ? n.journal : noteFolder === '📌' ? n.pinned : noteFolder ? n.folder === noteFolder : true)
-    .filter(n => !q || fold(`${n.title} ${n.body} ${n.folder}`).includes(q))
+    .filter(n => !q || fold(`${n.title} ${n.locked ? '' : n.body} ${n.folder}`).includes(q))
     .filter(n => !journalEmpty(n));
   list.sort(noteFolder === '📓' ? (a, b) => b.journal.localeCompare(a.journal) : (a, b) => (b.pinned - a.pinned) || b.updated - a.updated);
   if (!list.length) h += `<div class="empty"><strong>${q ? `Nada con “${esc(noteQuery)}”` : noteFolder === '📓' ? 'Aún no has escrito en el diario' : 'Aún no hay notas'}</strong><span>${q ? '' : 'Pulsa + para escribir una. Puedes poner listas con casillas, fotos y dibujos.'}</span></div>`;
@@ -3930,9 +3962,12 @@ function renderNoteMeta() {
   $('#noteMeta').innerHTML = n.journal ? `📓 <b>${cap(parseISO(n.journal).toLocaleDateString('es-ES', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' }))}</b>${md?.m ? ` · ánimo ${'●'.repeat(md.m)}${'○'.repeat(Math.max(0, 5 - md.m))}` : ''}` : (notes.some(x => x.id === n.id) ? `Editada ${new Date(n.updated).toLocaleString('es-ES', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })}` : 'Nota nueva');
   $('#notePin').setAttribute('aria-pressed', !!n.pinned); $('#notePin').classList.toggle('on', !!n.pinned);
   $('#noteDel').textContent = noteDelArmed ? '¿Borrar?' : '🗑';
+  $('#noteLock').setAttribute('aria-pressed', !!n.locked); $('#noteLock').classList.toggle('on', !!n.locked); $('#noteLock').textContent = n.locked ? '🔒' : '🔓';
+  const checks = nBlocks.some(b => b.t === 'check'); $('#noteReset').hidden = !checks; $('#noteCopy').hidden = !checks;
 }
 const autosize = ta => { ta.style.height = 'auto'; ta.style.height = ta.scrollHeight + 'px'; };
 function renderNoteBlocks(focusI, atEnd = true) {
+  if (noteDraft) { const checks = nBlocks.some(b => b.t === 'check'); $('#noteReset').hidden = !checks; $('#noteCopy').hidden = !checks; }
   $('#noteBlocks').innerHTML = nBlocks.map((b, i) => b.t === 'check'
     ? `<div class="nb-c${b.on ? ' on' : ''}" data-i="${i}"><button type="button" class="nbx" data-nb="tick" aria-pressed="${b.on}" aria-label="Hecho">${TICK('var(--surface)')}</button><input class="nb-ci" data-nb="v" value="${esc(b.v)}" enterkeyhint="next" aria-label="Elemento de la lista"></div>`
     : `<textarea class="nb-t" data-nb="v" data-i="${i}" rows="1" placeholder="${nBlocks.length === 1 ? 'Escribe aquí…' : ''}" aria-label="Texto">${esc(b.v)}</textarea>`).join('');
@@ -3978,14 +4013,20 @@ $('#noteTitle').addEventListener('input', scheduleNoteSave);
 $('#noteFolder').addEventListener('change', () => saveNote());
 $('#noteProj').addEventListener('change', () => saveNote());
 $('#noteDone').addEventListener('click', () => { closeSheets(); render(); });
+$('#noteLock').addEventListener('click', async () => {
+  if (!noteDraft) return;
+  if (!noteDraft.locked && !(await faceUnlock())) return;
+  noteDraft.locked = !noteDraft.locked; renderNoteMeta(); saveNote(); showToast(noteDraft.locked ? '🔒 Nota privada: se abrirá con Face ID' : 'La nota ya no es privada');
+});
+$('#noteReset').addEventListener('click', resetChecks);
+$('#noteCopy').addEventListener('click', copyNote);
 $('#notePin').addEventListener('click', () => { noteDraft.pinned = !noteDraft.pinned; renderNoteMeta(); saveNote(); });
 $('#noteDel').addEventListener('click', () => {
   if (!noteDelArmed) { noteDelArmed = true; renderNoteMeta(); setTimeout(() => { noteDelArmed = false; if (noteDraft) renderNoteMeta(); }, 3000); return; }
   const n = notes.find(x => x.id === noteDraft.id), files = [...noteDraft.photos]; noteDraft = null; closeSheets();
   if (!n) { files.forEach(delFile); render(); return; }
-  dropRow('notes', n.id); let undone = false;
-  showToast(`Nota borrada: ${noteName(n)}`, () => { undone = true; saveRow('notes', n); });
-  setTimeout(() => { if (!undone && !notes.some(x => x.id === n.id)) files.forEach(delFile); }, 6000);
+  dropRow('notes', n.id); const tid = toTrash('note', noteName(n), n);
+  showToast(`Nota borrada: ${noteName(n)}`, () => { saveRow('notes', n); dropRow('trash', tid); });
   render();
 });
 $('#notePhotoIn').addEventListener('change', e => { addPhotos(e.target.files, { kind: 'note' }); e.target.value = ''; });
@@ -4013,7 +4054,7 @@ function openLinkPicker(src) { linkSrc = src; $('#linkSearch').value = ''; rende
 function linkCands(q) {
   const f = s => !q || fold(s || '').includes(fold(q)), out = [], cur = linkSrc ? (linkSrc.k === 'note' ? noteDraft?.links : tasks.find(t => t.id === linkSrc.id)?.links) || [] : [];
   const add = (k, id, t, sub) => { if (linkSrc && k === linkSrc.k && id === linkSrc.id) return; if (cur.some(l => l.k === k && l.id === id)) return; out.push({ k, id, t, sub }); };
-  notes.filter(n => !journalEmpty(n) && f(noteName(n) + ' ' + n.body)).sort((a, b) => b.updated - a.updated).forEach(n => add('note', n.id, noteName(n), n.folder));
+  notes.filter(n => !journalEmpty(n) && f(noteName(n) + ' ' + (n.locked ? '' : n.body))).sort((a, b) => b.updated - a.updated).forEach(n => add('note', n.id, noteName(n), n.folder));
   projects.filter(p => f(p.name)).forEach(p => add('proj', p.id, p.name, p.done ? 'terminado' : 'proyecto'));
   tasks.filter(t => !t.parentId && (!t.done || q) && f(t.title)).sort(sortTasks).forEach(t => add('task', t.id, t.title, t.date ? friendlyDate(t.date) : 'sin fecha'));
   for (const k of ['books', 'movies']) shelf[k].items.filter(b => f(`${b.title} ${b.author}`)).forEach(b => add(k, b.id, b.title, b.author));
@@ -4034,7 +4075,7 @@ $('#linkResults').addEventListener('click', e => {
   backFromLinks();
 });
 function openLink(k, id) {
-  if (k === 'note') { if (noteDraft && $('#noteSheet').classList.contains('show')) saveNote(); openNote(id); }
+  if (k === 'note') { if (noteDraft && $('#noteSheet').classList.contains('show')) saveNote(); openNoteSafe(id); }
   else if (k === 'task') openDetails(id);
   else if (k === 'proj') { closeSheets(); if (query) { query = ''; $('#searchInput').value = ''; $('#searchBar').hidden = true; } view = 'sinfecha'; listSel = 'p:' + id; $('#scroller').scrollTop = 0; render(); }
   else { const S = shelf[k], b = S.items.find(x => x.id === id); if (!b) return; S.tab = b.status; S.open = id; S.adding = false; renderShelf(k); openSheet(SHELF[k].sheet); }
@@ -4046,6 +4087,342 @@ document.addEventListener('click', e => {
   if (u.closest('#noteSheet')) { noteDraft.links = noteDraft.links.filter(keep); renderNoteLinks(); saveNote(); }
   else if (u.closest('#detailSheet')) { const t = tasks.find(x => x.id === (detailRoot()?.id)); if (t) { t.links = (t.links || []).filter(keep); store.put(t).catch(writeFailed); renderDetails(); } }
 }, true);
+
+// ---------- Papelera: lo borrado se guarda 30 días ----------
+const TRASH_DAYS = 30;
+function toTrash(kind, title, data) {
+  const id = 'x' + uid();
+  saveRow('trash', { id, kind, title: String(title || '').slice(0, 200), at: Date.now(), data: JSON.stringify(data) });
+  return id;
+}
+const trashData = r => { try { return JSON.parse(r.data); } catch { return null; } };
+const TRASH_ICON = { task: '☑️', note: '📝', proj: '📁', habit: '🔥' };
+function restoreTrash(r) {
+  const d = trashData(r); if (!d) return;
+  if (r.kind === 'task') { const list = d.filter(x => x?.id && !tasks.some(t => t.id === x.id)); tasks.push(...list); store.putMany(list).catch(writeFailed); }
+  else if (r.kind === 'note') saveRow('notes', d);
+  else if (r.kind === 'habit') { if (!habits.some(h => h.id === d.id)) { habits.push(d); store.putHabit(d).catch(writeFailed); } }
+  else if (r.kind === 'proj') {
+    saveRow('projects', d.p);
+    const tl = tasks.filter(t => d.tasks.includes(t.id) && !t.project); tl.forEach(t => { t.project = d.p.id; }); if (tl.length) store.putMany(tl).catch(writeFailed);
+    notes.filter(n => d.notes.includes(n.id) && !n.project).forEach(n => saveRow('notes', { ...n, project: d.p.id }));
+  }
+  dropRow('trash', r.id);
+}
+// Al borrar del todo: también sus fotos y dibujos
+function purgeTrash(r) {
+  const d = trashData(r);
+  if (d && r.kind === 'note') (d.photos || []).forEach(delFile);
+  if (d && r.kind === 'task') d.forEach(t => (t.photos || []).forEach(delFile));
+  dropRow('trash', r.id);
+}
+let trashChecked = false;
+function autoPurge() {
+  if (trashChecked || !trash.length) return; trashChecked = true;
+  const lim = Date.now() - TRASH_DAYS * 864e5; trash.filter(r => r.at < lim).forEach(purgeTrash);
+}
+let trashArmed = null;
+function renderTrash() {
+  const list = [...trash].sort((a, b) => b.at - a.at), day = 864e5;
+  $('#trashBody').innerHTML = list.length ? `<div class="lrows">${list.map(r => { const ago = Math.floor((Date.now() - r.at) / day), left = Math.max(0, TRASH_DAYS - ago);
+    return `<div class="trow"><span class="li">${TRASH_ICON[r.kind] || '•'}</span><span><b>${esc(r.title || 'Sin título')}</b><small>${ago === 0 ? 'hoy' : ago === 1 ? 'ayer' : `hace ${ago} días`} · se borra del todo en ${left} ${left === 1 ? 'día' : 'días'}</small></span>
+      <button type="button" class="btn small" data-tr="back" data-id="${r.id}">Recuperar</button><button type="button" class="x${trashArmed === r.id ? ' confirm' : ''}" data-tr="del" data-id="${r.id}" aria-label="Borrar del todo">${trashArmed === r.id ? '¿Seguro?' : '✕'}</button></div>`; }).join('')}</div>
+    <button type="button" class="btn danger block" data-tr="all">${trashArmed === 'all' ? `Toca otra vez para borrar ${list.length} del todo` : 'Vaciar la papelera'}</button>`
+    : '<p class="hint">La papelera está vacía. Lo que borres (tareas, notas, proyectos y hábitos) se queda aquí 30 días por si lo quieres recuperar.</p>';
+}
+$('#trashBody').addEventListener('click', e => {
+  const b = e.target.closest('[data-tr]'); if (!b) return;
+  const r = trash.find(x => x.id === b.dataset.id);
+  if (b.dataset.tr === 'back' && r) { restoreTrash(r); showToast(`Recuperado: ${r.title}`); trashArmed = null; }
+  else if (b.dataset.tr === 'del' && r) { if (trashArmed !== r.id) trashArmed = r.id; else { purgeTrash(r); trashArmed = null; } }
+  else if (b.dataset.tr === 'all') { if (trashArmed !== 'all') trashArmed = 'all'; else { [...trash].forEach(purgeTrash); trashArmed = null; } }
+  renderTrash(); render();
+});
+$('#openTrash').addEventListener('click', () => { trashArmed = null; renderTrash(); openSheet('#trashSheet'); });
+
+// ---------- Organizar mi día: coloca lo que no tiene hora en tus huecos libres ----------
+let orgPlan = null;
+function bedLimit() { const s = habits.find(h => h.kind === 'sleep'); return s ? Math.min(23 * 60 + 30, Math.max(18 * 60, toMin(s.bed) - 30)) : 22 * 60; }
+// Desde cuándo: hoy, desde ahora; mañana, desde que te levantas (según tu rutina de sueño) o desde las 8
+function orgStart(day) {
+  if (day === todayISO()) return Math.max(8 * 60, Math.ceil((toMin(nowHM()) + 5) / 15) * 15);
+  const s = habits.find(h => h.kind === 'sleep'), we = [0, 6].includes(parseISO(day).getDay());
+  return s ? Math.ceil((toMin(we ? s.wakeWe : s.wakeWk) + 30) / 15) * 15 : 8 * 60;
+}
+function buildOrg(day) {
+  const today = todayISO(), start = orgStart(day), end = bedLimit();
+  const busy = calDayItems(() => true, day).timed.map(i => [i.s, i.e]).sort((a, b) => a[0] - b[0]);
+  const cands = tasks.filter(t => !t.done && !t.time && !children(t.id).length && !t.inbox && t.date && t.date <= day)
+    .sort((a, b) => (b.flag ? 1 : 0) - (a.flag ? 1 : 0) || (a.date < day ? 0 : 1) - (b.date < day ? 0 : 1) || (a.created || 0) - (b.created || 0));
+  const placed = [], left = [];
+  cands.forEach(t => {
+    const len = Math.max(15, Math.ceil(estMin(t) / 15) * 15); let s = start, ok = false;
+    for (let g = 0; g < 200 && s + len <= end; g++) {
+      const clash = [...busy, ...placed.map(p => [p.s, p.e])].find(([a, b]) => s < b && s + len > a);
+      if (!clash) { ok = true; break; } s = Math.ceil(clash[1] / 5) * 5;
+    }
+    if (ok) placed.push({ id: t.id, s, e: s + len, on: true }); else left.push(t.id);
+  });
+  return { day, start, end, placed, left };
+}
+function openOrg(day) { const today = todayISO(); day = day || (orgStart(today) + 30 <= bedLimit() ? today : addDays(today, 1)); orgPlan = buildOrg(day); renderOrg(); openSheet('#orgSheet'); }
+function renderOrg() {
+  const P = orgPlan, T = id => tasks.find(t => t.id === id);
+  const today = todayISO(), isT = P.day === today;
+  $('#orgBody').innerHTML = `<div class="sheet-head"><h3>Organizar mi día</h3><button type="button" class="btn ghost" data-org="close">Cerrar</button></div>
+    <div class="segs"><button type="button" class="seg ${isT ? 'on' : ''}" data-org="day" data-d="${today}">Hoy</button><button type="button" class="seg ${isT ? '' : 'on'}" data-org="day" data-d="${addDays(today, 1)}">Mañana</button></div>
+    <p class="hint">Coloco lo que tienes para ${isT ? 'hoy' : 'mañana (y lo que quede de hoy)'} sin hora en tus huecos libres de ${hhmm(P.start)} a ${hhmm(P.end)}, sin pisar lo que ya tiene hora ni tus rutinas. Primero lo que tiene 🚩 y lo atrasado. Cada tarea ocupa sus minutos (o 30).</p>
+    ${P.start >= P.end ? `<p class="err">Ya no queda tiempo ${isT ? 'hoy. Prueba con Mañana.' : 'ese día.'}</p>` : ''}
+    ${P.placed.length ? `<div class="sublist">${P.placed.map(p => { const t = T(p.id); return t ? `<button type="button" class="planrow ${p.on ? 'on' : ''}" data-org="pick" data-id="${p.id}" style="--c:${colorVar(catOf(t.cat).color)}"><span class="box">${TICK('var(--surface)')}</span><span><b>${t.flag ? '🚩 ' : ''}${esc(t.title)}</b><small>${hhmm(p.s)}–${hhmm(p.e)}${t.date < P.day ? ' · era ' + friendlyDate(t.date).toLowerCase() : ''}</small></span><span class="est">${fmtDur(p.e - p.s)}</span></button>` : ''; }).join('')}</div>` : (P.left.length ? '' : '<p class="hint">No tienes nada sin hora para hoy. ¡Día despejado!</p>')}
+    ${P.left.length ? `<h4>No caben ${isT ? 'hoy' : 'mañana'} (${P.left.length})</h4><div class="sublist">${P.left.map(id => { const t = T(id); return t ? `<div class="revrow"><div class="n">${esc(t.title)}</div><div class="m">${fmtDur(estMin(t))}</div></div>` : ''; }).join('')}</div>
+      <label class="checkrow"><input type="checkbox" id="orgLeft" checked> Pasar ${isT ? 'a mañana' : 'al día siguiente'} lo que no cabe</label>` : ''}
+    ${P.placed.length ? '<button type="button" class="btn primary block" data-org="go">Así está bien</button>' : ''}`;
+}
+$('#orgBody').addEventListener('click', e => {
+  const b = e.target.closest('[data-org]'); if (!b) return;
+  if (b.dataset.org === 'close') { closeSheets(); return; }
+  if (b.dataset.org === 'day') { orgPlan = buildOrg(b.dataset.d); renderOrg(); return; }
+  if (b.dataset.org === 'pick') { const p = orgPlan.placed.find(x => x.id === b.dataset.id); if (p) p.on = !p.on; renderOrg(); return; }
+  const day = orgPlan.day, sel = orgPlan.placed.filter(p => p.on), move = $('#orgLeft')?.checked ? orgPlan.left : [];
+  const list = [...sel.map(p => p.id), ...move].map(id => tasks.find(t => t.id === id)).filter(Boolean), snaps = snapshot(list);
+  sel.forEach(p => { const t = tasks.find(x => x.id === p.id); if (t) Object.assign(t, { date: day, time: hhmm(p.s), endTime: hhmm(p.e) }); });
+  move.forEach(id => { const t = tasks.find(x => x.id === id); if (t) t.date = addDays(day, 1); });
+  store.putMany(list).catch(writeFailed); closeSheets(); render();
+  showToast(`${day === todayISO() ? 'Hoy' : 'Mañana'} organizado: ${sel.length} con hora${move.length ? ` · ${move.length} al día siguiente` : ''}`, () => restore(snaps));
+});
+
+// ---------- Cerrar el día: lo hecho, lo pendiente, los hábitos, el ánimo y el diario ----------
+const closedToday = () => { try { return localStorage.getItem('closed-' + todayISO()) === '1'; } catch { return false; } };
+function closeBannerHTML() {
+  if (new Date().getHours() < 19 || closedToday() || hoyEdit) return '';
+  return `<div class="banner"><span>🌙 ¿Cerramos el día?</span><button class="btn primary small" data-act="closeday">Cerrar el día</button></div>`;
+}
+function renderCloseDay() {
+  const today = todayISO(), doneT = tasks.filter(t => t.done && t.doneAt && isoDate(new Date(t.doneAt)) === today && !children(t.id).length);
+  const pend = tasks.filter(t => !t.done && t.date && t.date <= today && !children(t.id).length).sort(sortTasks);
+  const habLeft = habits.filter(h => (h.kind === 'quit' || (h.kind === 'build' && h.freq === 'daily')) && !habitDoneToday(h));
+  const m = extra.mood[today] || {}, pts = pointsOn(today), j = journalOf(today);
+  $('#closeBody').innerHTML = `<div class="sheet-head"><h3>Cerrar el día</h3><button type="button" class="btn ghost" data-cd="close">Cerrar</button></div>
+    <div class="kpis"><div class="kpi"><b>${doneT.length}</b><span>hechas hoy</span></div><div class="kpi"><b>${pts}</b><span>de ${stats.goal} ⭐</span></div><div class="kpi"><b>${pend.length}</b><span>pendientes</span></div></div>
+    ${doneT.length ? `<p class="hint">✓ ${doneT.slice(0, 8).map(t => esc(t.title)).join(' · ')}${doneT.length > 8 ? ` y ${doneT.length - 8} más` : ''}</p>` : ''}
+    <h4>Lo que queda</h4>
+    ${pend.length ? `<div class="latebar"><button class="chip" data-cd="allnext">Todo a mañana</button></div><div class="sublist">${pend.map(t => { const par = t.parentId ? tasks.find(p => p.id === t.parentId) : null;
+      return `<div class="revrow"><div class="n">${esc(par ? par.title + ' · ' + t.title : t.title)}</div><div class="m">${t.date < today ? 'era ' + friendlyDate(t.date).toLowerCase() : t.time ? t.time : 'hoy'}</div>
+      <div class="chips"><button class="chip" data-cd="done" data-id="${t.id}">✓ Hecha</button><button class="chip" data-cd="next" data-id="${t.id}">Mañana</button><label class="chip ctxdate2">Otro día<input type="date" data-cdd="${t.id}" aria-label="Otro día"></label><button class="chip" data-cd="none" data-id="${t.id}">Sin fecha</button></div></div>`; }).join('')}</div>` : '<p class="hint">Nada pendiente. ¡Día redondo! 🎉</p>'}
+    ${habLeft.length ? `<h4>Hábitos de hoy</h4><div class="chips wrap">${habLeft.map(h => `<button class="chip" data-cd="hab" data-id="${h.id}">${h.kind === 'quit' ? '🚫 ' : ''}${esc(h.name)} ✓</button>`).join('')}</div>` : ''}
+    ${on('animo') ? `<h4>¿Qué tal hoy?</h4><div class="moodrow">${MOODS.map((em, i) => `<button class="${m.m === i + 1 ? 'on' : ''}" data-cd="mood" data-v="${i + 1}" aria-label="${MOOD_TXT[i]}">${em}</button>`).join('')}</div>` : ''}
+    ${on('diario') ? `<button type="button" class="btn block" data-cd="journal">📓 ${j && !journalEmpty(j) ? 'Seguir con el diario' : 'Escribir el diario'}</button>` : ''}
+    <button type="button" class="btn primary block" data-cd="finish">🌙 Día cerrado</button>`;
+}
+function openCloseDay() { renderCloseDay(); openSheet('#closeSheet'); }
+$('#closeBody').addEventListener('click', e => {
+  const b = e.target.closest('[data-cd]'); if (!b) return;
+  const a = b.dataset.cd, t = b.dataset.id ? tasks.find(x => x.id === b.dataset.id) : null;
+  if (a === 'close') { closeSheets(); return; }
+  if (a === 'finish') { lsSet('closed-' + todayISO(), '1'); closeSheets(); showToast('🌙 Día cerrado. ¡Buen descanso!'); render(); return; }
+  if (a === 'journal') { openJournal(todayISO()); return; }
+  if (a === 'done' && t) toggle(t.id);
+  else if ((a === 'next' || a === 'none') && t) moveTasks([t], a === 'next' ? 'manana' : 'none');
+  else if (a === 'allnext') moveTasks(tasks.filter(x => !x.done && x.date && x.date <= todayISO() && !children(x.id).length), 'manana');
+  else if (a === 'hab') setHabit(b.dataset.id, 1);
+  else if (a === 'mood') setMood('m', Number(b.dataset.v));
+  renderCloseDay();
+});
+$('#closeBody').addEventListener('change', e => {
+  const id = e.target.dataset.cdd; if (!id || !e.target.value) return;
+  const t = tasks.find(x => x.id === id); if (t) moveTaskTo(t, { date: e.target.value }); renderCloseDay();
+});
+
+// ---------- Cuentas atrás en Hoy ----------
+function countdownHTML() {
+  const today = todayISO();
+  const l = [...tasks.filter(t => t.cd && !t.done && t.date && t.date >= today).map(t => ({ d: t.date, name: t.title, id: t.id })),
+    ...projects.filter(p => p.cd && !p.done && p.due && p.due >= today).map(p => ({ d: p.due, name: p.name, proj: p.id }))].sort((a, b) => a.d.localeCompare(b.d)).slice(0, 6);
+  if (!l.length) return '';
+  return `<div class="cdowns">${l.map(x => { const n = Math.round((parseISO(x.d) - parseISO(today)) / 864e5);
+    return `<button class="cdown${n <= 3 ? ' soon' : ''}" ${x.proj ? `data-golink="proj" data-id="${x.proj}"` : `data-act="details" data-id="${x.id}"`}><b>${n === 0 ? '¡Hoy!' : n === 1 ? 'Mañana' : n}</b>${n > 1 ? '<small>días</small>' : ''}<span>${esc(x.name)}</span></button>`; }).join('')}</div>`;
+}
+
+// ---------- Hábitos que se cuentan (8 vasos de agua, 10.000 pasos…) ----------
+const countOf = (h, d = todayISO()) => Number(h.counts?.[d]) || 0;
+function setCount(id, n) {
+  const h = habits.find(x => x.id === id); if (!h) return;
+  const d = todayISO(), prev = countOf(h, d); n = Math.max(0, Math.min(1e6, Math.round(n)));
+  if (n === prev) return;
+  h.counts = { ...(h.counts || {}), [d]: n };
+  const was = h.log[d] === 1, now = n >= h.qty;
+  if (now && !was) { h.log[d] = 1; addPoints(habitPoints(h)); navigator.vibrate?.(10); showToast(`🎉 ${h.name}: ${n} ${h.unit || ''} · +${habitPoints(h)} ⭐`); }
+  else if (!now && was) { delete h.log[d]; addPoints(-habitPoints(h)); }
+  store.setHabitCount(h, d, n, now ? 1 : null).catch(writeFailed);
+  render();
+}
+function countHTML(h) {
+  const n = countOf(h), pct = Math.min(100, n / h.qty * 100), step = h.qty >= 1000 ? Math.round(h.qty / 10) : 1;
+  return `<div class="hcount"><button class="hcb" data-act="hcount" data-id="${h.id}" data-d="-${step}" aria-label="Quitar ${step}">−</button>
+    <label class="hcv"><input type="number" inputmode="numeric" min="0" value="${n}" data-hcount="${h.id}" aria-label="Cuántos llevas hoy"><small>/ ${h.qty.toLocaleString('es-ES')}${h.unit ? ' ' + esc(h.unit) : ''}</small></label>
+    <button class="hcb plus" data-act="hcount" data-id="${h.id}" data-d="${step}" aria-label="Añadir ${step}">+${step === 1 ? '' : step.toLocaleString('es-ES')}</button>
+    <span class="hcbar"><i style="width:${pct}%"></i></span></div>`;
+}
+
+// ---------- Metas del año ----------
+const GOAL_KINDS = [['manual', 'Contar a mano'], ['books', 'Libros leídos'], ['movies', 'Películas vistas'], ['habit', 'Días de un hábito'], ['tag', 'Tareas hechas con una etiqueta'], ['projects', 'Terminar proyectos']];
+function goalProgress(g) {
+  const y = String(g.year), inY = d => (d || '').startsWith(y);
+  if (g.kind === 'books' || g.kind === 'movies') return shelf[g.kind].items.filter(b => b.status === 'read' && inY(b.finished)).length;
+  if (g.kind === 'habit') { const h = habits.find(x => x.id === g.ref); return h ? Object.entries(h.log).filter(([d, v]) => v === 1 && inY(d)).length : 0; }
+  if (g.kind === 'tag') return tasks.filter(t => t.done && (t.tags || []).includes(g.ref) && inY(t.ptsDay || (t.doneAt ? isoDate(new Date(t.doneAt)) : ''))).length;
+  if (g.kind === 'projects') return projects.filter(p => g.projects.includes(p.id) && p.done).length;
+  return g.cur || 0;
+}
+const goalTarget = g => g.kind === 'projects' ? Math.max(1, g.projects.length) : Math.max(1, g.target);
+function goalsHTML() {
+  const y = new Date().getFullYear(), list = goals.filter(g => g.year === y).sort((a, b) => a.order - b.order);
+  // El ritmo se mide desde que creaste la meta (o desde el 1 de enero) hasta fin de año
+  const yEnd = +new Date(y + 1, 0, 1), partOf = g => { const st = Math.max(+new Date(y, 0, 1), Math.min(g.order || 0, Date.now())); return yEnd > st ? Math.min(1, Math.max(0, (Date.now() - st) / (yEnd - st))) : 1; };
+  return `<section class="summary"><div class="rato-head"><h2>Metas de ${y}</h2><button class="btn ghost small" data-act="goalnew">+ Meta</button></div>
+    ${list.length ? `<div class="goals">${list.map(g => { const v = goalProgress(g), T = goalTarget(g), pct = Math.min(100, Math.round(v / T * 100)), dayPart = partOf(g), want = T * dayPart;
+      const pace = v >= T ? '🎉 ¡Conseguida!' : v >= Math.floor(want) ? 'vas bien' : `vas ${Math.ceil(want - v)} por detrás`;
+      return `<div class="goal"><button class="gname" data-act="goaledit" data-id="${g.id}"><b>${esc(g.title)}</b><small>${v.toLocaleString('es-ES')} de ${T.toLocaleString('es-ES')}${g.unit ? ' ' + esc(g.unit) : ''} · ${pace}</small></button>
+        ${g.kind === 'manual' ? `<span class="gbtns"><button class="hcb" data-act="goalstep" data-id="${g.id}" data-d="-1" aria-label="Quitar uno">−</button><button class="hcb plus" data-act="goalstep" data-id="${g.id}" data-d="1" aria-label="Sumar uno">+</button></span>` : ''}
+        <span class="gbar"><i style="width:${pct}%"></i><em style="left:${Math.min(100, dayPart * 100)}%"></em></span></div>`; }).join('')}</div><p class="hint">La rayita marca dónde deberías ir a estas alturas (desde que creaste la meta hasta fin de año).</p>`
+      : '<p class="hint">Ponte metas para el año: leer 20 libros, ir al gimnasio 150 días, terminar tus proyectos… Se rellenan solas con lo que ya apuntas.</p>'}</section>`;
+}
+let goalId = null, goalKind = 'manual', goalProjs = [], goalDelArmed = false;
+function openGoalSheet(id) {
+  const g = id ? goals.find(x => x.id === id) : null;
+  goalId = g ? g.id : null; goalKind = g ? g.kind : 'manual'; goalProjs = g ? [...g.projects] : []; goalDelArmed = false;
+  $('#mgTitle').textContent = g ? 'Editar meta' : 'Nueva meta'; $('#mgName').value = g ? g.title : ''; $('#mgTarget').value = g ? g.target : '';
+  $('#mgUnit').value = g ? g.unit : ''; $('#mgCur').value = g ? g.cur : 0; $('#mgDel').hidden = !g; $('#mgDel').textContent = 'Borrar meta';
+  renderGoalForm(g); openSheet('#metaSheet'); if (!g) setTimeout(() => $('#mgName').focus(), 60);
+}
+function renderGoalForm(g) {
+  $('#mgKinds').innerHTML = GOAL_KINDS.map(([k, l]) => `<button type="button" class="chip" aria-pressed="${goalKind === k}" data-gk="${k}">${l}</button>`).join('');
+  $('#mgRefField').hidden = !['habit', 'tag'].includes(goalKind);
+  if (goalKind === 'habit') $('#mgRef').innerHTML = habits.filter(h => h.kind !== 'routine').map(h => `<option value="${h.id}">${esc(h.name)}</option>`).join('') || '<option value="">No tienes hábitos</option>';
+  if (goalKind === 'tag') $('#mgRef').innerHTML = [...new Set(tasks.flatMap(t => t.tags || []))].sort().map(x => `<option value="${esc(x)}">@${esc(x)}</option>`).join('') || '<option value="">No tienes etiquetas</option>';
+  const cur = g || goals.find(x => x.id === goalId); if (cur && cur.ref) $('#mgRef').value = cur.ref;
+  $('#mgProjField').hidden = goalKind !== 'projects';
+  $('#mgProjs').innerHTML = projects.map(p => `<button type="button" class="chip" aria-pressed="${goalProjs.includes(p.id)}" data-gp="${p.id}">📁 ${esc(p.name)}</button>`).join('') || '<p class="hint">Aún no tienes proyectos.</p>';
+  $('#mgTargetField').hidden = goalKind === 'projects';
+  $('#mgCurField').hidden = goalKind !== 'manual';
+  $('#mgUnit').placeholder = { books: 'libros', movies: 'películas', habit: 'días', tag: 'tareas' }[goalKind] || 'km, euros, veces…';
+}
+$('#mgKinds').addEventListener('click', e => { const b = e.target.closest('[data-gk]'); if (!b) return; goalKind = b.dataset.gk; if (!$('#mgUnit').value || ['libros', 'películas', 'días', 'tareas'].includes($('#mgUnit').value)) $('#mgUnit').value = { books: 'libros', movies: 'películas', habit: 'días', tag: 'tareas' }[goalKind] || ''; renderGoalForm(); });
+$('#mgProjs').addEventListener('click', e => { const b = e.target.closest('[data-gp]'); if (!b) return; const id = b.dataset.gp; goalProjs = goalProjs.includes(id) ? goalProjs.filter(x => x !== id) : [...goalProjs, id]; renderGoalForm(); });
+$('#metaSheet').addEventListener('submit', e => {
+  e.preventDefault();
+  const title = $('#mgName').value.trim(); if (!title) { $('#mgName').focus(); return; }
+  const old = goalId ? goals.find(x => x.id === goalId) : null;
+  saveRow('goals', { ...(old || { id: 'g' + uid(), year: new Date().getFullYear(), order: Date.now() }), title, kind: goalKind, target: Number($('#mgTarget').value) || 1, unit: $('#mgUnit').value.trim(), cur: Number($('#mgCur').value) || 0, ref: $('#mgRef').value || '', projects: goalProjs });
+  closeSheets(); render();
+});
+$('#mgDel').addEventListener('click', () => {
+  if (!goalDelArmed) { goalDelArmed = true; $('#mgDel').textContent = 'Toca otra vez para borrarla'; return; }
+  const g = goals.find(x => x.id === goalId); if (g) { dropRow('goals', g.id); showToast(`Meta borrada: ${g.title}`, () => saveRow('goals', g)); }
+  closeSheets(); render();
+});
+
+// ---------- Tiempo por categoría y por proyecto ----------
+let timeRange = 'semana';
+function timeHTML() {
+  const today = todayISO(), from = timeRange === 'semana' ? mondayOf(today) : today.slice(0, 8) + '01', inR = d => d && d >= from && d <= today;
+  const byCat = {}, byProj = {};
+  tasks.forEach(t => {
+    if (children(t.id).length) return;
+    let m = Object.entries(t.focusLog || {}).filter(([d]) => inR(d)).reduce((s, [, v]) => s + v, 0);
+    const dd = t.done ? (t.ptsDay || (t.doneAt ? isoDate(new Date(t.doneAt)) : '')) : '';
+    if (!m && t.done && inR(dd)) m = durationMin(t) || Number(t.minutes) || 0;
+    if (!m) return;
+    const root = t.parentId ? tasks.find(p => p.id === t.parentId) || t : t;
+    byCat[root.cat || ''] = (byCat[root.cat || ''] || 0) + m;
+    if (root.project) byProj[root.project] = (byProj[root.project] || 0) + m;
+  });
+  const cl = Object.entries(byCat).sort((a, b) => b[1] - a[1]), pl = Object.entries(byProj).sort((a, b) => b[1] - a[1]), tot = cl.reduce((s, x) => s + x[1], 0), max = Math.max(1, ...cl.map(x => x[1]), ...pl.map(x => x[1]));
+  const row = (name, m, col) => `<div class="focusrow"><span>${esc(name)}</span><span>${fmtDur(m)}</span><div class="bar"><i style="width:${m / max * 100}%;background:${col}"></i></div></div>`;
+  return `<section class="summary"><div class="rato-head"><h2>Tiempo dedicado</h2><div class="segs mini"><button type="button" class="seg ${timeRange === 'semana' ? 'on' : ''}" data-act="trange" data-v="semana">Semana</button><button type="button" class="seg ${timeRange === 'mes' ? 'on' : ''}" data-act="trange" data-v="mes">Mes</button></div></div>
+    ${tot ? `<p class="hint">${fmtDur(tot)} en total ${timeRange === 'semana' ? 'esta semana' : 'este mes'}. Cuenta las horas de lo que has hecho y el temporizador.</p><div class="focusrows">${cl.map(([c, m]) => row(catOf(c).name, m, colorVar(catOf(c).color))).join('')}</div>
+      ${pl.length ? `<span class="label" style="display:block;margin-top:10px">Por proyecto</span><div class="focusrows">${pl.map(([p, m]) => { const pr = projects.find(x => x.id === p); return pr ? row('📁 ' + pr.name, m, colorVar(pr.color)) : ''; }).join('')}</div>` : ''}`
+      : `<p class="hint">Aún no hay tiempo apuntado ${timeRange === 'semana' ? 'esta semana' : 'este mes'}. Se cuenta con las horas de inicio y fin de lo que completas y con el temporizador.</p>`}</section>`;
+}
+
+// ---------- Búsqueda en todo ----------
+function searchAllHTML(q) {
+  const f = s => fold(s || '').includes(fold(q)), out = [];
+  if (q.startsWith('@')) return '';
+  const ns = notes.filter(n => f(noteName(n)) || (!n.locked && f(n.body)));
+  if (ns.length) out.push(`<h2 class="group"><span>Notas</span><span>${ns.length}</span></h2><div class="ngrid">${ns.slice(0, 12).map(noteCardHTML).join('')}</div>`);
+  const ps = projects.filter(p => f(p.name) || f(p.notes));
+  if (ps.length) out.push(`<h2 class="group"><span>Proyectos</span><span>${ps.length}</span></h2><div class="plist">${ps.map(projCardHTML).join('')}</div>`);
+  for (const [k, name, icon] of [['books', 'Libros', '📚'], ['movies', 'Películas', '🎬']]) {
+    const l = shelf[k].items.filter(b => f(`${b.title} ${b.author} ${b.genre} ${b.notes}`));
+    if (l.length) out.push(`<h2 class="group"><span>${name}</span><span>${l.length}</span></h2><div class="lrows">${l.slice(0, 10).map(b => `<button class="lrow" data-golink="${k}" data-id="${b.id}"><span class="li">${icon}</span><span>${esc(b.title)}<small>${esc([b.author, SHELF[k].st[b.status]].filter(Boolean).join(' · '))}</small></span><span class="go">›</span></button>`).join('')}</div>`);
+  }
+  const sh = shop.filter(s => !s.done && f(s.name));
+  if (sh.length) out.push(`<h2 class="group"><span>En la compra</span><span>${sh.length}</span></h2><div class="lrows">${sh.map(s => `<button class="lrow" data-act="lsel" data-k="compra" data-go="sinfecha"><span class="li">🛒</span><span>${esc(s.name)}</span><span class="go">›</span></button>`).join('')}</div>`);
+  const hs = habits.filter(h => f(h.name));
+  if (hs.length) out.push(`<h2 class="group"><span>Hábitos</span><span>${hs.length}</span></h2><div class="lrows">${hs.map(h => `<button class="lrow" data-act="hedit" data-id="${h.id}"><span class="li">🔥</span><span>${esc(h.name)}</span><span class="go">›</span></button>`).join('')}</div>`);
+  return out.join('');
+}
+
+// ---------- Notas privadas con Face ID (o Touch ID / el código del dispositivo) ----------
+// Es un candado en este dispositivo: la nota sigue guardada en tu cuenta como las demás.
+const LOCK_KEY = 'mis-tareas-lock-cred';
+let unlockedUntil = 0;
+document.addEventListener('visibilitychange', () => { if (document.hidden) unlockedUntil = 0; });
+const b64u = buf => btoa(String.fromCharCode(...new Uint8Array(buf))).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+const unb64u = s => Uint8Array.from(atob(s.replace(/-/g, '+').replace(/_/g, '/')), c => c.charCodeAt(0));
+async function faceUnlock(reset) {
+  if (!reset && Date.now() < unlockedUntil) return true;
+  if (!window.PublicKeyCredential || !navigator.credentials?.create) { showToast('Este dispositivo no permite Face ID en la web'); return false; }
+  let ids = []; try { ids = reset ? [] : JSON.parse(localStorage.getItem(LOCK_KEY) || '[]'); } catch {}
+  const challenge = crypto.getRandomValues(new Uint8Array(32));
+  try {
+    if (!ids.length) {
+      if (await PublicKeyCredential.isUserVerifyingPlatformAuthenticatorAvailable?.() === false) { showToast('Este dispositivo no tiene Face ID, Touch ID ni código para la web'); return false; }
+      const cred = await navigator.credentials.create({ publicKey: { challenge, rp: { name: 'Mis Tareas' },
+        user: { id: new TextEncoder().encode(String(store.uid || 'local').slice(0, 60)), name: 'Notas privadas', displayName: 'Notas privadas' },
+        pubKeyCredParams: [{ type: 'public-key', alg: -7 }, { type: 'public-key', alg: -257 }],
+        authenticatorSelection: { authenticatorAttachment: 'platform', userVerification: 'required', residentKey: 'discouraged' }, timeout: 60000 } });
+      lsSet(LOCK_KEY, JSON.stringify([b64u(cred.rawId)]));
+    } else {
+      await navigator.credentials.get({ publicKey: { challenge, allowCredentials: ids.map(id => ({ type: 'public-key', id: unb64u(id), transports: ['internal'] })), userVerification: 'required', timeout: 60000 } });
+    }
+    unlockedUntil = Date.now() + 5 * 60000; return true;
+  } catch (e) {
+    if (e.name !== 'NotAllowedError' && e.name !== 'AbortError') logError(e.message, 'face id');
+    showToast('No se ha podido comprobar que eres tú'); return false;
+  }
+}
+async function openNoteSafe(id) {
+  const n = notes.find(x => x.id === id);
+  if (n?.locked && !(await faceUnlock())) return;
+  openNote(id);
+}
+
+// ---------- Listas reutilizables ----------
+function resetChecks() { nBlocks.forEach(b => { if (b.t === 'check') b.on = false; }); renderNoteBlocks(); saveNote(); showToast('Lista desmarcada: lista para usar otra vez'); }
+function copyNote() {
+  saveNote(); const src = noteDraft; if (!src) return;
+  const copy = { ...structuredClone(src), id: 'n' + uid(), title: (src.title || noteName(src)) + ' (copia)', body: serializeBlocks(nBlocks.map(b => b.t === 'check' ? { ...b, on: false } : b)), pinned: false, journal: '', photos: [], created: Date.now(), updated: Date.now() };
+  saveRow('notes', copy); openNote(copy.id); showToast('Copia hecha, con todo desmarcado');
+}
+// Compra: añadir lo de una nota con casillas (p. ej. "Compra semanal")
+function renderShopFrom() {
+  const l = notes.filter(n => !n.locked && /^\[( |x)\]/im.test(n.body)).sort((a, b) => b.updated - a.updated);
+  $('#shopFromBody').innerHTML = l.length ? `<div class="lrows">${l.map(n => { const k = (n.body.match(/^\[( |x)\]/gim) || []).length; return `<button class="lrow" data-sf="${n.id}"><span class="li">📝</span><span>${esc(noteName(n))}<small>${k} cosas</small></span><span class="go">+</span></button>`; }).join('')}</div>`
+    : '<p class="hint">Crea en Notas una lista con casillas (por ejemplo “Compra semanal” o “Básicos”) y desde aquí la añades a la compra de una vez.</p>';
+}
+$('#shopFromBody').addEventListener('click', e => {
+  const b = e.target.closest('[data-sf]'); if (!b) return;
+  const n = notes.find(x => x.id === b.dataset.sf); if (!n) return;
+  const learned = extra.prefs.shopMap || {}, have = new Set(shop.filter(s => !s.done).map(s => shopKey(s.name))); let k = 0;
+  parseBlocks(n.body).filter(x => x.t === 'check' && x.v.trim()).forEach((x, i) => {
+    if (have.has(shopKey(x.v))) return; have.add(shopKey(x.v));
+    const old = shop.find(s => s.done && shopKey(s.name) === shopKey(x.v));
+    saveRow('shop', old ? { ...old, done: false, order: Date.now() + i } : { id: 's' + uid(), name: cap(x.v.trim()), sec: shopSection(x.v, learned), done: false, order: Date.now() + i }); k++;
+  });
+  closeSheets(); showToast(k ? `${k} cosas añadidas a la compra` : 'Ya estaba todo en la lista'); render();
+});
 
 // ---------- Pintar ----------
 const prioRank = { alta: 0, normal: 1, baja: 2 };
@@ -4282,9 +4659,10 @@ function renderMain() {
 
   let html = '', count = 0, doneCount = 0;
   if (query) {
-    const list = tasks.filter(x => byCat(x) && matches(x, query)).sort((a, b) => (a.done - b.done) || sortTasks(a, b));
+    const list = tasks.filter(x => byCat(x) && matches(x, query)).sort((a, b) => (a.done - b.done) || sortTasks(a, b)), rest = searchAllHTML(query);
     count = list.length;
-    html = list.length ? `<ul class="list">${list.map(taskHTML).join('')}</ul>` : `<div class="empty"><strong>Nada con “${esc(query)}”</strong><span>Busca por título, notas o @etiqueta.</span></div>`;
+    html = list.length || rest ? (list.length ? `<h2 class="group"><span>Tareas</span><span>${list.length}</span></h2><ul class="list">${list.map(taskHTML).join('')}</ul>` : '') + rest
+      : `<div class="empty"><strong>Nada con “${esc(query)}”</strong><span>Busco en tareas, notas, proyectos, libros, películas, la compra y los hábitos. Escribe @etiqueta para las etiquetas.</span></div>`;
   } else if (af) {
     const list = tasks.filter(x => filterMatch(af, x)).sort(sortTasks);
     count = list.length;
@@ -4345,7 +4723,7 @@ function renderMain() {
 }
 $('#showDoneBtn').addEventListener('click', () => { showDone = !showDone; render(); });
 // Las horas del registro de sueño se ven en el botón al elegirlas
-$('#list').addEventListener('change', e => { if (e.target.dataset.sl) e.target.previousElementSibling.textContent = e.target.value || '—'; });
+$('#list').addEventListener('change', e => { if (e.target.dataset.hcount) { setCount(e.target.dataset.hcount, Number(e.target.value) || 0); return; } if (e.target.dataset.sl) e.target.previousElementSibling.textContent = e.target.value || '—'; });
 $('#list').addEventListener('click', e => {
   if (suppressClick) return;
   const el = e.target.closest('[data-act]'); if (!el) return;
@@ -4404,7 +4782,7 @@ $('#list').addEventListener('click', e => {
   else if (act === 'timer') openTimer(id);
   else if (act === 'yday') { selectedDay = selectedDay === el.dataset.d ? null : el.dataset.d; const y = $('#scroller').scrollTop; render(); $('#scroller').scrollTop = y; }
   else if (act === 'edit') openDetails(id);
-  else if (act === 'lsel') { listSel = el.dataset.k; showDone = false; $('#scroller').scrollTop = 0; render(); }
+  else if (act === 'lsel') { if (query || view !== 'sinfecha') { query = ''; $('#searchInput').value = ''; $('#searchBar').hidden = true; $('#searchBtn').setAttribute('aria-pressed', 'false'); view = 'sinfecha'; } listSel = el.dataset.k; showDone = false; $('#scroller').scrollTop = 0; render(); }
   else if (act === 'lback') { listSel = null; showDone = false; $('#scroller').scrollTop = 0; render(); }
   else if (act === 'lboard') { el.dataset.v === '1' ? boards.add(listSel) : boards.delete(listSel); saveBoards(); render(); }
   else if (act === 'pnew') openProject(null);
@@ -4420,7 +4798,15 @@ $('#list').addEventListener('click', e => {
   else if (act === 'nfolder') { noteFolder = el.dataset.v; folderAdding = false; render(); }
   else if (act === 'nnewfolder') { folderAdding = !folderAdding; render(); setTimeout(() => $('#folderInput')?.focus(), 30); }
   else if (act === 'ndelfolder') { extra.prefs = { ...extra.prefs, noteFolders: (extra.prefs.noteFolders || []).filter(f => f !== noteFolder) }; store.saveExtra('prefs').catch(writeFailed); noteFolder = ''; render(); }
-  else if (act === 'nopen') openNote(id);
+  else if (act === 'nopen') openNoteSafe(id);
+  else if (act === 'organize') openOrg();
+  else if (act === 'closeday') openCloseDay();
+  else if (act === 'goalnew') openGoalSheet(null);
+  else if (act === 'goaledit') openGoalSheet(id);
+  else if (act === 'goalstep') { const g = goals.find(x => x.id === id); if (g) { saveRow('goals', { ...g, cur: Math.max(0, (g.cur || 0) + Number(el.dataset.d)) }); render(); } }
+  else if (act === 'trange') { timeRange = el.dataset.v; render(); }
+  else if (act === 'hcount') { const h = habits.find(x => x.id === id); if (h) setCount(id, countOf(h) + Number(el.dataset.d)); }
+  else if (act === 'shopfrom') { renderShopFrom(); openSheet('#shopFromSheet'); }
   else if (act === 'journal') openJournal(el.dataset.d || todayISO());
 });
 function searchTag(tag) {

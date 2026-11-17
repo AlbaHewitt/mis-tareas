@@ -1011,6 +1011,39 @@
     body[data-view="sinfecha"] .inner, body[data-view="notas"] .inner { max-width: 1000px; }
     .sheet.tall { width: 680px; }
   }
+  /* v27 */
+  .rato-head > .btn.small, .rato-head > .segs.mini { margin-left: auto; flex: none; }
+  .hoyhead { flex-wrap: wrap; gap: 6px; }
+  .hoyacts { display: inline-flex; gap: 6px; margin-left: auto; }
+  .cdowns { display: flex; gap: 8px; overflow-x: auto; margin: 0 0 10px; scrollbar-width: none; }
+  .cdowns::-webkit-scrollbar { display: none; }
+  .cdown { flex: none; display: grid; grid-template-columns: auto auto; align-items: baseline; gap: 0 4px; max-width: 170px; text-align: left; background: var(--surface); border: 1px solid var(--border); border-radius: 14px; padding: 8px 12px; font: inherit; color: inherit; }
+  .cdown b { font-size: 22px; line-height: 1; } .cdown small { color: var(--muted); font-size: 12px; }
+  .cdown span { grid-column: 1 / -1; font-size: 13px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .cdown.soon b { color: var(--danger); }
+  .hab.counted { display: block; } .hab.counted.done { opacity: .75; }
+  .hcount { display: grid; grid-template-columns: auto 1fr auto; grid-template-rows: auto auto; gap: 6px 8px; align-items: center; margin: 8px 0 6px; }
+  .hcb { width: 40px; height: 40px; border-radius: 12px; border: 1px solid var(--border); background: var(--sunken); font-size: 20px; font-weight: 700; color: inherit; padding: 0; }
+  .hcb.plus { width: auto; min-width: 48px; padding: 0 10px; background: var(--accent); color: var(--accent-ink); border-color: var(--accent); font-size: 17px; }
+  .hcv { display: flex; align-items: baseline; justify-content: center; gap: 4px; }
+  .hcv input { width: 5.5em; text-align: right; border: 0; background: transparent; font: inherit; font-size: 22px; font-weight: 800; color: inherit; padding: 0; }
+  .hcv small { color: var(--muted); font-size: 14px; }
+  .hcbar { grid-column: 1 / -1; height: 8px; border-radius: 4px; background: var(--sunken); overflow: hidden; }
+  .hcbar i { display: block; height: 100%; background: var(--k-verde); border-radius: 4px; }
+  .goals { display: grid; gap: 12px; }
+  .goal { display: grid; grid-template-columns: 1fr auto; gap: 6px 8px; align-items: center; }
+  .gname { border: 0; background: none; padding: 0; text-align: left; font: inherit; color: inherit; display: grid; }
+  .gname small { color: var(--muted); font-size: 13px; }
+  .gbtns { display: flex; gap: 6px; } .gbtns .hcb { width: 36px; height: 36px; min-width: 36px; padding: 0; }
+  .gbar { grid-column: 1 / -1; position: relative; height: 10px; border-radius: 5px; background: var(--sunken); }
+  .gbar i { display: block; height: 100%; border-radius: 5px; background: var(--pc, var(--accent)); }
+  .gbar em { position: absolute; top: -3px; width: 2px; height: 16px; background: var(--text); opacity: .45; margin-left: -1px; }
+  .trow { display: grid; grid-template-columns: auto 1fr auto auto; gap: 8px; align-items: center; background: var(--surface); border: 1px solid var(--border); border-radius: 12px; padding: 8px 10px; }
+  .trow > span:nth-child(2) { display: grid; min-width: 0; } .trow small { color: var(--muted); font-size: 12px; }
+  .trow .x.confirm { width: auto; padding: 0 8px; color: var(--danger); font-weight: 700; }
+  .ctxdate2 { position: relative; } .ctxdate2 input { position: absolute; inset: 0; opacity: 0; width: 100%; }
+  .ncard.locked { background: var(--sunken); }
+  #noteLock.on { background: var(--accent-soft); }
 </style>
 </head>
 <body>
@@ -1077,7 +1110,7 @@
         <label class="pickbtn" id="dateBtn"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="5" width="18" height="16" rx="3"/><path d="M3 10h18M8 3v4M16 3v4"/></svg><span id="dateText">Hoy</span><input type="date" id="date" aria-label="Fecha"></label>
         <button type="button" class="chip" id="noDateBtn" aria-pressed="false">Sin fecha</button>
       </div>
-      <div class="chips"><button type="button" class="chip" id="tonightBtn" aria-pressed="false" hidden>🌙 Esta noche</button><button type="button" class="chip" id="somedayBtn" aria-pressed="false" hidden>💭 Algún día</button></div>
+      <div class="chips"><button type="button" class="chip" id="tonightBtn" aria-pressed="false" hidden>🌙 Esta noche</button><button type="button" class="chip" id="cdBtn" aria-pressed="false" hidden>⏳ Cuenta atrás en Hoy</button><button type="button" class="chip" id="somedayBtn" aria-pressed="false" hidden>💭 Algún día</button></div>
     </div>
     <label class="field"><span class="label">Etiquetas</span><input class="inp" type="text" id="tags" placeholder="p. ej. cálculo, ordenador (o escribe @cálculo en el título)" aria-label="Etiquetas" autocomplete="off"></label>
     <div class="chips wrap tagsugs" id="tagSugs" hidden></div>
@@ -1216,6 +1249,7 @@
       <button type="button" id="openPrefs"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/></svg>Personalizar<span class="go">›</span></button>
       <button type="button" id="openBooks"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20V3H6.5A2.5 2.5 0 0 0 4 5.5z"/><path d="M4 19.5A2.5 2.5 0 0 0 6.5 22H20v-5"/></svg>Libros<span class="go">›</span></button>
       <button type="button" id="openMovies"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M7 4v16M17 4v16M3 9h4M3 15h4M17 9h4M17 15h4"/></svg>Películas<span class="go">›</span></button>
+      <button type="button" id="openTrash"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 7h16M9 7V4h6v3M6 7l1 13h10l1-13"/></svg>Borrado recientemente<span class="go">›</span></button>
       <button type="button" id="openHelp"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M9.5 9a2.5 2.5 0 1 1 3.5 2.3c-.6.3-1 .9-1 1.6V14M12 17.5v.01"/></svg>Ayuda<span class="go">›</span></button>
       <button type="button" id="exportBtn"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v12M7 10l5 5 5-5M5 21h14"/></svg>Guardar copia de seguridad</button>
       <button type="button" id="importBtn"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 21V9M7 14l5-5 5 5M5 3h14"/></svg>Importar copia</button>
@@ -1372,6 +1406,8 @@
       <div class="chips" id="hFreq"><button type="button" class="chip" data-v="daily">Todos los días</button><button type="button" class="chip" data-v="weekly">Por semana</button><button type="button" class="chip" data-v="monthly">Por mes</button><button type="button" class="chip" data-v="yearly">Por año</button></div></div>
     <label class="field" id="hTargetField"><span class="label" id="hTargetLabel">Veces por semana</span>
       <input class="inp" type="number" id="hTarget" inputmode="numeric" min="1" max="7" value="3"></label>
+    <div class="grid2" id="hQtyField"><label class="field"><span class="label">Cuántos al día (opcional)</span><input class="inp" type="number" id="hQty" inputmode="numeric" min="2" max="1000000" placeholder="p. ej. 8"></label>
+      <label class="field"><span class="label">De qué</span><input class="inp" type="text" id="hUnit" maxlength="20" placeholder="vasos, pasos, páginas…" autocomplete="off"></label></div>
     <label class="field"><span class="label" id="hMinLabel">Minutos (= puntos al cumplirlo)</span>
       <input class="inp" type="number" id="hMin" inputmode="numeric" min="1" max="240" value="10"></label>
     <button class="btn primary block" type="submit" id="hSave">Crear hábito</button>
@@ -1599,6 +1635,7 @@
     <input class="inp title" type="text" id="projName" placeholder="Nombre, p. ej. TFG, Mudanza, Viaje a Roma" maxlength="80" aria-label="Nombre del proyecto">
     <div class="field"><span class="label">Color</span><div class="chips wrap" id="projColors"></div></div>
     <div class="field"><span class="label">Fecha límite</span><label class="pickbtn"><span id="projDueText">Sin fecha límite</span><input type="date" id="projDue" aria-label="Fecha límite"></label></div>
+    <label class="checkrow"><input type="checkbox" id="projCd"> ⏳ Cuenta atrás en Hoy (con su fecha límite)</label>
     <textarea class="inp" id="projNotes" placeholder="De qué va, objetivos, enlaces…" aria-label="Notas del proyecto"></textarea>
     <button class="btn primary block" type="submit">Guardar</button>
     <button class="btn block" type="button" id="projDone" hidden>✓ Proyecto terminado</button>
@@ -1610,14 +1647,14 @@
 <div class="sheet tall" id="noteSheet" hidden>
   <div class="grab"></div>
   <div class="inner">
-    <div class="sheet-head"><button type="button" class="btn ghost" id="noteDone">‹ Listo</button><div class="nhbtns"><button type="button" class="iconbtn" id="notePin" aria-label="Fijar arriba" aria-pressed="false">📌</button><button type="button" class="iconbtn" id="noteDel" aria-label="Borrar nota">🗑</button></div></div>
+    <div class="sheet-head"><button type="button" class="btn ghost" id="noteDone">‹ Listo</button><div class="nhbtns"><button type="button" class="iconbtn" id="noteLock" aria-label="Nota privada con Face ID" aria-pressed="false">🔓</button><button type="button" class="iconbtn" id="notePin" aria-label="Fijar arriba" aria-pressed="false">📌</button><button type="button" class="iconbtn" id="noteDel" aria-label="Borrar nota">🗑</button></div></div>
     <p class="hint" id="noteMeta"></p>
     <input class="inp ntitle" type="text" id="noteTitle" placeholder="Título" maxlength="200" autocomplete="off" aria-label="Título">
     <div class="grid2"><select class="inp" id="noteFolder" aria-label="Carpeta"></select><select class="inp" id="noteProj" aria-label="Proyecto"></select></div>
     <div class="nblocks" id="noteBlocks"></div>
     <div id="notePhotos"></div>
     <div id="noteLinks"></div>
-    <div class="ntools"><button type="button" class="btn small" id="noteCheck">☐ Lista</button><label class="btn small">📷 Foto<input type="file" id="notePhotoIn" accept="image/*" multiple hidden></label><button type="button" class="btn small" id="noteDraw">✏️ Dibujar</button><button type="button" class="btn small" id="noteLink">🔗 Enlazar</button></div>
+    <div class="ntools"><button type="button" class="btn small" id="noteCheck">☐ Lista</button><label class="btn small">📷 Foto<input type="file" id="notePhotoIn" accept="image/*" multiple hidden></label><button type="button" class="btn small" id="noteDraw">✏️ Dibujar</button><button type="button" class="btn small" id="noteLink">🔗 Enlazar</button><button type="button" class="btn small" id="noteReset" hidden>↺ Desmarcar todo</button><button type="button" class="btn small" id="noteCopy" hidden>⧉ Hacer una copia</button></div>
   </div>
 </div>
 
@@ -1630,6 +1667,40 @@
     <div class="lrows" id="linkResults"></div>
   </div>
 </div>
+
+<!-- Hoja: papelera -->
+<div class="sheet" id="trashSheet" hidden>
+  <div class="grab"></div>
+  <div class="inner">
+    <div class="sheet-head"><h3>Borrado recientemente</h3><button type="button" class="btn ghost" data-close>Cerrar</button></div>
+    <div id="trashBody" style="display:grid;gap:12px"></div>
+  </div>
+</div>
+<div class="sheet" id="orgSheet" hidden><div class="grab"></div><div class="inner" id="orgBody"></div></div>
+<div class="sheet" id="closeSheet" hidden><div class="grab"></div><div class="inner" id="closeBody"></div></div>
+<div class="sheet" id="shopFromSheet" hidden>
+  <div class="grab"></div>
+  <div class="inner">
+    <div class="sheet-head"><h3>Añadir desde una lista</h3><button type="button" class="btn ghost" data-close>Cerrar</button></div>
+    <div id="shopFromBody"></div>
+  </div>
+</div>
+<!-- Hoja: meta del año -->
+<form class="sheet" id="metaSheet" autocomplete="off" hidden>
+  <div class="grab"></div>
+  <div class="inner">
+    <div class="sheet-head"><h3 id="mgTitle">Nueva meta</h3><button type="button" class="btn ghost" data-close>Cancelar</button></div>
+    <input class="inp title" type="text" id="mgName" placeholder="p. ej. Leer 20 libros, Ir al gimnasio 150 días" maxlength="120" aria-label="Meta">
+    <div class="field"><span class="label">Cómo se cuenta</span><div class="chips wrap" id="mgKinds"></div></div>
+    <label class="field" id="mgRefField" hidden><span class="label">Cuál</span><select class="inp" id="mgRef"></select></label>
+    <div class="field" id="mgProjField" hidden><span class="label">Proyectos que quieres terminar</span><div class="chips wrap" id="mgProjs"></div></div>
+    <div class="grid2" id="mgTargetField"><label class="field"><span class="label">Objetivo</span><input class="inp" type="number" id="mgTarget" inputmode="numeric" min="1" placeholder="20"></label>
+      <label class="field"><span class="label">De qué</span><input class="inp" type="text" id="mgUnit" maxlength="20" placeholder="km, euros, veces…" autocomplete="off"></label></div>
+    <label class="field" id="mgCurField"><span class="label">Llevas</span><input class="inp" type="number" id="mgCur" inputmode="numeric" min="0" value="0"></label>
+    <button class="btn primary block" type="submit">Guardar</button>
+    <button class="btn danger block" type="button" id="mgDel" hidden>Borrar meta</button>
+  </div>
+</form>
 
 <!-- Ver una foto -->
 <div class="photoview" id="photoView" hidden>
