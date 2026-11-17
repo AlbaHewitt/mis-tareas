@@ -1,22 +1,24 @@
 import { firebaseConfig } from './config.js';
 import { parseQuick, fold } from './parse.js';
 import { toICS, googleURL } from './cal.js';
-import { DAY_ORDER, DAY_LETTER, MONTHS_SHORT, normTag, pad, isoDate, todayISO, parseISO, addDays, dim, mondayOf, toMin, uid, esc, cap, monthDate, stepDate, nextDate, alignStart, friendlyDate, longDate, repeatLabel, durationMin, autoPoints, taskPoints, isLate, habitPoints, habitOK, weekCount, PERIODIC, periodStart, periodCount, prevPeriod, applies, WD_NAME, habitStreak, habitBest, wakeTarget, bedMin, fmtDur, judgeSleep, nowHM, LEVEL_NAMES, levelStart, levelOf } from './logic.js';
+import { DAY_ORDER, DAY_LETTER, MONTHS_SHORT, normTag, pad, isoDate, todayISO, parseISO, addDays, dim, mondayOf, toMin, uid, esc, cap, monthDate, stepDate, nextDate, alignStart, friendlyDate, longDate, repeatLabel, durationMin, autoPoints, taskPoints, isLate, habitPoints, habitOK, weekCount, PERIODIC, periodStart, periodCount, prevPeriod, applies, WD_NAME, habitStreak, habitBest, wakeTarget, bedMin, fmtDur, judgeSleep, nowHM, LEVEL_NAMES, levelStart, levelOf, isoWeek, SHOP_SECS, shopSection, shopKey } from './logic.js';
 
 const FB = 'https://www.gstatic.com/firebasejs/10.12.2/';
 const COLORS = ['violeta', 'naranja', 'verde', 'azul', 'gris', 'rosa', 'rojo', 'amarillo', 'turquesa', 'marron'];
 const DEFAULT_CATS = [
-  { id: 'urgente', name: 'Urgente', color: 'rojo' },
   { id: 'evento', name: 'Evento', color: 'violeta' }, { id: 'entreno', name: 'Entreno', color: 'naranja' },
   { id: 'casa', name: 'Casa', color: 'verde' }, { id: 'estudio', name: 'Estudio', color: 'azul' },
   { id: 'trabajo', name: 'Trabajo', color: 'gris' }, { id: 'personal', name: 'Personal', color: 'rosa' },
+  { id: 'cumple', name: 'Cumpleaños', color: 'amarillo' },
 ];
 const NO_CAT = { id: '', name: 'Sin categoría', color: 'gris' };
-const VIEWS = { hoy: 'Hoy', semana: 'Agenda', habitos: 'Hábitos', proximas: 'Próximas', sinfecha: 'Sin fecha', hechas: 'Progreso' };
+const VIEWS = { hoy: 'Hoy', semana: 'Agenda', habitos: 'Hábitos', proximas: 'Próximas', sinfecha: 'Listas', notas: 'Notas', hechas: 'Progreso' };
 const TICK = c => `<svg viewBox="0 0 16 16" fill="none" stroke="${c}" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M3 8.5l3 3 7-7"/></svg>`;
 const $ = s => document.querySelector(s);
 
 let tasks = [];
+// Proyectos, lista de la compra y notas
+let projects = [], shop = [], notes = [];
 let cats = DEFAULT_CATS;
 let habits = [];
 let stats = { goal: 100, days: {}, focus: {} };
@@ -36,6 +38,7 @@ const SECTIONS = [
   ['animo', 'Ánimo y energía', 'Pregunta en Hoy y estadísticas en Progreso'],
   ['estimado', 'Estimado vs real', 'En Progreso'],
   ['concentracion', 'Concentración por asignatura', 'En Progreso'],
+  ['diario', 'Diario', 'En Notas y un botón en Hoy'],
 ];
 const on = id => !(extra.prefs?.off || []).includes(id);
 let dayOffset = 0, monthOffset = 0, calSel = null, sinfechaMode = 'sinfecha', activeFilter = null;
@@ -48,9 +51,10 @@ let query = '';
 let showDone = false;
 let selectedDay = null;
 // Estado del formulario de tarea
+let formFlag = false;
 let editingId = null, formCat = 'personal', formDays = [], formParts = [], formNoDate = false, splitDays = [1, 2, 3, 4, 5], formSomeday = false, formTonight = false;
 
-document.documentElement.dataset.v = '24';
+document.documentElement.dataset.v = '25';
 // ---------- Registro de errores (se ve en ⋯ → Ayuda) ----------
 const EKEY = 'mis-tareas-errores';
 function logError(msg, where) {
@@ -113,6 +117,9 @@ function clean(t) {
     parentId: t.parentId || '', order: Number(t.order) || 0, loc: String(t.loc || '').slice(0, 200), inbox: !!t.inbox && !t.date,
     someday: !!t.someday && !t.date, tonight: !!t.tonight && !!t.date,
     tags: Array.isArray(t.tags) ? [...new Set(t.tags.map(normTag).filter(Boolean))].slice(0, 10) : [],
+    flag: !!t.flag, project: String(t.project || '').slice(0, 60), status: t.status === 'doing' && !t.done ? 'doing' : '',
+    born: Number(t.born) >= 1900 && Number(t.born) <= 2100 ? Math.round(Number(t.born)) : null,
+    links: cleanLinks(t.links), photos: Array.isArray(t.photos) ? t.photos.map(String).slice(0, 20) : [],
     streak: Number(t.streak) || 0, best: Number(t.best) || 0,
     history: Array.isArray(t.history) ? t.history.filter(d => typeof d === 'string').slice(-120) : [],
     pts: Number(t.pts) || 0, ptsDay: t.ptsDay || '', focus: Number(t.focus) || 0,
@@ -161,6 +168,7 @@ const SHELF = {
     editSt: [['want', 'Quiero verla'], ['read', 'Vista']], one: 'película', add: 'Añadir una película', emptyWant: 'Apunta aquí las películas que te apetece ver.',
     numF: { '': 'Todos', old: 'Antes de 1970', '1970': 'Años 70', '1980': 'Años 80', '1990': 'Años 90', '2000': 'Años 2000', '2010': 'Años 2010', '2020': 'Desde 2020', x: 'Sin año' }, genrePh: 'Categoría (drama, ciencia ficción, terror…)' },
 };
+const shelfView = k => { try { return localStorage.getItem('shelf-view-' + k) || 'list'; } catch { return 'list'; } };
 const shelf = { books: { items: [], f: { q: '', author: '', genre: '', num: '', sort: 'title' }, open: null, addSt: 'want' },
   movies: { items: [], f: { q: '', author: '', genre: '', num: '', sort: 'title' }, open: null, addSt: 'want' } };
 function cleanItem(kind, b) {
@@ -172,7 +180,28 @@ function cleanItem(kind, b) {
   if (kind === 'books') { out.pages = n(b.pages, 20000); out.page = out.pages ? Math.min(out.pages, n(b.page, 20000) || 0) : (n(b.page, 20000) || 0); }
   out.year = n(b.year, 2100) >= (kind === 'books' ? 1 : 1880) ? n(b.year, 2100) : null;
   out.looked = !!b.looked;
+  out.cover = /^https:\/\/(covers\.openlibrary\.org|upload\.wikimedia\.org)\//.test(b.cover || '') ? String(b.cover).slice(0, 400) : '';
+  out.cl = !!b.cl;
   return out;
+}
+// --- Proyectos, compra y notas ---
+const LINK_KINDS = ['note', 'task', 'proj', 'books', 'movies'];
+function cleanLinks(l) { return (Array.isArray(l) ? l : []).filter(x => x && LINK_KINDS.includes(x.k) && x.id).map(x => ({ k: x.k, id: String(x.id).slice(0, 80) })).slice(0, 30); }
+const isDay = v => /^\d{4}-\d{2}-\d{2}$/.test(v || '');
+const cleanProject = p => ({ name: String(p.name || '').slice(0, 80), color: COLORS.includes(p.color) ? p.color : 'azul', notes: String(p.notes || '').slice(0, 4000), due: isDay(p.due) ? p.due : '', done: !!p.done, order: Number(p.order) || Date.now(), created: Number(p.created) || Date.now() });
+const cleanShop = s => ({ name: String(s.name || '').slice(0, 100), sec: SHOP_SECS.some(x => x[0] === s.sec) ? s.sec : 'otros', done: !!s.done, order: Number(s.order) || Date.now() });
+const cleanNote = n => ({ title: String(n.title || '').slice(0, 200), body: String(n.body || '').slice(0, 20000), folder: String(n.folder || '').slice(0, 40), pinned: !!n.pinned,
+  created: Number(n.created) || Date.now(), updated: Number(n.updated) || Date.now(), photos: (Array.isArray(n.photos) ? n.photos : []).map(String).slice(0, 30),
+  project: String(n.project || '').slice(0, 60), links: cleanLinks(n.links), journal: isDay(n.journal) ? n.journal : '' });
+const ROWS = { projects: [() => projects, v => { projects = v; }, cleanProject], shop: [() => shop, v => { shop = v; }, cleanShop], notes: [() => notes, v => { notes = v; }, cleanNote] };
+function saveRow(coll, row) {
+  const [get, , cl] = ROWS[coll], l = get(), i = l.findIndex(x => x.id === row.id), { id, ...rest } = row, clean = { id, ...cl(rest) };
+  if (i >= 0) l[i] = clean; else l.push(clean);
+  (store.fb ? store.fb.setDoc(store.ref(coll, id), cl(rest)) : Promise.resolve(local('mis-tareas-' + coll, l))).catch(writeFailed);
+}
+function dropRow(coll, id) {
+  const [get, set] = ROWS[coll]; set(get().filter(x => x.id !== id));
+  (store.fb ? store.fb.deleteDoc(store.ref(coll, id)) : Promise.resolve(local('mis-tareas-' + coll, get()))).catch(writeFailed);
 }
 const normTemplates = l => (Array.isArray(l) ? l : []).filter(x => x && x.name && x.task).slice(0, 50);
 const normRewards = r => ({
@@ -193,7 +222,7 @@ const store = {
       await b.commit();
     }
   },
-  async saveCats(list) { cats = list; if (!this.fb) return local(LCATS, list); return this.fb.setDoc(this.ref('settings', 'categories'), { list, urg: true }); },
+  async saveCats(list) { cats = list; if (!this.fb) return local(LCATS, list); return this.fb.setDoc(this.ref('settings', 'categories'), { list, urg: true, v2: true }); },
   async putHabit(h) { if (!this.fb) return local(LHAB, habits); const { id, ...rest } = h; return this.fb.setDoc(this.ref('habits', id), cleanHabit(rest)); },
   async removeHabit(id) { if (!this.fb) return local(LHAB, habits); return this.fb.deleteDoc(this.ref('habits', id)); },
   async setHabitDay(h, day, val) {
@@ -243,6 +272,7 @@ async function initStore() {
     templates = normTemplates(get(LTPL, []));
     for (const k in SHELF) shelf[k].items = get(SHELF[k].lkey, []).map(b => ({ id: b.id, ...cleanItem(k, b) }));
     extra = { mood: get('mis-tareas-mood', {}), filters: get('mis-tareas-filters', []), garden: get('mis-tareas-garden', []), prefs: get('mis-tareas-prefs', {}) };
+    for (const k in ROWS) ROWS[k][1](get('mis-tareas-' + k, []).map(r => ({ id: r.id, ...ROWS[k][2](r) })));
     loaded = true;
     setSync('warn', 'Solo en este dispositivo');
     $('#accountInfo').textContent = 'La sincronización no está configurada. Las tareas se guardan solo en este dispositivo.';
@@ -266,7 +296,7 @@ async function initStore() {
   auth.onAuthStateChanged(a, user => {
     unsubs.forEach(u => u()); unsubs = [];
     if (!user) {
-      store.fb = null; store.user = null; tasks = []; for (const k in shelf) shelf[k].items = []; cats = DEFAULT_CATS; habits = []; stats = { goal: 100, days: {}, focus: {} }; rewards = { list: [], redeemed: [] }; extra = { mood: {}, filters: [], garden: [], prefs: {} }; loaded = false;
+      store.fb = null; store.user = null; tasks = []; for (const k in shelf) shelf[k].items = []; cats = DEFAULT_CATS; habits = []; stats = { goal: 100, days: {}, focus: {} }; rewards = { list: [], redeemed: [] }; extra = { mood: {}, filters: [], garden: [], prefs: {} }; projects = []; shop = []; notes = []; fileCache.clear(); loaded = false;
       $('#login').hidden = false; $('#logoutBtn').hidden = true;
       render(); return;
     }
@@ -286,8 +316,11 @@ async function initStore() {
     unsubs.push(fs.onSnapshot(store.ref('settings', 'categories'), snap => {
       const list = snap.exists() ? snap.data().list : null;
       cats = Array.isArray(list) ? list : DEFAULT_CATS;
-      // Una sola vez: añade la categoría Urgente a las cuentas que ya tenían categorías
-      if (Array.isArray(list) && !snap.data().urg && !snap.metadata.fromCache) store.saveCats(list.some(c => c.id === 'urgente') ? list : [{ id: 'urgente', name: 'Urgente', color: 'rojo' }, ...list]).catch(() => {});
+      // Una sola vez: "Urgente" pasa a ser la bandera 🚩 (las tareas se marcan solas) y llega la categoría Cumpleaños
+      if (Array.isArray(list) && !snap.data().v2 && !snap.metadata.fromCache) {
+        let l = list.filter(c => c.id !== 'urgente'); if (!l.some(c => c.id === 'cumple')) l = [...l, { id: 'cumple', name: 'Cumpleaños', color: 'amarillo' }];
+        store.saveCats(l).catch(() => {});
+      }
       render(); if (!$('#catSheet').hidden) renderCatSheet();
     }, () => {}));
     unsubs.push(fs.onSnapshot(fs.collection(db, 'users', user.uid, 'habits'), snap => {
@@ -310,6 +343,10 @@ async function initStore() {
       shelf[k].items = snap.docs.map(d => ({ id: d.id, ...cleanItem(k, d.data()) }));
       if (!$(SHELF[k].sheet).hidden && !document.activeElement?.closest?.(SHELF[k].sheet)) renderShelf(k);
     }, () => {}));
+    for (const k in ROWS) unsubs.push(fs.onSnapshot(fs.collection(db, 'users', user.uid, k), snap => {
+      ROWS[k][1](snap.docs.map(d => ({ id: d.id, ...ROWS[k][2](d.data()) })));
+      if (k !== 'notes' || !$('#noteSheet').classList.contains('show')) render();
+    }, () => {}));
     unsubs.push(fs.onSnapshot(store.ref('settings', 'templates'), snap => {
       templates = normTemplates(snap.exists() ? snap.data().list : []);
       if (!$('#tplSheet').hidden) renderTplSheet();
@@ -329,7 +366,7 @@ function adoptSiriTasks() {
   tasks.filter(t => t.siriKey !== undefined && !adopting.has(t.id)).forEach(t => {
     adopting.add(t.id);
     const p = parseQuick(t.title, cats);
-    const full = { id: t.id, title: p.title, cat: p.cat || (p.prio && cats.some(c => c.id === 'urgente') ? 'urgente' : '') || (cats.find(c => c.id !== 'urgente')?.id ?? ''), date: p.date ?? todayISO(), time: p.time || '', endTime: p.endTime || '',
+    const full = { id: t.id, title: p.title, cat: p.cat || guessCat(p.title) || (cats[0]?.id ?? ''), flag: !!p.prio, date: p.date ?? todayISO(), time: p.time || '', endTime: p.endTime || '',
       prio: p.prio || 'normal', repeat: p.repeat || '', days: p.days || [], every: p.every || 1, nth: p.nth || null, nthDay: p.nthDay ?? null, notes: '', done: false, created: Date.now() };
     alignStart(full);
     Object.keys(t).forEach(k => delete t[k]); Object.assign(t, full);
@@ -376,6 +413,7 @@ function migrate() {
       ch = { ...(ch || {}), subtasks: [] };
     }
     if (t.rota) ch = { ...(ch || {}), rota: '' };
+    if (t.cat === 'urgente') { const par = t.parentId ? tasks.find(p => p.id === t.parentId) : null; ch = { ...(ch || {}), flag: !t.parentId, cat: guessCat(par ? par.title : t.title) || '' }; }
     if (ch) { Object.assign(t, ch); delete t.subtasks; delete t.rota; fixes.push(t); }
   });
   if (fixes.length) store.putMany(fixes).catch(writeFailed);
@@ -545,6 +583,7 @@ function openSheet(id) {
   if (token === sheetToken) { s.classList.add('show'); scrim.classList.add('show'); }
 }
 function closeSheets(instant) {
+  if (noteDraft && $('#noteSheet').classList.contains('show')) saveNote(true);
   sheetToken++;
   document.querySelectorAll('.sheet.show').forEach(s => {
     s.classList.remove('show');
@@ -625,6 +664,14 @@ function renderCatChips() {
   $('#catChips').innerHTML = cats.map(c =>
     `<button type="button" class="chip" data-cat="${esc(c.id)}" aria-pressed="${formCat === c.id}"><span class="dot" style="background:${colorVar(c.color)}"></span>${esc(c.name)}</button>`).join('')
     + `<button type="button" class="chip" data-cat="" aria-pressed="${formCat === ''}">Ninguna</button>`;
+  $('#flagBtn').setAttribute('aria-pressed', formFlag);
+  $('#bornField').hidden = formCat !== 'cumple';
+}
+// Etiquetas que ya usas, para añadirlas con un toque
+function renderTagSugs() {
+  const have = new Set(readTags()), all = [...new Set(tasks.flatMap(t => t.tags || []))].filter(g => !have.has(g)).sort((x, y) => x.localeCompare(y, 'es')).slice(0, 14);
+  $('#tagSugs').innerHTML = all.map(g => `<button type="button" class="chip" data-tagadd="${esc(g)}">@${esc(g)}</button>`).join('');
+  $('#tagSugs').hidden = !all.length;
 }
 const dayChips = (sel, attr) => DAY_ORDER.map(d => `<button type="button" class="chip" ${attr}="${d}" aria-pressed="${sel.includes(d)}">${DAY_LETTER[d]}</button>`).join('');
 function renderWhen() {
@@ -682,7 +729,7 @@ function renderDetected() {
   if (p.time) bits.push(p.time + (p.endTime ? '–' + p.endTime : ''));
   if (p.cat) bits.push('#' + catOf(p.cat).name);
   else if (!formCatTouched && guessCat(p.title || '')) bits.push('#' + catOf(guessCat(p.title)).name);
-  if (p.prio && cats.some(c => c.id === 'urgente')) bits.push('#Urgente');
+  if (p.prio) bits.push('🚩');
   (p.tags || []).forEach(t => bits.push('@' + t));
   if (p.repeat) bits.push('↻ ' + repeatLabel({ ...p, date: p.date || $('#date').value }));
   $('#detected').innerHTML = bits.map(b => `<span>${esc(b)}</span>`).join('');
@@ -690,12 +737,13 @@ function renderDetected() {
 }
 let formCatTouched = false;
 // Si no eliges categoría, se adivina por las palabras (gym → Entreno, estudiar → Estudio, limpiar → Casa…)
-const CAT_WORDS = [['entreno', /\b(gym|gimnasio|entren|correr|running|pesas|yoga|pilates|nadar|piscina|crossfit|spinning|bici|futbol|fútbol|padel|pádel|caminar)/i],
+const CAT_WORDS = [['cumple', /\bcumple/i], ['entreno', /\b(gym|gimnasio|entren|correr|running|pesas|yoga|pilates|nadar|piscina|crossfit|spinning|bici|futbol|fútbol|padel|pádel|caminar)/i],
   ['estudio', /\b(estudi|examen|repas|tema \d|apuntes|deberes|practica|práctica|entrega|clase de|leer el tema|ejercicios)/i],
   ['casa', /\b(limpi|lavar|lavadora|tender|planchar|cocinar|compra|super|barrer|fregar|aspir|ordenar|regar|basura|cama|baño)/i],
   ['evento', /\b(cumple|boda|cena con|comida con|quedar|quedada|concierto|cine|fiesta|viaje|vuelo|reuni)/i]];
 const guessCat = title => { const c = CAT_WORDS.find(([id, rx]) => rx.test(title) && cats.some(x => x.id === id)); return c ? c[0] : ''; };
-$('#catChips').addEventListener('click', e => { const b = e.target.closest('[data-cat]'); if (b) { formCat = b.dataset.cat; formCatTouched = true; renderCatChips(); } });
+$('#catChips').addEventListener('click', e => { const b = e.target.closest('[data-cat]'); if (!b) return; formCat = b.dataset.cat; formCatTouched = true; if (formCat === 'cumple' && !formNoDate && !$('#repeat').value) { $('#repeat').value = 'anual'; } renderCatChips(); renderWhen(); });
+$('#flagBtn').addEventListener('click', () => { formFlag = !formFlag; renderCatChips(); });
 $('#date').addEventListener('change', () => { if ($('#date').value) formNoDate = false; renderMonthDay(); renderWhen(); });
 $('#noDateBtn').addEventListener('click', () => {
   formNoDate = !formNoDate;
@@ -714,6 +762,8 @@ $('#time').addEventListener('change', () => {
 $('#somedayBtn').addEventListener('click', () => { formSomeday = !formSomeday; renderWhen(); });
 $('#tonightBtn').addEventListener('click', () => { formTonight = !formTonight; renderWhen(); });
 const readTags = () => $('#tags').value.split(/[,\s]+/).map(normTag).filter(Boolean);
+$('#tags').addEventListener('input', renderTagSugs);
+$('#tagSugs').addEventListener('click', e => { const b = e.target.closest('[data-tagadd]'); if (!b) return; $('#tags').value = [...readTags(), b.dataset.tagadd].join(', '); renderTagSugs(); });
 $('#endTime').addEventListener('change', renderWhen);
 $('#clearTimes').addEventListener('click', () => { $('#time').value = ''; $('#endTime').value = ''; renderWhen(); });
 $('#repeat').addEventListener('change', () => {
@@ -827,14 +877,18 @@ function openForm(id, preset) {
   $('#title').value = t ? t.title : '';
   formCat = t ? (t.cat ?? '') : (catFilter || cats[cats.length - 1]?.id || '');
   if (!t && !cats.some(c => c.id === formCat)) formCat = cats[0]?.id || '';
-  formNoDate = t ? !t.date : view === 'sinfecha';
-  formSomeday = t ? !!t.someday : (view === 'sinfecha' && sinfechaMode === 'someday');
+  const inLists = !t && view === 'sinfecha' && !query, lk = inLists ? (listSel || '') : '';
+  formNoDate = t ? !t.date : inLists;
+  formSomeday = t ? !!t.someday : lk === 'someday';
+  formFlag = t ? !!t.flag : (lk === 'flag' || !!preset?.flag);
   formTonight = t ? !!t.tonight : false;
-  $('#tags').value = t ? (t.tags || []).join(', ') : '';
+  $('#tags').value = t ? (t.tags || []).join(', ') : lk.startsWith('t:') ? lk.slice(2) : '';
+  $('#proj').innerHTML = projOptions(t ? t.project : lk.startsWith('p:') ? lk.slice(2) : (preset?.project || ''));
+  $('#born').value = t && t.born ? t.born : '';
   $('#date').value = t ? (t.date || todayISO()) : preset?.date || (view === 'semana' ? (calMode === 'mes' ? agendaSel : calSel) || todayISO() : todayISO());
   if (!t && (preset?.date || view === 'semana')) formNoDate = false;
   $('#time').value = t ? (t.time || '') : (preset?.time || '');
-  $('#endTime').value = t ? (t.endTime || '') : (preset?.time ? hhmm(toMin(preset.time) + 60) : '');
+  $('#endTime').value = t ? (t.endTime || '') : (preset?.end || (preset?.time ? hhmm(toMin(preset.time) + 60) : ''));
   $('#loc').value = t ? (t.loc || '') : '';
   $('#prio').value = t ? (t.prio || 'normal') : 'normal';
   $('#repeat').value = t ? (t.repeat || '') : '';
@@ -862,11 +916,17 @@ function openForm(id, preset) {
   $('#tplSave').hidden = !t || !!t.parentId;
   $('#tplChips').hidden = !!t || !templates.length;
   $('#tplChips').innerHTML = templates.map(p => `<button type="button" class="chip" data-tpl="${p.id}">📋 ${esc(p.name)}</button>`).join('');
-  renderCatChips(); renderParts(); renderDetected();
+  renderCatChips(); renderParts(); renderDetected(); renderTagSugs();
   openSheet('#taskSheet');
   if (!t) setTimeout(() => $('#title').focus(), 60);
 }
-$('#fab').addEventListener('click', () => (view === 'habitos' && !query) ? openHabit(null) : openForm(null));
+$('#fab').addEventListener('click', () => {
+  if (query) return openForm(null);
+  if (view === 'habitos') return openHabit(null);
+  if (view === 'notas') return openNote(null);
+  if (view === 'sinfecha' && listSel === 'compra') { $('#shopInput')?.focus(); return; }
+  openForm(null);
+});
 $('#taskSheet').addEventListener('submit', e => {
   e.preventDefault();
   const title = $('#title').value.trim();
@@ -884,6 +944,7 @@ $('#taskSheet').addEventListener('submit', e => {
     points: $('#points').value === '' ? null : Number($('#points').value),
     remind: formNoDate || $('#remind').value === '' ? null : Number($('#remind').value), notes: $('#notes').value.trim(), inbox: false, loc: $('#loc').value.trim(),
     tags: readTags(), someday: formNoDate && formSomeday, tonight: !formNoDate && formTonight,
+    flag: formFlag, project: $('#proj').value, born: formCat === 'cumple' && $('#born').value ? Number($('#born').value) : null,
   };
   if (!editingId) {
     const p = parseQuick(title, cats);
@@ -892,10 +953,11 @@ $('#taskSheet').addEventListener('submit', e => {
     if (p.time) { data.time = p.time; data.endTime = p.endTime || data.endTime || $('#endTime').value; if (!data.date) data.date = todayISO(); }
     if (p.cat) data.cat = p.cat;
     else if (!formCatTouched) { const g = guessCat(p.title); if (g) data.cat = g; }
-    if (p.prio && cats.some(c => c.id === 'urgente')) data.cat = 'urgente';
+    if (p.prio) data.flag = true;
     if (p.tags) data.tags = [...new Set([...data.tags, ...p.tags.map(normTag)])];
     if (p.repeat && !formParts.length) { data.repeat = p.repeat; data.days = p.days || []; data.every = p.every || 1; data.nth = p.nth || null; data.nthDay = p.nthDay ?? null; data.monthDay = null; }
   }
+  if (data.cat === 'cumple' && data.date && !data.repeat && !formParts.length) data.repeat = 'anual';
   if (!data.date) { data.time = ''; data.endTime = ''; data.repeat = ''; }
   if (data.time && !data.endTime) data.endTime = hhmm(toMin(data.time) + 60);
   if (data.repeat === 'dias' && !data.days.length) data.repeat = 'semanal';
@@ -918,7 +980,7 @@ function saveParts(parent) {
     const id = p.isNew ? parent.id + '-' + uid() : p.id;
     if (!c) { c = { id, created: Date.now() + i, done: false }; tasks.push(c); }
     const was = !!c.done;
-    Object.assign(c, { title: p.title.trim() || `Parte ${i + 1}`, date: p.date, cat: parent.cat, parentId: parent.id, prio: parent.prio, order: i, points: p.points ?? null });
+    Object.assign(c, { title: p.title.trim() || `Parte ${i + 1}`, date: p.date, cat: parent.cat, parentId: parent.id, prio: parent.prio, project: parent.project || '', order: i, points: p.points ?? null });
     if (!p.date) { c.time = ''; c.endTime = ''; }
     if (p.done !== was) setDone(c, p.done);
     writes.push(c);
@@ -1234,7 +1296,7 @@ const matches = (t, q) => q.startsWith('@') ? (t.tags || []).some(g => g.startsW
 async function exportBackup() {
   const name = `mis-tareas-copia-${todayISO()}.json`;
   const data = { app: 'mis-tareas', version: 2, exported: new Date().toISOString(),
-    tasks: tasks.map(t => ({ id: t.id, ...clean(t) })), habits, cats, stats, rewards, templates, books: shelf.books.items, movies: shelf.movies.items };
+    tasks: tasks.map(t => ({ id: t.id, ...clean(t) })), habits, cats, stats, rewards, templates, books: shelf.books.items, movies: shelf.movies.items, projects, shop, notes };
   const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
   const file = new File([blob], name, { type: 'application/json' });
   const done = () => { try { localStorage.setItem('last-backup', String(Date.now())); } catch {} render(); };
@@ -1268,6 +1330,7 @@ $('#importFile').addEventListener('change', async e => {
       if (Array.isArray(data.templates)) { templates = normTemplates(data.templates); store.saveTemplates().catch(writeFailed); }
       let nShelf = 0;
       for (const k in SHELF) (data[k] || []).forEach(b => { if (!b?.id || !b.title) return; nShelf++; saveItem(k, { id: String(b.id).replace(/[^\w.~:@+-]/g, '_'), ...cleanItem(k, b) }); });
+      for (const k in ROWS) (Array.isArray(data[k]) ? data[k] : []).forEach(r => { if (r?.id) saveRow(k, { ...r, id: String(r.id).replace(/[^\w.~:@+-]/g, '_') }); });
       info.textContent = list.length || (data.habits || []).length || !nShelf ? `Copia restaurada: ${list.length} tareas y ${(data.habits || []).length} hábitos${nShelf ? `, y ${nShelf} libros y películas` : ''}. Los puntos no se tocan para no sumarlos dos veces.` : `Listo: ${(data.books || []).length} libros y ${(data.movies || []).length} películas añadidos.`;
       render(); return;
     }
@@ -1998,7 +2061,7 @@ async function syncGcal(interactive) {
         if (t && t.gcal?.updated === ev.updated) continue;
         const exam = /examen|entrega|parcial|^ex\.? /.test(fold(ev.summary || ''));
         const data = { title: (ev.summary || '(sin título)').slice(0, 300), date: s.date, time: s.time, endTime: s.time && e.date === s.date ? e.time : '', gcal: { id: ev.id, updated: ev.updated } };
-        if (!t) { t = { id, cat: exam ? 'estudio' : 'evento', prio: exam ? 'alta' : 'normal', notes: '', loc: ev.location || '', done: false, created: Date.now(), ...data }; tasks.push(t); }
+        if (!t) { t = { id, cat: exam ? 'estudio' : 'evento', prio: exam ? 'alta' : 'normal', flag: !!exam, notes: '', loc: ev.location || '', done: false, created: Date.now(), ...data }; tasks.push(t); }
         else Object.assign(t, data);
         writes.push(t); got++;
       }
@@ -2237,6 +2300,7 @@ function itemEditHTML(kind, b) {
     <div class="chips">${C.editSt.map(([v, l]) => `<button type="button" class="chip ${b.status === v ? 'on' : ''}" data-bact="status" data-v="${v}">${l}</button>`).join('')}</div>
     ${b.status === 'read' ? `<div class="stars" aria-label="Valoración">${[1, 2, 3, 4, 5].map(n => `<button type="button" class="${(b.rating || 0) >= n ? 'on' : ''}" data-bact="rate" data-v="${n}" aria-label="${n} estrellas">★</button>`).join('')}</div>` : ''}
     <textarea class="inp" data-bf="notes" placeholder="Notas, citas, quién te lo recomendó…" aria-label="Notas">${esc(b.notes)}</textarea>
+    ${linksHTML([], { k: kind, id: b.id }).replace(/data-unlink[^>]*>✕<\/button>/g, '>')}
     <div class="grid2"><button type="button" class="btn danger small" data-bact="del">Borrar</button><button type="button" class="btn primary small" data-bact="close">Listo</button></div></div>`;
 }
 function renderShelf(kind) {
@@ -2259,6 +2323,8 @@ function renderShelf(kind) {
       <div class="grid2"><button class="btn" type="button" data-bact="canceladd">Cancelar</button><button class="btn primary" type="submit">Añadir</button></div></form>` : ''}
     <datalist id="${kind}Who">${authors.map(x => `<option value="${esc(x)}">`).join('')}</datalist><datalist id="${kind}Genres">${genres.map(x => `<option value="${esc(x)}">`).join('')}</datalist>
     <div class="segs">${tabs}</div>
+    ${items.length && S.tab !== 'reading' ? `<div class="segs mini shelfview"><button type="button" class="seg ${shelfView(kind) === 'list' ? 'on' : ''}" data-bact="view" data-v="list">☰ Lista</button><button type="button" class="seg ${shelfView(kind) === 'covers' ? 'on' : ''}" data-bact="view" data-v="covers">▦ Portadas</button></div>` : ''}
+    ${items.length && shelfView(kind) === 'covers' && items.some(needsCover) ? `<button type="button" class="btn ghost small" data-bact="fillcovers" ${lookupRun[kind] ? 'disabled' : ''}>${lookupRun[kind] ? `🖼 Buscando… ${lookupRun[kind]}` : `🖼 Buscar las portadas que faltan (${items.filter(needsCover).length})`}</button>` : ''}
     ${items.length ? `<div class="bfilter">
       <input class="inp" type="search" data-search value="${esc(F.q)}" placeholder="🔍 Buscar por título, ${C.who.toLowerCase()} o categoría" aria-label="Buscar">
       <details class="box-card"${active ? ' open' : ''}><summary>Filtros y orden${active ? ` · ${active}` : ''}</summary>
@@ -2279,6 +2345,11 @@ function renderShelfLists(kind) {
   const box = $(C.body).querySelector('.shelflists');
   if (!list.length) { box.innerHTML = `<p class="hint">${filtering ? 'Nada coincide con la búsqueda.' : S.tab === 'want' ? C.emptyWant : S.tab === 'reading' ? 'Nada ahora mismo. Empieza uno de “Quiero leer”.' : 'Todavía nada. Cuando termines uno, aparecerá aquí.'}</p>`; return; }
   let h = '';
+  if (S.tab !== 'reading' && shelfView(kind) === 'covers') {
+    const ob = S.open ? S.items.find(b => b.id === S.open) : null;
+    box.innerHTML = (ob ? `<div class="covedit">${itemEditHTML(kind, ob)}</div>` : '') + `<div class="covers">${list.map(b => `<button type="button" class="cov${S.open === b.id ? ' on' : ''}" data-bid="${b.id}" data-bact="edit">${b.cover ? `<img src="${esc(b.cover)}" alt="" loading="lazy" referrerpolicy="no-referrer" onerror="this.remove()">` : ''}<span class="cph">${esc(b.title)}</span><b>${esc(b.title)}</b><small>${esc(b.author || '')}${b.rating ? ' · ' + '★'.repeat(b.rating) : ''}</small></button>`).join('')}</div>`;
+    return;
+  }
   if (S.tab === 'reading') h = `<div class="books">${list.map(b => {
     const pct = b.pages ? Math.round(b.page / b.pages * 100) : null;
     return `<div class="book reading" data-bid="${b.id}">
@@ -2313,22 +2384,45 @@ const pickGenre = (map, texts) => { const all = texts.join(' | '); for (const [r
 const needsLookup = (kind, b) => !b.looked && (!b.author || !b.year || !b.genre || (kind === 'books' && !b.pages));
 const lookupRun = {};
 async function findBook(b) {
-  const q = new URLSearchParams({ q: `${b.title} ${b.author || ''}`.trim(), fields: 'title,author_name,first_publish_year,subject,number_of_pages_median', limit: '5' });
+  const q = new URLSearchParams({ q: `${b.title} ${b.author || ''}`.trim(), fields: 'title,author_name,first_publish_year,subject,number_of_pages_median,cover_i', limit: '5' });
   const r = await fetch('https://openlibrary.org/search.json?' + q); if (!r.ok) throw new Error('openlibrary ' + r.status);
   const docs = (await r.json()).docs || [], d = docs.find(x => x.author_name?.length) || docs[0]; if (!d) return {};
-  return { author: d.author_name?.[0] || '', year: d.first_publish_year || null, pages: d.number_of_pages_median || null, genre: pickGenre(BOOK_G, d.subject || []) };
+  const cv = (d.cover_i ? d : docs.find(x => x.cover_i))?.cover_i;
+  return { author: d.author_name?.[0] || '', year: d.first_publish_year || null, pages: d.number_of_pages_median || null, genre: pickGenre(BOOK_G, d.subject || []), cover: cv ? `https://covers.openlibrary.org/b/id/${cv}-M.jpg` : '' };
 }
 async function wdApi(p) { const r = await fetch('https://www.wikidata.org/w/api.php?' + new URLSearchParams({ format: 'json', origin: '*', ...p })); if (!r.ok) throw new Error('wikidata ' + r.status); return r.json(); }
 async function findMovie(b) {
   const s = await wdApi({ action: 'wbsearchentities', search: b.title.replace(/\s*\(saga\)\s*$/i, ''), language: 'es', uselang: 'es', type: 'item', limit: '8' });
   const hit = (s.search || []).find(x => /pel[ií]cula|film/i.test(x.description || '')); if (!hit) return {};
-  const e = (await wdApi({ action: 'wbgetentities', ids: hit.id, props: 'claims' })).entities[hit.id].claims || {};
+  const ent = (await wdApi({ action: 'wbgetentities', ids: hit.id, props: 'claims|sitelinks' })).entities[hit.id], e = ent.claims || {};
   const ids = k => (e[k] || []).map(c => c.mainsnak?.datavalue?.value?.id).filter(Boolean);
   const years = (e.P577 || []).map(c => parseInt(String(c.mainsnak?.datavalue?.value?.time || '').slice(1, 5))).filter(Boolean);
   const dir = ids('P57').slice(0, 2), gen = ids('P136').slice(0, 8), want = [...dir, ...gen];
-  const lab = want.length ? (await wdApi({ action: 'wbgetentities', ids: want.join('|'), props: 'labels', languages: 'es|en' })).entities : {};
-  const L = id => lab[id]?.labels?.es?.value || lab[id]?.labels?.en?.value || '';
-  return { author: dir.map(L).filter(Boolean).join(' y '), year: years.length ? Math.min(...years) : null, genre: pickGenre(MOVIE_G, gen.map(L)) };
+  const lab = want.length ? (await wdApi({ action: 'wbgetentities', ids: want.join('|'), props: 'labels', languages: 'es|mul|en' })).entities : {};
+  const L = id => lab[id]?.labels?.es?.value || lab[id]?.labels?.mul?.value || lab[id]?.labels?.en?.value || '';
+  let cover = '';
+  for (const lang of ['en', 'es']) { const t = ent.sitelinks?.[lang + 'wiki']?.title; if (t && !cover) cover = await wikiThumb(t, lang).catch(() => ''); }
+  return { author: dir.map(L).filter(Boolean).join(' y '), year: years.length ? Math.min(...years) : null, genre: pickGenre(MOVIE_G, gen.map(L)), cover };
+}
+async function wikiThumb(title, lang) {
+  const r = await fetch(`https://${lang}.wikipedia.org/w/api.php?` + new URLSearchParams({ action: 'query', titles: title, prop: 'pageimages', piprop: 'thumbnail', pithumbsize: '320', pilicense: 'any', format: 'json', origin: '*' }));
+  if (!r.ok) return '';
+  const p = Object.values((await r.json()).query?.pages || {})[0];
+  return /^https:\/\/upload\.wikimedia\.org\//.test(p?.thumbnail?.source || '') ? p.thumbnail.source : '';
+}
+// Portadas que faltan (para lo que ya tenías apuntado)
+const needsCover = b => !b.cover && !b.cl;
+async function fillCovers(kind) {
+  if (lookupRun[kind]) return;
+  const list = shelf[kind].items.filter(needsCover); let n = 0, got = 0, fails = 0;
+  for (const b of list) {
+    lookupRun[kind] = `${++n}/${list.length}`; if (!$(SHELF[kind].sheet).hidden) renderShelf(kind);
+    try { const f = await (kind === 'books' ? findBook(b) : findMovie(b)), cur = shelf[kind].items.find(x => x.id === b.id) || b; if (f.cover) got++; saveItem(kind, { ...cur, cover: cur.cover || f.cover || '', cl: true }); }
+    catch (e) { fails++; logError(e.message, 'portadas'); if (fails > 4) break; }
+    await new Promise(r => setTimeout(r, 300));
+  }
+  lookupRun[kind] = ''; if (!$(SHELF[kind].sheet).hidden) renderShelf(kind);
+  showToast(fails > 4 ? 'No se pudo buscar ahora (¿sin conexión?). Prueba más tarde.' : `Portadas encontradas: ${got} de ${n}`);
 }
 // Rellena solo lo que está vacío; devuelve qué ha completado
 async function lookupItem(kind, b) {
@@ -2338,6 +2432,8 @@ async function lookupItem(kind, b) {
   if (!cur.year && found.year) { upd.year = found.year; got.push('año'); }
   if (!cur.genre && found.genre) { upd.genre = found.genre; got.push('categoría'); }
   if (kind === 'books' && !cur.pages && found.pages) { upd.pages = found.pages; got.push('páginas'); }
+  if (!cur.cover && found.cover) { upd.cover = found.cover; got.push('portada'); }
+  upd.cl = true;
   saveItem(kind, upd);
   return got;
 }
@@ -2372,10 +2468,12 @@ for (const kind in SHELF) {
     if (act === 'fab') { S.adding = true; S.addSt = S.tab; renderShelf(kind); $(SHELF[kind].sheet).scrollTop = 0; return; }
     if (act === 'canceladd') { S.adding = false; renderShelf(kind); return; }
     if (act === 'fillall') { fillAll(kind); return; }
+    if (act === 'fillcovers') { fillCovers(kind); return; }
+    if (act === 'view') { lsSet('shelf-view-' + kind, el.dataset.v); S.open = null; renderShelf(kind); return; }
     if (act === 'addst') { S.addSt = el.dataset.v; body.querySelectorAll('[data-bact=addst]').forEach(c => c.classList.toggle('on', c === el)); return; }
     const b = S.items.find(x => x.id === el.closest('[data-bid]')?.dataset.bid); if (!b) return;
     const today = todayISO();
-    if (act === 'edit') S.open = S.open === b.id ? null : b.id;
+    if (act === 'edit') { S.open = S.open === b.id ? null : b.id; if (S.open && shelfView(kind) === 'covers') setTimeout(() => $(SHELF[kind].body).querySelector('.covedit')?.scrollIntoView({ block: 'nearest', behavior: 'smooth' }), 30); }
     else if (act === 'close') S.open = null;
     else if (act === 'lookup') { el.disabled = true; el.textContent = '✨ Buscando…'; lookupItem(kind, { ...b, looked: false }).then(got => { showToast(got.length ? `Completado: ${got.join(', ')}` : 'No he encontrado más datos'); renderShelf(kind); }).catch(() => { showToast('No se pudo buscar ahora. Prueba más tarde.'); renderShelf(kind); }); return; }
     else if (act === 'start') { saveItem(kind, { ...b, status: 'reading', started: today }); showToast(`📖 Empiezas “${b.title}”`); }
@@ -2528,19 +2626,31 @@ function dayHTML(byCat) {
   return html + '</div>';
 }
 // --- Calendario del mes ---
-// ---------- Calendario: día, semana, mes y año (como un calendario de verdad) ----------
+// ---------- Calendario: día, varios días, mes, año y lista (como un calendario de verdad) ----------
 let calMode = (() => { try { return localStorage.getItem('cal-mode') || (innerWidth >= 820 ? 'semana' : 'mes'); } catch { return 'mes'; } })();
 const CAL_MODES = [['dia', 'Día'], ['semana', 'Semana'], ['mes', 'Mes'], ['ano', 'Año'], ['lista', 'Lista']];
+const lsNum = (k, d) => { try { const v = Number(localStorage.getItem(k)); return v > 0 ? v : d; } catch { return d; } };
+const lsSet = (k, v) => { try { localStorage.setItem(k, v); } catch {} };
+// Cuántos días se ven (pellizcando a lo ancho) y lo que mide cada hora (pellizcando a lo alto)
+let calN = Math.min(7, Math.max(2, lsNum('cal-n', innerWidth >= 820 ? 7 : 3))), calPX = Math.min(160, Math.max(24, lsNum('cal-px', 56)));
 let listDays = 30;
 const calDate = () => calSel || (monthOffset ? monthDate(todayISO(), monthOffset, 1) : todayISO());
+const calPrefs = () => ({ weekNums: true, noWeekend: false, ...(extra.prefs?.cal || {}) });
+const isWE = d => [0, 6].includes(parseISO(d).getDay());
+function gridDays() {
+  if (calMode === 'dia') return [calDate()];
+  if (calN >= 7) { const mon = mondayOf(calDate()), w = [...Array(7)].map((_, i) => addDays(mon, i)); return calPrefs().noWeekend ? w.filter(d => !isWE(d)) : w; }
+  return [...Array(calN)].map((_, i) => addDays(calDate(), i));
+}
+const ageOn = (t, d) => t.born && d ? Number(d.slice(0, 4)) - t.born : null;
 // Lo de un día: tareas (sin las grandes con partes), repeticiones futuras y rutinas
 function calDayItems(byCat, d) {
   const today = todayISO(), gh = ghostsIn(byCat, d, d)[d] || [];
-  const list = [...tasks.filter(t => byCat(t) && t.date === d && !children(t.id).length && true), ...gh.map(t => ({ ...t, ghost: true }))];
+  const list = [...tasks.filter(t => byCat(t) && t.date === d && !children(t.id).length), ...gh.map(t => ({ ...t, ghost: true }))];
   const timed = [], allDay = [];
   list.forEach(t => {
-    const par = t.parentId ? tasks.find(p => p.id === t.parentId) : null;
-    const it = { id: t.id, title: par ? par.title : t.title, sub: par ? t.title : '', color: colorVar(catOf(t.cat).color), done: !!t.done && !t.ghost, ghost: !!t.ghost, loc: t.loc || '' };
+    const par = t.parentId ? tasks.find(p => p.id === t.parentId) : null, age = ageOn(t, d);
+    const it = { id: t.id, title: (t.cat === 'cumple' ? '🎂 ' : '') + (par ? par.title : t.title) + (age ? ` (${age})` : ''), sub: par ? t.title : '', color: colorVar(catOf(t.cat).color), done: !!t.done && !t.ghost, ghost: !!t.ghost, loc: t.loc || '', flag: !!t.flag };
     if (!t.time) { allDay.push(it); return; }
     const s = toMin(t.time); let e = t.endTime ? toMin(t.endTime) : s + 60; if (e <= s) e += 1440;
     timed.push({ ...it, s, e });
@@ -2553,8 +2663,9 @@ function calDayItems(byCat, d) {
 }
 const laneIt = items => { const lanes = []; items.forEach(i => { let l = lanes.findIndex(end => end <= i.s); if (l < 0) { l = lanes.length; lanes.push(0); } lanes[l] = i.e; i.lane = l; }); return Math.max(1, lanes.length); };
 const calBlock = (i, top, nl, compact) => { const drag = !i.ghost && !i.routine;
-  return `<button class="cblk${i.done ? ' done' : ''}${i.ghost ? ' ghost' : ''}" style="top:${top(i.s)}px;height:${Math.max(18, (i.e - i.s) / 60 * HOUR_PX - 2)}px;left:calc(100% * ${i.lane / nl});width:calc(100% / ${nl} - 2px);--c:${i.color}" data-act="${i.routine ? 'rdetails' : 'details'}" data-id="${i.id}"${drag ? ` data-cdrag="${i.id}" data-s="${i.s}" data-e="${i.e}"` : ''}>
-  ${drag ? '<i class="cres t" data-ch="t"></i>' : ''}<b>${esc(i.title)}</b>${!compact && i.sub ? `<small>${esc(i.sub)}</small>` : ''}<small class="ctime">${hhmm(i.s)}${!compact && i.loc ? ' · 📍 ' + esc(i.loc) : ''}</small>${drag ? '<i class="cres b" data-ch="b"></i>' : ''}</button>`; };
+  return `<button class="cblk${i.done ? ' done' : ''}${i.ghost ? ' ghost' : ''}" style="top:${top(i.s)}px;height:${Math.max(18, (i.e - i.s) / 60 * calPX - 2)}px;left:calc(100% * ${i.lane / nl});width:calc(100% / ${nl} - 2px);--c:${i.color}" data-act="${i.routine ? 'rdetails' : 'details'}" data-id="${i.id}"${drag ? ` data-cdrag="${i.id}" data-s="${i.s}" data-e="${i.e}"` : ''}>
+  ${drag ? '<i class="cres t" data-ch="t"></i>' : ''}<b>${i.flag ? '🚩 ' : ''}${esc(i.title)}</b>${!compact && i.sub ? `<small>${esc(i.sub)}</small>` : ''}<small class="ctime">${hhmm(i.s)}${!compact && i.loc ? ' · 📍 ' + esc(i.loc) : ''}</small>${drag ? '<i class="cres b" data-ch="b"></i>' : ''}</button>`; };
+const wxTxt = (w, short) => w ? `<small class="wx" title="${w.max}° / ${w.min}°">${w.i}${short ? '' : ` ${w.max}°<span>/${w.min}°</span>`}</small>` : '';
 // Lista de lo que viene: día a día, sin rutinas
 function listCalHTML(byCat) {
   const today = todayISO(); let html = '', n = 0;
@@ -2562,21 +2673,22 @@ function listCalHTML(byCat) {
     const d = addDays(today, k), x = calDayItems(byCat, d), items = [...x.allDay.map(i => ({ ...i, s: -1 })), ...x.timed.filter(i => !i.routine)];
     if (!items.length) continue; n += items.length;
     const lbl = k === 0 ? 'Hoy' : k === 1 ? 'Mañana' : cap(parseISO(d).toLocaleDateString('es-ES', { weekday: 'long', day: 'numeric', month: 'long' }));
-    html += `<h2 class="group lday"><button type="button" data-act="calgo" data-d="${d}">${lbl}</button><span>${items.length}</span></h2><div class="clist">${items.map(i => `<button class="crow${i.done ? ' done' : ''}${i.ghost ? ' ghost' : ''}" style="--c:${i.color}" data-act="details" data-id="${i.id}"><span class="cwhen">${i.s < 0 ? 'todo el día' : `${hhmm(i.s)}<br><small>${hhmm(i.e % 1440)}</small>`}</span><span class="cwhat"><b>${esc(i.title)}</b>${i.sub ? `<small>${esc(i.sub)}</small>` : ''}${i.loc ? `<small>📍 ${esc(i.loc)}</small>` : ''}</span>${i.ghost ? '<small class="crep">↻</small>' : ''}</button>`).join('')}</div>`;
+    html += `<h2 class="group lday"><button type="button" data-act="calgo" data-d="${d}">${lbl}${wxTxt(wxOf(d))}</button><span>${items.length}</span></h2><div class="clist">${items.map(i => `<button class="crow${i.done ? ' done' : ''}${i.ghost ? ' ghost' : ''}" style="--c:${i.color}" data-act="details" data-id="${i.id}"><span class="cwhen">${i.s < 0 ? 'todo el día' : `${hhmm(i.s)}<br><small>${hhmm(i.e % 1440)}</small>`}</span><span class="cwhat"><b>${i.flag ? '🚩 ' : ''}${esc(i.title)}</b>${i.sub ? `<small>${esc(i.sub)}</small>` : ''}${i.loc ? `<small>📍 ${esc(i.loc)}</small>` : ''}</span>${i.ghost ? '<small class="crep">↻</small>' : ''}</button>`).join('')}</div>`;
   }
   if (!n) html = `<p class="empty">No tienes nada apuntado en los próximos ${listDays} días.</p>`;
   return html + `<button class="btn ghost block" data-act="calmore" style="margin-top:10px">Ver ${listDays + 30 > 365 ? 'más' : '30 días más'}</button>`;
 }
+// Rejilla de horas (arriba lo que tiene hora; debajo, lo que no)
 function calGridHTML(byCat, days) {
-  const today = todayISO(), now = toMin(nowHM()), data = days.map(d => calDayItems(byCat, d)), all = data.flatMap(x => x.timed);
+  const today = todayISO(), now = toMin(nowHM()), data = days.map(d => calDayItems(byCat, d)), all = data.flatMap(x => x.timed), PX = calPX;
   const startH = Math.min(7, ...all.map(i => Math.floor(i.s / 60))), endH = Math.min(24, Math.max(23, ...all.map(i => Math.ceil(i.e / 60))));
-  const top = m => (m - startH * 60) / 60 * HOUR_PX, H = (endH - startH) * HOUR_PX, multi = days.length > 1;
-  const head = multi ? `<div class="cg-head"><span></span>${days.map(d => { const x = parseISO(d); return `<button class="cg-day${d === today ? ' today' : ''}" data-act="calgo" data-d="${d}"><span>${DAY_LETTER[x.getDay()]}</span><b>${x.getDate()}</b></button>`; }).join('')}</div>` : '';
-  const allDay = data.some(x => x.allDay.length) ? `<div class="cg-all"><span class="cg-lbl">todo el día</span>${data.map((x, k) => `<div class="cg-allcol">${x.allDay.map(i => `<button class="cchip${i.done ? ' done' : ''}${i.ghost ? ' ghost' : ''}" style="--c:${i.color}" data-act="details" data-id="${i.id}">${esc(i.title)}${!multi && i.sub ? ` · <small>${esc(i.sub)}</small>` : ''}</button>`).join('')}</div>`).join('')}</div>` : '';
-  let hours = ''; for (let h = startH; h <= endH; h++) hours += `<div class="tl2h" style="top:${(h - startH) * HOUR_PX}px"><span>${pad(h % 24)}:00</span></div>`;
+  const top = m => (m - startH * 60) / 60 * PX, H = (endH - startH) * PX, multi = days.length > 1, compact = days.length > 3;
+  const head = multi ? `<div class="cg-head"><span></span>${days.map(d => { const x = parseISO(d); return `<button class="cg-day${d === today ? ' today' : ''}" data-act="calgo" data-d="${d}"><span>${DAY_LETTER[x.getDay()]}</span><b>${x.getDate()}</b>${wxTxt(wxOf(d), compact)}</button>`; }).join('')}</div>` : '';
+  const allDay = `<div class="cg-all"><span class="cg-lbl">Sin hora</span>${data.map((x, k) => `<div class="cg-allcol" data-d="${days[k]}">${x.allDay.map(i => `<button class="cchip${i.done ? ' done' : ''}${i.ghost ? ' ghost' : ''}" style="--c:${i.color}" data-act="details" data-id="${i.id}"${i.ghost ? '' : ` data-cdrag="${i.id}" data-allday="1"`}>${i.flag ? '🚩 ' : ''}${esc(i.title)}${!multi && i.sub ? ` · <small>${esc(i.sub)}</small>` : ''}</button>`).join('')}</div>`).join('')}</div>`;
+  let hours = ''; for (let h = startH; h <= endH; h++) hours += `<div class="tl2h" style="top:${(h - startH) * PX}px"><span>${pad(h % 24)}:00</span></div>`;
   const cols = days.map((d, k) => { const t = data[k].timed, nl = laneIt(t);
-    return `<div class="cg-col${d === today ? ' today' : ''}" data-d="${d}" data-sh="${startH}">${d === today && now >= startH * 60 && now <= endH * 60 ? `<div class="tl2now" style="top:${top(now)}px;left:0"></div>` : ''}${t.map(i => calBlock(i, top, nl, multi)).join('')}</div>`; }).join('');
-  return `<div class="cgrid${multi ? ' week' : ''}" style="--n:${days.length}">${head}${allDay}<div class="cg-body" style="height:${H}px">${hours}<div class="cg-cols">${cols}</div></div></div>`;
+    return `<div class="cg-col${d === today ? ' today' : ''}" data-d="${d}" data-sh="${startH}">${d === today && now >= startH * 60 && now <= endH * 60 ? `<div class="tl2now" style="top:${top(now)}px;left:0"></div>` : ''}${t.map(i => calBlock(i, top, nl, compact)).join('')}</div>`; }).join('');
+  return `<div class="cgrid${multi ? ' week' : ''}${compact ? ' compact' : ''}" style="--n:${days.length}">${head}<div class="cg-body" style="height:${H}px">${hours}<div class="cg-cols">${cols}</div></div>${allDay}</div>`;
 }
 function yearCalHTML(byCat) {
   const base = parseISO(calDate()), y = base.getFullYear(), today = todayISO(), from = `${y}-01-01`, to = `${y}-12-31`;
@@ -2586,63 +2698,122 @@ function yearCalHTML(byCat) {
     for (let day = 1; day <= n; day++) { const d = `${y}-${pad(m + 1)}-${pad(day)}`; cells += `<button class="${d === today ? 'today' : ''}${busy.has(d) ? ' busy' : ''}" data-act="calgo" data-d="${d}">${day}</button>`; }
     return `<div class="ymonth"><button class="ymt" data-act="calmonth" data-d="${y}-${pad(m + 1)}-01">${cap(first.toLocaleDateString('es-ES', { month: 'long' }))}</button><div class="ygrid">${cells}</div></div>`; }).join('')}</div>`;
 }
+const gridLabel = () => calN >= 7 ? 'Semana' : `${calN} días`;
 function calendarHTML(byCat) {
-  const d = calDate(), x = parseISO(d), mon = mondayOf(d);
-  const fmt = (v, o) => parseISO(v).toLocaleDateString('es-ES', o);
-  const title = calMode === 'dia' ? cap(fmt(d, { weekday: 'long', day: 'numeric', month: 'long' }))
-    : calMode === 'semana' ? `${fmt(mon, { day: 'numeric', month: 'short' })} – ${fmt(addDays(mon, 6), { day: 'numeric', month: 'short', year: 'numeric' })}`
+  const d = calDate(), x = parseISO(d), days = calMode === 'dia' || calMode === 'semana' ? gridDays() : [];
+  const fmt = (v, o) => parseISO(v).toLocaleDateString('es-ES', o), wk = calPrefs().weekNums;
+  const title = calMode === 'dia' ? `${cap(fmt(d, { weekday: 'long', day: 'numeric', month: 'long' }))}${wxTxt(wxOf(d))}`
+    : calMode === 'semana' ? `${fmt(days[0], { day: 'numeric', month: 'short' })} – ${fmt(days[days.length - 1], { day: 'numeric', month: 'short', year: 'numeric' })}${wk && calN >= 7 ? ` <small class="wkn">S${isoWeek(days[0])}</small>` : ''}`
     : calMode === 'ano' ? String(x.getFullYear()) : '';
-  let html = `<div class="calbar"><div class="segs">${CAL_MODES.map(([m, l]) => `<button type="button" class="seg ${calMode === m ? 'on' : ''}" data-act="calmode" data-m="${m}">${l}</button>`).join('')}</div><button class="btn small" data-act="caltoday">Hoy</button></div>`;
+  let html = `<div class="calbar"><div class="segs">${CAL_MODES.map(([m, l]) => `<button type="button" class="seg ${calMode === m ? 'on' : ''}" data-act="calmode" data-m="${m}">${m === 'semana' ? gridLabel() : l}</button>`).join('')}</div><button class="btn small" data-act="caltoday">Hoy</button></div>`;
   if (calMode === 'mes') return html + monthCalHTML(byCat);
   if (calMode === 'lista') return html + listCalHTML(byCat);
   html += `<div class="weeknav"><button class="iconbtn" data-act="calprev" aria-label="Anterior">‹</button><strong>${title}</strong><button class="iconbtn" data-act="calnext" aria-label="Siguiente">›</button></div>`;
   if (calMode === 'ano') return html + yearCalHTML(byCat);
-  if (calMode === 'semana') return html + calGridHTML(byCat, [...Array(7)].map((_, i) => addDays(mon, i))) + '<p class="hint" style="text-align:center">Toca un hueco para apuntar algo · mantén pulsada una tarea para moverla de hora o de día, o tira de su borde · desliza para cambiar de semana</p>';
-  return html + calGridHTML(byCat, [d]) + '<p class="hint" style="text-align:center">Toca un hueco para apuntar algo · mantén pulsada una tarea para moverla, o tira de su borde para cambiar cuánto dura · desliza para cambiar de día</p>';
+  return html + calGridHTML(byCat, days) + `<p class="hint" style="text-align:center">Toca un hueco para apuntar algo, o mantén pulsado y arrastra para elegir las horas · mantén pulsada una tarea para moverla (o suéltala sin moverla para ver más opciones) · pellizca para ver más o menos ${calMode === 'dia' ? 'días' : 'días u horas'}</p>`;
 }
 function calNav(n) {
   const d = calDate();
   if (calMode === 'mes') { monthOffset += n; calSel = null; }
   else if (calMode === 'dia') calSel = addDays(d, n);
-  else if (calMode === 'semana') calSel = addDays(d, 7 * n);
+  else if (calMode === 'semana') calSel = addDays(d, (calN >= 7 ? 7 : calN) * n);
   else calSel = yearDate(d, n);
   if (calMode !== 'mes') syncMonth();
   render();
 }
 // El mes que se ve sigue al día elegido
 function syncMonth() { const a = parseISO(calSel || todayISO()), t = parseISO(todayISO()); monthOffset = (a.getFullYear() - t.getFullYear()) * 12 + a.getMonth() - t.getMonth(); }
+function setCalN(n) {
+  const was = calMode === 'dia' ? 1 : calN;
+  if (n === was) return false;
+  if (n <= 1) calMode = 'dia'; else { calMode = 'semana'; calN = n; }
+  lsSet('cal-mode', calMode); lsSet('cal-n', calN);
+  return true;
+}
+// Zoom de las horas, dejando quieto lo que está bajo los dedos
+function zoomHours(px, y) {
+  px = Math.round(Math.min(160, Math.max(24, px))); if (px === calPX) return;
+  const body = $('#list .cg-body'), yy = y ?? innerHeight / 2, off = body ? (yy - body.getBoundingClientRect().top) / calPX : 0;
+  calPX = px; lsSet('cal-px', px); render();
+  const nb = $('#list .cg-body'); if (nb) $('#scroller').scrollTop += nb.getBoundingClientRect().top + off * calPX - yy;
+}
 // Tocar un hueco del día o de la semana: nueva tarea a esa hora
 $('#list').addEventListener('click', e => {
   if (suppressClick) return;
-  const col = e.target.closest('.cg-col'); if (!col || suppressClick || e.target.closest('.cblk')) return;
-  const r = col.getBoundingClientRect(), m = Math.floor((+col.dataset.sh * 60 + (e.clientY - r.top) / HOUR_PX * 60) / 30) * 30;
+  const col = e.target.closest('.cg-col'); if (!col || e.target.closest('.cblk')) return;
+  const r = col.getBoundingClientRect(), m = Math.floor((+col.dataset.sh * 60 + (e.clientY - r.top) / calPX * 60) / 30) * 30;
   openForm(null, { date: col.dataset.d, time: hhmm(Math.max(0, Math.min(1410, m))) });
 });
-// Arrastrar en Día y Semana: mantener pulsado mueve (de hora y de día); los bordes cambian la duración
-let cDrag = null, cPress = null, cMoved = false;
+// --- Mantener pulsado en la Agenda ---
+// · Una tarea con hora: se mueve (de hora y de día; o abajo, a "Sin hora"). Sus bordes cambian lo que dura.
+// · Una tarea sin hora: se arrastra a la rejilla para darle hora.
+// · Un hueco: se arrastra para elegir de qué hora a qué hora es lo nuevo.
+// · Si sueltas sin mover: menú con más opciones.
+let cDrag = null, cPress = null, cMoved = false, cSel = null, pinch = null, pinchEnd = 0;
 const CSNAP = 15;
+const minAt = (col, y) => +col.dataset.sh * 60 + (y - col.getBoundingClientRect().top) / calPX * 60;
+const snapM = m => Math.round(m / CSNAP) * CSNAP;
+const colAt = (x, y) => [...document.querySelectorAll('#list .cg-col')].find(c => { const r = c.getBoundingClientRect(); return x >= r.left && x < r.right && (y === undefined || (y >= r.top && y <= r.bottom)); });
+const allColAt = (x, y) => [...document.querySelectorAll('#list .cg-allcol')].find(c => { const r = c.closest('.cg-all').getBoundingClientRect(), rc = c.getBoundingClientRect(); return x >= rc.left - 1 && x < rc.right + 1 && y >= r.top && y <= r.bottom; });
 function cBegin(p) {
-  const t = tasks.find(x => x.id === p.blk.dataset.cdrag); if (!t) return;
+  const el = p.blk || p.chip, t = tasks.find(x => x.id === el.dataset.cdrag); if (!t) return;
   navigator.vibrate?.(12); calSwipe = null;
-  const col = p.blk.closest('.cg-col');
-  cDrag = { el: p.blk, t, mode: p.mode || 'm', x0: p.x, y0: p.y, s0: +p.blk.dataset.s, e0: +p.blk.dataset.e, col, d0: col.dataset.d, sh: +col.dataset.sh };
-  p.blk.classList.add('dragging'); p.blk.style.left = '0'; p.blk.style.width = 'calc(100% - 2px)';
+  if (p.chip) {
+    const r = el.getBoundingClientRect(), ghost = el.cloneNode(true);
+    ghost.classList.add('cfloat'); ghost.style.cssText += `;left:${r.left}px;top:${r.top}px;width:${Math.max(120, r.width)}px`;
+    document.body.append(ghost); el.classList.add('lifted');
+    cDrag = { chip: el, ghost, t, mode: 'new', x0: p.x, y0: p.y, dx: p.x - r.left, dy: p.y - r.top, held: p.held };
+    return;
+  }
+  const col = el.closest('.cg-col');
+  cDrag = { el, t, mode: p.mode || 'm', x0: p.x, y0: p.y, s0: +el.dataset.s, e0: +el.dataset.e, col, d0: col.dataset.d, sh: +col.dataset.sh, held: p.held };
+  el.classList.add('dragging'); el.style.left = '0'; el.style.width = 'calc(100% - 2px)';
 }
+function selBegin(p) {
+  navigator.vibrate?.(12); calSwipe = null;
+  const m0 = Math.max(0, Math.min(1425, Math.floor(minAt(p.col, p.y) / CSNAP) * CSNAP)), el = document.createElement('div');
+  el.className = 'csel'; p.col.append(el);
+  cSel = { col: p.col, m0, s: m0, e: Math.min(1440, m0 + 60), el, moved: false };
+  selPaint();
+}
+function selPaint() { const c = cSel, sh = +c.col.dataset.sh; c.el.style.top = (c.s - sh * 60) / 60 * calPX + 'px'; c.el.style.height = (c.e - c.s) / 60 * calPX + 'px'; c.el.textContent = `${hhmm(c.s)}–${hhmm(c.e % 1440)}`; }
 $('#list').addEventListener('pointerdown', e => {
-  if (view !== 'semana' || e.button > 0) return;
-  const blk = e.target.closest('.cblk[data-cdrag]'); if (!blk) return;
-  if (e.target.dataset.ch) { e.preventDefault(); cBegin({ blk, mode: e.target.dataset.ch, x: e.clientX, y: e.clientY }); return; }
-  const p = { blk, x: e.clientX, y: e.clientY };
-  p.timer = setTimeout(() => { if (cPress === p) { cPress = null; cBegin(p); } }, HOLD_MS);
+  if (view !== 'semana' || e.button > 0 || pinch || !e.isPrimary) return;
+  const blk = e.target.closest('.cblk[data-cdrag]'), chip = e.target.closest('.cchip[data-cdrag]'), col = !blk && !chip && e.target.closest('.cg-col');
+  if (blk && e.target.dataset.ch) { e.preventDefault(); cBegin({ blk, mode: e.target.dataset.ch, x: e.clientX, y: e.clientY }); return; }
+  if (!blk && !chip && !col) return;
+  const p = { blk, chip, col, x: e.clientX, y: e.clientY, mouse: e.pointerType === 'mouse' };
+  p.timer = setTimeout(() => { if (cPress !== p) return; cPress = null; p.held = true; col ? selBegin(p) : cBegin(p); }, HOLD_MS);
   cPress = p;
 });
-const colAt = x => [...document.querySelectorAll('#list .cg-col')].find(c => { const r = c.getBoundingClientRect(); return x >= r.left && x < r.right; });
-document.addEventListener('touchmove', e => { if (cDrag) e.preventDefault(); }, { passive: false });
+document.addEventListener('touchmove', e => { if (cDrag || cSel || pinch) e.preventDefault(); }, { passive: false });
 document.addEventListener('pointermove', e => {
-  if (cPress && Math.hypot(e.clientX - cPress.x, e.clientY - cPress.y) > 8) { clearTimeout(cPress.timer); cPress = null; }
+  if (cPress && Math.hypot(e.clientX - cPress.x, e.clientY - cPress.y) > 8) {
+    const p = cPress; clearTimeout(p.timer); cPress = null;
+    // Con ratón no hace falta mantener: arrastrar ya mueve o elige las horas
+    if (p.mouse) p.col ? selBegin(p) : cBegin(p);
+  }
+  if (cSel) {
+    e.preventDefault(); tlAutoScroll(e.clientY);
+    const c = cSel, m = Math.max(0, Math.min(1440, snapM(minAt(c.col, e.clientY))));
+    if (Math.abs(m - c.m0) >= CSNAP) c.moved = true;
+    if (c.moved) { c.s = Math.min(c.m0, m); c.e = Math.max(c.m0 + CSNAP, m); }
+    selPaint(); return;
+  }
   const d = cDrag; if (!d) return;
   e.preventDefault(); tlAutoScroll(e.clientY);
-  const dm = Math.round((e.clientY - d.y0) / HOUR_PX * 60 / CSNAP) * CSNAP, len = d.e0 - d.s0;
+  if (Math.hypot(e.clientX - d.x0, e.clientY - d.y0) > 6) d.moved = true;
+  const all = $('#list .cg-all');
+  if (d.mode === 'new') {
+    d.ghost.style.left = e.clientX - d.dx + 'px'; d.ghost.style.top = e.clientY - d.dy + 'px';
+    const c = colAt(e.clientX, e.clientY);
+    document.querySelectorAll('#list .cg-col.drop').forEach(x => x !== c && x.classList.remove('drop')); c?.classList.add('drop');
+    d.ghost.dataset.t = c ? hhmm(Math.max(0, Math.min(1380, snapM(minAt(c, e.clientY))))) : '';
+    return;
+  }
+  const toAll = d.mode === 'm' ? allColAt(e.clientX, e.clientY) : null;
+  all?.classList.toggle('drop', !!toAll); d.toAll = toAll || null;
+  const dm = Math.round((e.clientY - d.y0) / calPX * 60 / CSNAP) * CSNAP, len = d.e0 - d.s0;
   let s = d.s0, en = d.e0;
   if (d.mode === 'm') {
     s = Math.max(0, Math.min(1440 - len, d.s0 + dm)); en = s + len;
@@ -2650,34 +2821,93 @@ document.addEventListener('pointermove', e => {
   } else if (d.mode === 't') s = Math.max(0, Math.min(d.e0 - CSNAP, d.s0 + dm));
   else en = Math.min(1440, Math.max(d.s0 + CSNAP, d.e0 + dm));
   d.s = s; d.e = en;
-  d.el.style.top = (s - d.sh * 60) / 60 * HOUR_PX + 'px';
-  d.el.style.height = Math.max(18, (en - s) / 60 * HOUR_PX - 2) + 'px';
-  const tm = d.el.querySelector('.ctime'); if (tm) tm.textContent = `${hhmm(s)}–${hhmm(en % 1440)}`;
+  d.el.style.top = (s - d.sh * 60) / 60 * calPX + 'px';
+  d.el.style.height = Math.max(18, (en - s) / 60 * calPX - 2) + 'px';
+  d.el.classList.toggle('leaving', !!toAll);
+  const tm = d.el.querySelector('.ctime'); if (tm) tm.textContent = toAll ? 'Sin hora' : `${hhmm(s)}–${hhmm(en % 1440)}`;
 }, { passive: false });
-function cDrop(cancel) {
-  if (cPress) { clearTimeout(cPress.timer); cPress = null; return; } // toque corto: se abren los detalles
-  const d = cDrag; if (!d) return; cDrag = null;
-  cMoved = true; suppressClick = true; setTimeout(() => { cMoved = false; suppressClick = false; }, 80);
-  d.el.classList.remove('dragging');
-  const date = d.col.dataset.d;
-  if (cancel || d.s === undefined || (d.s === d.s0 && d.e === d.e0 && date === d.d0)) { render(); return; }
-  const t = d.t, prev = { date: t.date, time: t.time, endTime: t.endTime };
-  t.date = date; t.time = hhmm(d.s); t.endTime = d.e >= 1440 ? '23:59' : hhmm(d.e);
+const quiet = () => { cMoved = true; suppressClick = true; setTimeout(() => { cMoved = false; suppressClick = false; }, 90); };
+function moveTaskTo(t, ch) {
+  const prev = { date: t.date, time: t.time, endTime: t.endTime };
+  Object.assign(t, ch); if (t.date) { t.inbox = false; t.someday = false; }
   store.put(t).catch(writeFailed);
-  const dl = date !== prev.date ? ` · ${cap(parseISO(date).toLocaleDateString('es-ES', { weekday: 'long', day: 'numeric' }))}` : '';
-  showToast(`${t.title}: ${t.time}–${t.endTime}${dl}`, () => { const cur = tasks.find(x => x.id === t.id) || t; Object.assign(cur, prev); store.put(cur).catch(writeFailed); });
+  const dl = t.date !== prev.date ? ` · ${cap(parseISO(t.date).toLocaleDateString('es-ES', { weekday: 'long', day: 'numeric' }))}` : '';
+  showToast(`${t.title}: ${t.time ? `${t.time}–${t.endTime}` : 'sin hora'}${dl}`, () => { const cur = tasks.find(x => x.id === t.id) || t; Object.assign(cur, prev); store.put(cur).catch(writeFailed); });
   render();
 }
-document.addEventListener('pointerup', () => cDrop(false));
-document.addEventListener('pointercancel', () => cDrop(true));
+function cDrop(e, cancel) {
+  if (cPress) { clearTimeout(cPress.timer); cPress = null; return; } // toque corto: detalles (o nueva tarea en un hueco)
+  if (cSel) {
+    const c = cSel; cSel = null; c.el.remove(); quiet();
+    if (!cancel) openForm(null, { date: c.col.dataset.d, time: hhmm(c.s), end: hhmm(c.e % 1440 || 1439) });
+    return;
+  }
+  const d = cDrag; if (!d) return; cDrag = null; quiet();
+  $('#list .cg-all')?.classList.remove('drop');
+  if (d.mode === 'new') {
+    d.ghost.remove(); d.chip.classList.remove('lifted'); document.querySelectorAll('#list .cg-col.drop').forEach(x => x.classList.remove('drop'));
+    if (cancel) return;
+    if (!d.moved) { if (d.held) setTimeout(() => openCtx(d.t.id), 60); return; }
+    const c = colAt(e.clientX, e.clientY), a = !c && allColAt(e.clientX, e.clientY);
+    if (c) { const s = Math.max(0, Math.min(1380, snapM(minAt(c, e.clientY)))); moveTaskTo(d.t, { date: c.dataset.d, time: hhmm(s), endTime: hhmm(s + 60) }); }
+    else if (a && a.dataset.d !== d.t.date) moveTaskTo(d.t, { date: a.dataset.d });
+    return;
+  }
+  d.el.classList.remove('dragging', 'leaving');
+  if (cancel) { render(); return; }
+  if (!d.moved) { render(); if (d.held && d.mode === 'm') setTimeout(() => openCtx(d.t.id), 60); return; }
+  if (d.toAll) { moveTaskTo(d.t, { date: d.toAll.dataset.d, time: '', endTime: '' }); return; }
+  const date = d.col.dataset.d;
+  if (d.s === undefined || (d.s === d.s0 && d.e === d.e0 && date === d.d0)) { render(); return; }
+  moveTaskTo(d.t, { date, time: hhmm(d.s), endTime: d.e >= 1440 ? '23:59' : hhmm(d.e) });
+}
+document.addEventListener('pointerup', e => cDrop(e, false));
+document.addEventListener('pointercancel', e => cDrop(e, true));
+// Pellizcar: a lo ancho cambia cuántos días se ven; a lo alto, lo que mide cada hora
+$('#list').addEventListener('touchstart', e => {
+  if (view !== 'semana' || !['dia', 'semana'].includes(calMode) || e.touches.length !== 2 || !e.target.closest('.cgrid')) return;
+  const [a, b] = e.touches;
+  if (cPress) { clearTimeout(cPress.timer); cPress = null; }
+  if (cSel) { cSel.el.remove(); cSel = null; }
+  calSwipe = null;
+  pinch = { dx: Math.max(40, Math.abs(a.clientX - b.clientX)), dy: Math.max(40, Math.abs(a.clientY - b.clientY)), n: calMode === 'dia' ? 1 : calN, px: calPX, axis: null, tgts: [...new Set([...e.touches].map(t => t.target).concat(e.target))] };
+  // Los dedos siguen mandando sus eventos al elemento donde empezaron, aunque se repinte la Agenda: se escuchan ahí
+  pinch.tgts.forEach(t => { t.addEventListener('touchmove', pinchMove, { passive: false }); t.addEventListener('touchend', pinchStop); t.addEventListener('touchcancel', pinchStop); });
+}, { passive: true });
+let pinchTimer = 0, pinchNext = null;
+function pinchMove(e) {
+  if (!pinch || e.touches.length !== 2) return;
+  e.preventDefault();
+  const [a, b] = e.touches, rx = Math.abs(a.clientX - b.clientX) / pinch.dx, ry = Math.abs(a.clientY - b.clientY) / pinch.dy;
+  if (!pinch.axis) { const lx = Math.abs(Math.log(rx || 1)), ly = Math.abs(Math.log(ry || 1)); if (Math.max(lx, ly) < 0.12) return; pinch.axis = lx >= ly ? 'x' : 'y'; }
+  pinchNext = { rx, ry, my: (a.clientY + b.clientY) / 2 };
+  if (!pinchTimer) pinchTimer = setTimeout(pinchApply, 30);
+}
+function pinchApply() {
+  pinchTimer = 0; const q = pinchNext; if (!pinch || !q) return;
+  if (pinch.axis === 'x') { if (setCalN(Math.max(1, Math.min(7, Math.round(pinch.n / Math.max(0.1, q.rx)))))) render(); }
+  else if (pinch.axis === 'y') zoomHours(pinch.px * q.ry, q.my);
+}
+function pinchStop(e) {
+  if (!pinch || e.touches.length >= 2) return;
+  if (pinchTimer) { clearTimeout(pinchTimer); pinchApply(); }
+  pinch.tgts.forEach(t => { t.removeEventListener('touchmove', pinchMove); t.removeEventListener('touchend', pinchStop); t.removeEventListener('touchcancel', pinchStop); });
+  pinch = null; pinchNext = null; pinchEnd = Date.now(); quiet();
+}
+// En el ordenador (o con el trackpad del iPad): pellizcar en el trackpad = Ctrl + rueda
+$('#list').addEventListener('wheel', e => {
+  if (!e.ctrlKey || view !== 'semana' || !e.target.closest('.cgrid')) return;
+  e.preventDefault(); zoomHours(calPX * Math.exp(Math.max(-0.25, Math.min(0.25, -e.deltaY / 150))), e.clientY);
+}, { passive: false });
 // Deslizar a los lados para cambiar de día, semana, mes o año
 let calSwipe = null;
-$('#list').addEventListener('pointerdown', e => { if (view === 'semana' && calMode !== 'lista' && !e.target.closest('li.task, input, .wkscroll, .sscroll, .cres')) calSwipe = { x: e.clientX, y: e.clientY, t: Date.now() }; });
+$('#list').addEventListener('pointerdown', e => { if (view === 'semana' && calMode !== 'lista' && e.isPrimary && !e.target.closest('li.task, input, .wkscroll, .sscroll, .cres')) calSwipe = { x: e.clientX, y: e.clientY, t: Date.now() }; });
 $('#list').addEventListener('pointerup', e => {
-  const s = calSwipe; calSwipe = null; if (!s || view !== 'semana' || cDrag || cMoved) return;
+  const s = calSwipe; calSwipe = null; if (!s || view !== 'semana' || cDrag || cSel || cMoved || pinch || Date.now() - pinchEnd < 400) return;
   const dx = e.clientX - s.x, dy = e.clientY - s.y;
   if (Math.abs(dx) > 70 && Math.abs(dx) > Math.abs(dy) * 1.5 && Date.now() - s.t < 800) { suppressClick = true; setTimeout(() => { suppressClick = false; }, 60); calNav(dx < 0 ? 1 : -1); }
 });
+
 
 let agendaSel = null;
 function monthCalHTML(byCat) {
@@ -2688,18 +2918,20 @@ function monthCalHTML(byCat) {
   const sel = calSel && calSel.startsWith(ym) ? calSel : (monthOffset === 0 ? today : from);
   agendaSel = sel;
   const dayTasks = d => tasks.filter(t => byCat(t) && t.date === d).concat(gh[d] || []);
-  let cells = '';
-  for (let i = 0; i < lead; i++) cells += '<span></span>';
+  const cellL = [], wk = calPrefs().weekNums;
+  for (let i = 0; i < lead; i++) cellL.push('<span></span>');
   for (let day = 1; day <= n; day++) {
-    const d = `${ym}-${pad(day)}`, list = dayTasks(d), late = list.some(t => !t.done && d < today);
+    const d = `${ym}-${pad(day)}`, list = dayTasks(d), late = list.some(t => !t.done && d < today), w = wxOf(d);
     const dots = [...new Set(list.map(t => catOf(t.cat).color))].slice(0, 4).map(c => `<i style="background:${colorVar(c)}"></i>`).join('');
-    cells += `<button class="mcell ${d === today ? 'today' : ''} ${d === sel ? 'sel' : ''} ${late ? 'late' : ''}" data-act="calday" data-d="${d}"><span>${day}</span><span class="mdots">${dots}</span>${list.length > 4 ? `<em>${list.length}</em>` : ''}</button>`;
+    cellL.push(`<button class="mcell ${d === today ? 'today' : ''} ${d === sel ? 'sel' : ''} ${late ? 'late' : ''}" data-act="calday" data-d="${d}"><span>${day}</span>${w ? `<span class="mwx">${w.i}</span>` : ''}<span class="mdots">${dots}</span>${list.length > 4 ? `<em>${list.length}</em>` : ''}</button>`);
   }
+  let cells = '';
+  for (let i = 0; i < cellL.length; i += 7) cells += (wk ? `<i class="wn">${isoWeek(addDays(from, i - lead))}</i>` : '') + cellL.slice(i, i + 7).join('');
   const selReal = tasks.filter(t => byCat(t) && t.date === sel && (!t.done || showDone)).sort(sortTasks), selGh = gh[sel] || [];
   const title = cap(first.toLocaleDateString('es-ES', { month: 'long', year: 'numeric' }));
   return `<div class="weeknav"><button class="iconbtn" data-act="mprev" aria-label="Mes anterior">‹</button><strong>${title}</strong><button class="iconbtn" data-act="mnext" aria-label="Mes siguiente">›</button></div>
-    <div class="mcal"><b>L</b><b>M</b><b>X</b><b>J</b><b>V</b><b>S</b><b>D</b>${cells}</div>
-    <h2 class="group"><span>${cap(parseISO(sel).toLocaleDateString('es-ES', { weekday: 'long', day: 'numeric', month: 'long' }))}</span><button class="btn ghost small" data-act="calgo" data-d="${sel}">Ver el día ›</button></h2>
+    <div class="mcal${calPrefs().weekNums ? ' wk' : ''}">${calPrefs().weekNums ? '<b></b>' : ''}<b>L</b><b>M</b><b>X</b><b>J</b><b>V</b><b>S</b><b>D</b>${cells}</div>
+    <h2 class="group"><span>${cap(parseISO(sel).toLocaleDateString('es-ES', { weekday: 'long', day: 'numeric', month: 'long' }))}${wxTxt(wxOf(sel))}</span><button class="btn ghost small" data-act="calgo" data-d="${sel}">Ver el día ›</button></h2>
     ${selReal.length ? `<ul class="list">${listItemsHTML(selReal)}</ul>` : ''}
     ${selGh.length ? `<div style="display:grid;gap:6px;margin-top:6px">${selGh.map(t => `<button class="ghost" data-act="edit" data-id="${t.id}"><span class="dot" style="background:${colorVar(catOf(t.cat).color)}"></span><span><b>${esc(t.title)}</b>${t.time ? ' · ' + t.time : ''}</span><span>↻</span></button>`).join('')}</div>` : ''}
     ${!selReal.length && !selGh.length ? '<p class="free">Nada este día</p>' : ''}`;
@@ -2708,14 +2940,14 @@ function monthCalHTML(byCat) {
 function matrixHTML(byCat) {
   const lim = addDays(todayISO(), 2);
   const list = tasks.filter(t => byCat(t) && !t.done && !t.someday && !children(t.id).length);
-  const urgent = t => t.date && t.date <= lim, imp = t => t.prio === 'alta';
+  const urgent = t => t.date && t.date <= lim, imp = t => t.flag || t.prio === 'alta';
   const Q = [
     ['Hazlo ya', 'Urgente e importante', list.filter(t => urgent(t) && imp(t)), 'q1'],
     ['Prográmalo', 'Importante, sin prisa', list.filter(t => !urgent(t) && imp(t)), 'q2'],
     ['Hazlo rápido', 'Urgente, poco importante', list.filter(t => urgent(t) && !imp(t)), 'q3'],
     ['Suéltalo', 'Ni urgente ni importante', list.filter(t => !urgent(t) && !imp(t)), 'q4'],
   ];
-  return `<p class="hint" style="margin:0 2px 8px">Importante = prioridad alta. Urgente = vence en los próximos 2 días o está atrasada.</p><div class="matrix">${Q.map(([t, s, items, k]) => `<section class="mq ${k}"><h3>${t} <span>${items.length}</span></h3><p>${s}</p>
+  return `<p class="hint" style="margin:0 2px 8px">Importante = con bandera 🚩. Urgente = vence en los próximos 2 días o está atrasada.</p><div class="matrix">${Q.map(([t, s, items, k]) => `<section class="mq ${k}"><h3>${t} <span>${items.length}</span></h3><p>${s}</p>
     ${items.sort(sortTasks).slice(0, 12).map(x => `<div class="mqi"><button data-act="edit" data-id="${x.id}"><span class="dot" style="background:${colorVar(catOf(x.cat).color)}"></span>${esc(x.title)}${x.date ? `<em>${friendlyDate(x.date)}</em>` : ''}</button>${k === 'q4' && !x.date ? `<button class="chip" data-act="someday" data-id="${x.id}">Algún día</button>` : ''}</div>`).join('') || '<p class="free">Nada</p>'}
     ${items.length > 12 ? `<p class="free">y ${items.length - 12} más</p>` : ''}</section>`).join('')}</div>`;
 }
@@ -2737,17 +2969,21 @@ function renderDetails() {
     return;
   }
   const t = tasks.find(x => x.id === detailId); if (!t) return closeSheets();
-  const root = t.parentId ? tasks.find(p => p.id === t.parentId) || t : t, parts = children(root.id).sort(sortParts);
+  const root = detailRoot(), parts = children(root.id).sort(sortParts), proj = root.project ? projects.find(p => p.id === root.project) : null;
   const c = catOf(root.cat), pr = progressOf(root.id);
   $('#detailTitle').textContent = root.title;
   const when = t.date ? `${longDate(t.date)}${t.time ? ` · ${t.time}${t.endTime ? '–' + t.endTime : ''}` : ''}` : 'Sin fecha';
   const facts = [
     `<span class="catn"><span class="dot" style="background:${colorVar(c.color)}"></span>${esc(c.name)}</span>`,
     parts.length ? '' : `<span>📅 ${esc(when)}</span>`,
+    root.flag ? '<span class="flag">🚩 Con bandera</span>' : '',
+    t.status === 'doing' && !t.done ? '<span class="doing">▶ Haciendo</span>' : '',
     root.repeat ? `<span>↻ ${repeatLabel(root)}</span>` : '',
+    ageOn(root, t.date) ? `<span>🎂 cumple ${ageOn(root, t.date)}</span>` : '',
+    proj ? `<button type="button" class="projchip" data-golink="proj" data-id="${proj.id}">📁 ${esc(proj.name)}</button>` : '',
     (t.loc || root.loc) ? `<a class="dloc" href="https://maps.apple.com/?q=${encodeURIComponent(t.loc || root.loc)}" target="_blank" rel="noopener">📍 ${esc(t.loc || root.loc)}</a>` : '',
     parts.length ? '' : `<span>⭐ ${t.parentId ? partPoints(t) : taskPoints(t)}</span>`,
-    ...(root.tags || []).map(x => `<span class="tagchip">@${esc(x)}</span>`),
+    ...(root.tags || []).map(x => `<button type="button" class="tagchip" data-dact="tag" data-t="${esc(x)}">@${esc(x)}</button>`),
   ].filter(Boolean).join('');
   body.innerHTML = `<div class="dfacts">${facts}</div>
     ${root.notes ? `<p class="dnotes">${esc(root.notes)}</p>` : ''}
@@ -2756,8 +2992,15 @@ function renderDetails() {
         <span><b>${esc(p.title)}</b><small>${p.date ? friendlyDate(p.date) : 'Sin fecha'}${p.time ? ' · ' + p.time : ''} · ⭐ ${partPoints(p)}</small></span></li>`).join('')}</ul>`
       : `<button class="btn primary block" type="button" data-dact="toggle" data-id="${t.id}">${t.done ? 'Marcar como pendiente' : '✓ Hecha'}</button>`}
     ${!t.done && !parts.length ? `<div class="chips dmove"><span class="label">Mover a</span>${t.date !== todayISO() ? `<button type="button" class="chip" data-dact="move" data-to="hoy" data-id="${t.id}">Hoy</button>` : ''}<button type="button" class="chip" data-dact="move" data-to="manana" data-id="${t.id}">Mañana</button><button type="button" class="chip" data-dact="move" data-to="lunes" data-id="${t.id}">El lunes</button>${t.date ? `<button type="button" class="chip" data-dact="move" data-to="none" data-id="${t.id}">Sin fecha</button>` : ''}</div>` : ''}
+    <div class="chips dmove"><button type="button" class="chip${root.flag ? ' on' : ''}" data-dact="flag" data-id="${root.id}">🚩 ${root.flag ? 'Quitar bandera' : 'Bandera'}</button>${!t.done && !parts.length ? `<button type="button" class="chip${t.status === 'doing' ? ' on' : ''}" data-dact="doing" data-id="${t.id}">${t.status === 'doing' ? '⏸ Ya no la hago' : '▶ La estoy haciendo'}</button>` : ''}<button type="button" class="chip" data-dact="dup" data-id="${t.id}">⧉ Duplicar</button></div>
+    ${photosHTML(root.photos || [], `data-ptask="${root.id}"`)}
+    ${linksHTML(root.links, { k: 'task', id: root.id })}
+    <div class="chips dmove"><label class="chip">📷 Foto<input type="file" accept="image/*" multiple hidden data-dphoto="${root.id}"></label><button type="button" class="chip" data-dact="draw" data-id="${root.id}">✏️ Dibujo</button><button type="button" class="chip" data-dact="link" data-id="${root.id}">🔗 Enlazar</button></div>
     <div class="grid2"><button class="btn" type="button" data-dact="edit" data-id="${root.id}">${PENCIL} Editar</button>${on('temporizador') && !t.done && !parts.length ? `<button class="btn" type="button" data-dact="timer" data-id="${t.id}">⏱ Concentrarme</button>` : '<span></span>'}</div>`;
+  hydrateImgs(body);
 }
+const detailRoot = () => { const t = tasks.find(x => x.id === detailId); return t ? (t.parentId ? tasks.find(p => p.id === t.parentId) || t : t) : null; };
+$('#detailBody').addEventListener('change', e => { const id = e.target.dataset.dphoto; if (id) { addPhotos(e.target.files, { kind: 'task', id }); e.target.value = ''; } });
 $('#detailBody').addEventListener('click', e => {
   const el = e.target.closest('[data-dact]'); if (!el) return;
   const { dact, id } = el.dataset;
@@ -2767,6 +3010,12 @@ $('#detailBody').addEventListener('click', e => {
   else if (dact === 'hedit') openHabit(id);
   else if (dact === 'move') { const t = tasks.find(x => x.id === id); if (t) { closeSheets(); moveTasks([t], el.dataset.to); } }
   else if (dact === 'timer') { closeSheets(); openTimer(id); }
+  else if (dact === 'flag') { const t = tasks.find(x => x.id === id); if (t) { setFlag(t, !t.flag); renderDetails(); } }
+  else if (dact === 'doing') { const t = tasks.find(x => x.id === id); if (t) { setStatus(t, t.status === 'doing' ? '' : 'doing'); renderDetails(); } }
+  else if (dact === 'dup') { closeSheets(); duplicateTask(id); }
+  else if (dact === 'draw') openDraw(null, async data => { const fid = await putFile(data, 'draw'); setPhotoList({ kind: 'task', id }, [...photoList({ kind: 'task', id }), fid]); renderDetails(); });
+  else if (dact === 'link') openLinkPicker({ k: 'task', id });
+  else if (dact === 'tag') { closeSheets(); searchTag(el.dataset.t); }
 });
 // Marcar varias partes a la vez (el círculo de un grupo): si están todas hechas, vuelven a pendientes
 function toggleMany(ids) {
@@ -2863,7 +3112,8 @@ const ckBtn = it => `<button class="ck${it.done ? ' on' : ''}" style="--c:${it.c
 const itemText = it => `<b>${esc(it.title)}${it.sub ? `<small class="tsub">${esc(it.sub)}</small>` : ''}</b>`;
 function hoyHTML() {
   const now = toMin(nowHM()), { items, extras, late } = hoyItems(hoyEdit);
-  let html = timerBannerHTML() + backupBannerHTML() + (on('repaso') ? reviewBannerHTML() : '') + (on('planificar') && !hoyEdit ? planBannerHTML() : '') + sleepPromptHTML() + moodPromptHTML();
+  const w = wxOf(todayISO());
+  let html = (w && !hoyEdit ? `<div class="wxline">${w.i} <b>${w.max}°</b> / ${w.min}° · ${esc(calPrefs().wx.name)}</div>` : '') + timerBannerHTML() + backupBannerHTML() + (hoyEdit ? '' : birthdayHTML()) + (on('repaso') ? reviewBannerHTML() : '') + (on('planificar') && !hoyEdit ? planBannerHTML() : '') + sleepPromptHTML() + moodPromptHTML();
   if (hoyEdit) return html + hoyEditHTML(items, extras);
   const pending = items.filter(i => !i.done).length + extras.filter(i => !i.done).length;
   if (on('bandeja')) html += inboxHTML();
@@ -2882,6 +3132,7 @@ function hoyHTML() {
   html += '</div><div class="hoyside">';
   if (extras.length) html += `<h2 class="group"><span>Extra</span><span>${extras.length}</span></h2><div class="xlist">${extras.sort((a, b) => a.done - b.done).map(x => row(x, x.done ? 'done' : '')).join('')}</div>`;
   if (late.length) html += `<h2 class="group late"><span>De otros días</span><span>${late.length}</span></h2><div class="latebar"><button class="chip" data-act="mvlate" data-to="hoy">Todas a hoy</button><button class="chip" data-act="mvlate" data-to="manana">A mañana</button><button class="chip" data-act="mvlate" data-to="none">Sin fecha</button></div><div class="xlist">${late.map(t => { const par = t.parentId ? tasks.find(p => p.id === t.parentId) : null; return row({ ids: [t.id], id: t.id, title: par ? par.title : t.title, sub: `${par ? t.title + ' · ' : ''}${friendlyDate(t.date).toLowerCase()}`, color: colorVar(catOf(t.cat).color), done: false }, 'late'); }).join('')}</div>`;
+  if (on('diario')) { const j = journalOf(todayISO()); html += `<button class="hableft" data-act="journal" data-d="${todayISO()}"><span>📓</span><span><b>Diario de hoy</b><small>${j && !journalEmpty(j) ? 'Ya has escrito · toca para seguir' : '¿Qué tal ha ido el día?'}</small></span><span class="go">›</span></button>`; }
   return html + '</div></div>';
 }
 // La línea de horas: cada hora mide lo mismo. En modo editar: tocar = cambiar la hora; mantener = arrastrar.
@@ -3061,10 +3312,745 @@ function sleepPromptHTML() {
       <button class="btn primary" data-act="slsave" data-id="${h.id}">Apuntar</button></div></section>`).join('');
 }
 
+// ---------- El tiempo (Open-Meteo: sin cuenta; solo se envía la ciudad elegida o unas coordenadas aproximadas) ----------
+const WX_ICON = c => c === 0 ? '☀️' : c <= 2 ? '🌤️' : c === 3 ? '☁️' : c <= 48 ? '🌫️' : c <= 57 ? '🌦️' : c <= 67 ? '🌧️' : c <= 77 ? '🌨️' : c <= 82 ? '🌧️' : c <= 86 ? '🌨️' : '⛈️';
+let wx = (() => { try { return JSON.parse(localStorage.getItem('mis-tareas-wx')) || null; } catch { return null; } })(), wxBusy = false;
+function wxOf(d) {
+  const p = calPrefs().wx; if (!p || !wx || wx.key !== `${p.lat},${p.lon}`) return null;
+  const v = wx.days?.[d]; return v ? { i: WX_ICON(v[0]), max: Math.round(v[1]), min: Math.round(v[2]) } : null;
+}
+async function wxRefresh(force) {
+  const p = calPrefs().wx; if (!p || wxBusy || !navigator.onLine) return;
+  const key = `${p.lat},${p.lon}`;
+  if (!force && wx && wx.key === key && Date.now() - wx.at < 3 * 3600e3) return;
+  wxBusy = true;
+  try {
+    const r = await fetch('https://api.open-meteo.com/v1/forecast?' + new URLSearchParams({ latitude: p.lat, longitude: p.lon, daily: 'weather_code,temperature_2m_max,temperature_2m_min', timezone: 'auto', forecast_days: '16' }));
+    if (!r.ok) throw new Error('tiempo ' + r.status);
+    const j = await r.json(), days = {};
+    (j.daily?.time || []).forEach((d, i) => { days[d] = [j.daily.weather_code[i], j.daily.temperature_2m_max[i], j.daily.temperature_2m_min[i]]; });
+    wx = { key, at: Date.now(), days }; lsSet('mis-tareas-wx', JSON.stringify(wx));
+    render();
+  } catch (e) { logError(e.message, 'tiempo'); } finally { wxBusy = false; }
+}
+function setCalPref(ch) { extra.prefs = { ...extra.prefs, cal: { ...calPrefs(), ...ch } }; store.saveExtra('prefs').catch(writeFailed); }
+// Ajustes del calendario: números de semana, fin de semana y el tiempo
+let wxFound = [], wxMsg = '';
+function renderCalPrefs() {
+  const P = calPrefs(), sw = (k, name, desc) => `<div class="secrow"><span><b>${name}</b><small>${desc}</small></span><button type="button" class="switch" role="switch" aria-checked="${!!P[k]}" data-cp="${k}" aria-label="${name}"></button></div>`;
+  $('#calPrefBody').innerHTML = `${sw('weekNums', 'Números de semana', 'En la Semana y en el Mes (S47…)')}${sw('noWeekend', 'Ocultar el fin de semana', 'La vista Semana enseña de lunes a viernes')}
+    <h4>El tiempo</h4>
+    ${P.wx ? `<div class="secrow"><span><b>📍 ${esc(P.wx.name)}</b><small>Sale en Hoy y en la Agenda (16 días)</small></span><button type="button" class="btn ghost small" data-cp="wxdel">Quitar</button></div>` : '<p class="hint">Elige tu ciudad y verás el tiempo de cada día en Hoy y en la Agenda. Solo se envía la ciudad (o tu zona aproximada) a Open-Meteo.</p>'}
+    <form class="partadd" id="wxForm"><input class="inp" type="search" id="wxCity" placeholder="Ciudad, p. ej. Madrid" autocomplete="off" enterkeyhint="search"><button class="btn" type="submit">Buscar</button></form>
+    ${wxFound.map((c, i) => `<button type="button" class="btn ghost block" data-cp="wxpick" data-i="${i}">${esc([c.name, c.admin1, c.country].filter(Boolean).join(', '))}</button>`).join('')}
+    ${wxMsg ? `<p class="hint">${esc(wxMsg)}</p>` : ''}
+    <button type="button" class="btn ghost block" data-cp="wxgeo">📍 Usar mi ubicación</button>
+    <h4>Atajos de teclado</h4>
+    <p class="hint">Con un teclado (iPad u ordenador): <b>T</b> hoy · <b>← →</b> antes / después · <b>N</b> nueva · <b>D S M A L</b> día, semana, mes, año, lista · <b>+ −</b> horas más grandes o más pequeñas · <b>1–6</b> pestañas · <b>/</b> buscar · <b>Esc</b> cerrar.</p>`;
+}
+$('#calPrefBody').addEventListener('click', e => {
+  const b = e.target.closest('[data-cp]'); if (!b) return;
+  const k = b.dataset.cp, P = calPrefs();
+  if (k === 'weekNums' || k === 'noWeekend') setCalPref({ [k]: !P[k] });
+  else if (k === 'wxdel') { setCalPref({ wx: null }); wx = null; }
+  else if (k === 'wxpick') { const c = wxFound[+b.dataset.i]; if (c) { setCalPref({ wx: { name: c.name, lat: +c.latitude.toFixed(2), lon: +c.longitude.toFixed(2) } }); wxFound = []; wxMsg = ''; wxRefresh(true); } }
+  else if (k === 'wxgeo') {
+    if (!navigator.geolocation) { wxMsg = 'Este dispositivo no deja usar la ubicación.'; renderCalPrefs(); return; }
+    wxMsg = 'Buscando dónde estás…'; renderCalPrefs();
+    navigator.geolocation.getCurrentPosition(pos => { setCalPref({ wx: { name: 'Mi zona', lat: +pos.coords.latitude.toFixed(2), lon: +pos.coords.longitude.toFixed(2) } }); wxMsg = ''; wxRefresh(true); renderCalPrefs(); render(); },
+      () => { wxMsg = 'No se pudo usar la ubicación. Escribe tu ciudad.'; renderCalPrefs(); }, { maximumAge: 3600e3, timeout: 15000 });
+    return;
+  }
+  renderCalPrefs(); render();
+});
+$('#calPrefBody').addEventListener('submit', async e => {
+  if (e.target.id !== 'wxForm') return; e.preventDefault();
+  const q = $('#wxCity').value.trim(); if (!q) return;
+  wxMsg = 'Buscando…'; renderCalPrefs();
+  try {
+    const r = await fetch('https://geocoding-api.open-meteo.com/v1/search?' + new URLSearchParams({ name: q, count: '5', language: 'es', format: 'json' }));
+    wxFound = r.ok ? ((await r.json()).results || []) : []; wxMsg = wxFound.length ? 'Elige la tuya:' : 'No la encuentro. Prueba con otro nombre.';
+  } catch { wxFound = []; wxMsg = 'Sin conexión. Prueba más tarde.'; }
+  renderCalPrefs();
+});
+$('#openCalPrefs').addEventListener('click', () => { wxFound = []; wxMsg = ''; renderCalPrefs(); openSheet('#calPrefSheet'); });
+
+// ---------- Mini calendario del menú lateral (iPad y ordenador) ----------
+let miniOff = 0;
+function miniCalHTML() {
+  const t = parseISO(todayISO()), first = new Date(t.getFullYear(), t.getMonth() + miniOff, 1), y = first.getFullYear(), m = first.getMonth(), n = dim(y, m), lead = (first.getDay() + 6) % 7;
+  const today = todayISO(), sel = view === 'semana' && !query ? calDate() : '', ym = `${y}-${pad(m + 1)}`;
+  const busy = new Set(tasks.filter(x => !x.done && x.date && x.date.startsWith(ym)).map(x => x.date));
+  let cells = '<span></span>'.repeat(lead);
+  for (let day = 1; day <= n; day++) { const d = `${ym}-${pad(day)}`; cells += `<button type="button" class="${d === today ? 'today' : ''}${d === sel ? ' sel' : ''}${busy.has(d) ? ' busy' : ''}" data-mini="${d}">${day}</button>`; }
+  return `<div class="mmhead"><button type="button" data-mini="prev" aria-label="Mes anterior">‹</button><b>${cap(first.toLocaleDateString('es-ES', { month: 'long', year: 'numeric' }))}</b><button type="button" data-mini="next" aria-label="Mes siguiente">›</button></div><div class="mmgrid">${'LMXJVSD'.split('').map(c => `<i>${c}</i>`).join('')}${cells}</div>`;
+}
+$('#miniCal').addEventListener('click', e => {
+  const b = e.target.closest('[data-mini]'); if (!b) return;
+  const v = b.dataset.mini;
+  if (v === 'prev' || v === 'next') { miniOff += v === 'next' ? 1 : -1; $('#miniCal').innerHTML = miniCalHTML(); return; }
+  if (query) { query = ''; $('#searchInput').value = ''; $('#searchBar').hidden = true; $('#searchBtn').setAttribute('aria-pressed', 'false'); }
+  view = 'semana'; activeFilter = null; calSel = v; if (['ano', 'lista'].includes(calMode)) calMode = 'dia'; syncMonth(); $('#scroller').scrollTop = 0; render();
+});
+
+// ---------- Atajos de teclado (iPad con teclado u ordenador) ----------
+document.addEventListener('keydown', e => {
+  if (e.metaKey || e.ctrlKey || e.altKey) return;
+  const tg = e.target;
+  if (tg.closest?.('input, textarea, select, [contenteditable]')) { if (e.key === 'Escape') tg.blur(); return; }
+  if (!$('#drawPad').hidden) return;
+  if (!$('#photoView').hidden) { if (e.key === 'Escape') closeViewer(); return; }
+  const sheetOpen = document.querySelector('.sheet.show');
+  if (e.key === 'Escape') { if (sheetOpen) closeSheets(); return; }
+  if (sheetOpen || !$('#login').hidden || !loaded) return;
+  const k = e.key.length === 1 ? e.key.toLowerCase() : e.key;
+  const go = v => { if (query) { query = ''; $('#searchInput').value = ''; $('#searchBar').hidden = true; } view = v; activeFilter = null; showDone = false; $('#scroller').scrollTop = 0; render(); };
+  const agenda = m => { view = 'semana'; activeFilter = null; calMode = m; lsSet('cal-mode', m); if (m === 'mes') syncMonth(); render(); };
+  if (k === 't') { if (view === 'semana') { calSel = null; monthOffset = 0; render(); } else go('hoy'); }
+  else if (k === 'ArrowLeft' || k === 'ArrowRight') { if (view !== 'semana' || calMode === 'lista') return; calNav(k === 'ArrowRight' ? 1 : -1); }
+  else if (k === 'n') { view === 'habitos' ? openHabit(null) : view === 'notas' ? openNote(null) : $('#fab').click(); }
+  else if ('dsmal'.includes(k) && k.length === 1) agenda({ d: 'dia', s: 'semana', m: 'mes', a: 'ano', l: 'lista' }[k]);
+  else if (/^[1-6]$/.test(k)) go(['hoy', 'semana', 'habitos', 'sinfecha', 'notas', 'hechas'][+k - 1]);
+  else if (k === '/') $('#searchBtn').click();
+  else if (k === '+' || k === '=') { if (view === 'semana') zoomHours(calPX * 1.2); }
+  else if (k === '-') { if (view === 'semana') zoomHours(calPX / 1.2); }
+  else return;
+  e.preventDefault();
+});
+
+// ---------- Cumpleaños: la edad y el aviso del día antes ----------
+function birthdayHTML() {
+  const today = todayISO(), tm = addDays(today, 1), out = [], seen = new Set(), isB = t => t.cat === 'cumple';
+  [today, tm].forEach(d => {
+    [...tasks.filter(t => isB(t) && t.date === d), ...(ghostsIn(isB, d, d)[d] || [])].forEach(t => {
+      const k = t.id + d; if (seen.has(k)) return; seen.add(k);
+      const age = ageOn(t, d); out.push(`${d === today ? 'Hoy' : 'Mañana'}: ${t.title}${age ? ` (${age})` : ''}`);
+    });
+  });
+  return out.length ? `<div class="banner bday"><span>🎂 ${out.map(esc).join(' · ')}</span></div>` : '';
+}
+
+// ---------- Bandera y "Haciendo" ----------
+function setFlag(t, v) {
+  const s = snapshot([t]); t.flag = v; store.put(t).catch(writeFailed);
+  showToast(v ? `🚩 ${t.title}` : `Sin bandera: ${t.title}`, () => restore(s)); render();
+}
+function setStatus(t, st) {
+  if (st === 'done') { if (!t.done) { t.status = ''; toggle(t.id); } return; }
+  if (t.done) { t.status = st; toggle(t.id); return; }
+  const s = snapshot([t]); t.status = st; store.put(t).catch(writeFailed);
+  showToast(st === 'doing' ? `▶ Haciendo: ${t.title}` : `Por hacer: ${t.title}`, () => restore(s)); render();
+}
+
+// ---------- Duplicar y copiar a otro día ----------
+function duplicateTask(id, date) {
+  const t = tasks.find(x => x.id === id); if (!t) return;
+  const base = ({ id: _i, done, doneAt, spawned, pts, ptsDay, history, streak, best, gcal, focus, focusLog, siriKey, ...rest }) => structuredClone(rest);
+  const shift = date && t.date ? Math.round((parseISO(date) - parseISO(t.date)) / 864e5) : 0;
+  const copy = { ...base(t), id: uid(), done: false, created: Date.now(), date: date || t.date, status: '', photos: [] };
+  if (!copy.date) { copy.time = ''; copy.endTime = ''; copy.repeat = ''; }
+  else { copy.inbox = false; copy.someday = false; }
+  alignStart(copy);
+  const made = [copy];
+  if (!t.parentId) children(t.id).forEach((c, i) => made.push({ ...base(c), id: copy.id + '-' + uid(), parentId: copy.id, done: false, created: Date.now() + i + 1, date: c.date ? addDays(c.date, shift) : '', photos: [] }));
+  tasks.push(...made); store.putMany(made).catch(writeFailed);
+  showToast(`Copiada: ${t.title}${copy.date && copy.date !== t.date ? ' → ' + friendlyDate(copy.date).toLowerCase() : ''}`, () => {
+    const ids = new Set(made.map(m => m.id)); tasks = tasks.filter(x => !ids.has(x.id)); made.forEach(m => store.remove(m.id).catch(writeFailed));
+  });
+  render();
+}
+
+// ---------- Menú al mantener pulsada una tarea ----------
+let ctxId = null;
+function openCtx(id) { if (!tasks.some(x => x.id === id)) return; ctxId = id; renderCtx(); openSheet('#ctxSheet'); }
+function renderCtx() {
+  const t = tasks.find(x => x.id === ctxId); if (!t) return closeSheets();
+  const parts = children(t.id).length, b = (a, icon, label, cls = '') => `<button type="button" class="${cls}" data-ctx="${a}"><span class="mi">${icon}</span>${label}</button>`;
+  $('#ctxTitle').textContent = t.title;
+  $('#ctxBody').innerHTML = [
+    parts ? '' : b('done', '✓', t.done ? 'Marcar como pendiente' : 'Marcar como hecha'),
+    b('flag', '🚩', t.flag ? 'Quitar la bandera' : 'Poner bandera'),
+    !t.done && !parts ? b('doing', t.status === 'doing' ? '⏸' : '▶', t.status === 'doing' ? 'Ya no la estoy haciendo' : 'La estoy haciendo') : '',
+    b('dup', '⧉', 'Duplicar'),
+    `<label class="ctxdate"><span class="mi">📅</span>Copiar a otro día…<input type="date" data-ctxd="copy" aria-label="Copiar a otro día"></label>`,
+    `<label class="ctxdate"><span class="mi">↪</span>Mover a otro día…<input type="date" data-ctxd="move" value="${t.date || ''}" aria-label="Mover a otro día"></label>`,
+    b('edit', '✎', 'Editar'),
+    b('del', '🗑', 'Borrar', 'danger'),
+  ].join('');
+}
+$('#ctxBody').addEventListener('click', e => {
+  const lab = e.target.closest('.ctxdate');
+  if (lab) { if (e.target.tagName !== 'INPUT') { const i = lab.querySelector('input'); try { i.showPicker(); } catch { i.focus(); } } return; }
+  const b = e.target.closest('[data-ctx]'); if (!b) return;
+  const t = tasks.find(x => x.id === ctxId); if (!t) return;
+  const a = b.dataset.ctx;
+  if (a === 'edit') { openForm(t.parentId && !children(t.id).length ? t.id : t.id); return; }
+  closeSheets();
+  if (a === 'done') toggle(t.id);
+  else if (a === 'flag') setFlag(t, !t.flag);
+  else if (a === 'doing') setStatus(t, t.status === 'doing' ? '' : 'doing');
+  else if (a === 'dup') duplicateTask(t.id);
+  else if (a === 'del') remove(t.id);
+});
+$('#ctxBody').addEventListener('change', e => {
+  const k = e.target.dataset.ctxd; if (!k || !e.target.value) return;
+  const t = tasks.find(x => x.id === ctxId); if (!t) return;
+  closeSheets();
+  if (k === 'copy') duplicateTask(t.id, e.target.value);
+  else if (e.target.value !== t.date) moveTaskTo(t, { date: e.target.value });
+});
+
+// ---------- Mantener pulsado en las listas: menú; en el Mes y en el Tablero, además, arrastrar ----------
+let lpPress = null, lift = null;
+$('#list').addEventListener('pointerdown', e => {
+  if (e.button > 0 || hoyEdit || !e.isPrimary) return;
+  const el = e.target.closest('li.task[data-id], .kcard[data-id]'); if (!el || e.target.closest('.check, input')) return;
+  const p = { el, id: el.dataset.id, x: e.clientX, y: e.clientY, card: el.classList.contains('kcard') };
+  p.timer = setTimeout(() => { if (lpPress === p) { lpPress = null; liftBegin(p); } }, HOLD_MS + 60);
+  lpPress = p;
+});
+function liftBegin(p) {
+  swipe = null; navigator.vibrate?.(12);
+  p.el.classList.add('held');
+  const drag = p.card || (view === 'semana' && calMode === 'mes');
+  lift = { ...p, moved: false };
+  if (drag) {
+    const r = p.el.getBoundingClientRect(), g = document.createElement('div');
+    g.className = 'liftghost'; g.textContent = tasks.find(x => x.id === p.id)?.title || '';
+    g.style.cssText = `left:${r.left}px;top:${r.top}px;width:${Math.min(r.width, 280)}px`;
+    document.body.append(g); lift.ghost = g; lift.dx = p.x - r.left; lift.dy = p.y - r.top;
+  }
+}
+const liftTarget = (x, y, card) => { const el = document.elementFromPoint(x, y); return el?.closest(card ? '.kcol' : '.mcell'); };
+document.addEventListener('touchmove', e => { if (lift?.ghost) e.preventDefault(); }, { passive: false });
+document.addEventListener('pointermove', e => {
+  if (lpPress && Math.hypot(e.clientX - lpPress.x, e.clientY - lpPress.y) > 8) { clearTimeout(lpPress.timer); lpPress = null; }
+  if (!lift?.ghost) return;
+  e.preventDefault();
+  if (Math.hypot(e.clientX - lift.x, e.clientY - lift.y) > 6) lift.moved = true;
+  lift.ghost.style.left = e.clientX - lift.dx + 'px'; lift.ghost.style.top = e.clientY - lift.dy + 'px';
+  tlAutoScroll(e.clientY);
+  const bd = $('#list .board'); if (bd && lift.card) { if (e.clientX < 40) bd.scrollBy(-14, 0); else if (e.clientX > innerWidth - 40) bd.scrollBy(14, 0); }
+  const tg = liftTarget(e.clientX, e.clientY, lift.card);
+  document.querySelectorAll('#list .drop').forEach(x => x !== tg && x.classList.remove('drop')); tg?.classList.add('drop');
+}, { passive: false });
+function liftEnd(e, cancel) {
+  if (lpPress) { clearTimeout(lpPress.timer); lpPress = null; return; }
+  const L = lift; if (!L) return; lift = null;
+  L.el.classList.remove('held'); L.ghost?.remove(); document.querySelectorAll('#list .drop').forEach(x => x.classList.remove('drop'));
+  quiet(); if (cancel) return;
+  const t = tasks.find(x => x.id === L.id); if (!t) return;
+  if (!L.moved) { setTimeout(() => openCtx(t.id), 60); return; }
+  const tg = liftTarget(e.clientX, e.clientY, L.card); if (!tg) return;
+  if (L.card) { const st = tg.dataset.st; if (st && st !== (t.done ? 'done' : t.status === 'doing' ? 'doing' : 'todo')) setStatus(t, st === 'todo' ? '' : st); }
+  else if (tg.dataset.d && tg.dataset.d !== t.date) { calSel = tg.dataset.d; moveTaskTo(t, { date: tg.dataset.d }); }
+}
+document.addEventListener('pointerup', e => liftEnd(e, false));
+document.addEventListener('pointercancel', e => liftEnd(e, true));
+
+// ---------- Listas: sin fecha, con bandera, algún día, compra, proyectos, listas inteligentes y etiquetas ----------
+let listSel = null;
+const boards = (() => { try { return new Set(JSON.parse(localStorage.getItem('mis-tareas-boards') || '[]')); } catch { return new Set(); } })();
+const saveBoards = () => lsSet('mis-tareas-boards', JSON.stringify([...boards]));
+function listHit(k, t) {
+  if (k === 'sinfecha') return !t.date && !t.inbox && !t.someday;
+  if (k === 'someday') return !t.date && !!t.someday;
+  if (k === 'flag') return !!t.flag;
+  if (k.startsWith('p:')) return t.project === k.slice(2);
+  if (k.startsWith('t:')) return (t.tags || []).includes(k.slice(2));
+  if (k.startsWith('f:')) { const f = extra.filters.find(x => x.id === k.slice(2)); return !!f && filterHit(f, t); }
+  return false;
+}
+function listTitle(k) {
+  if (!k) return 'Listas';
+  if (k === 'sinfecha') return 'Sin fecha'; if (k === 'someday') return 'Algún día'; if (k === 'flag') return 'Con bandera'; if (k === 'compra') return 'Compra';
+  if (k.startsWith('p:')) return projects.find(p => p.id === k.slice(2))?.name || 'Proyecto';
+  if (k.startsWith('t:')) return '@' + k.slice(2);
+  if (k.startsWith('f:')) return extra.filters.find(x => x.id === k.slice(2))?.name || 'Lista';
+  return 'Listas';
+}
+const projStats = id => { const r = tasks.filter(t => t.project === id && !t.parentId); return { done: r.filter(t => t.done).length, total: r.length }; };
+const dueTxt = d => { const n = Math.round((parseISO(d) - parseISO(todayISO())) / 864e5); return n === 0 ? 'es hoy' : n === 1 ? 'mañana' : n > 0 ? `faltan ${n} días` : `hace ${-n} días`; };
+function projCardHTML(p) {
+  const s = projStats(p.id), pct = s.total ? Math.round(s.done / s.total * 100) : 0, nn = notes.filter(n => n.project === p.id).length;
+  return `<button class="pcard2${p.done ? ' done' : ''}" data-act="lsel" data-k="p:${p.id}" style="--c:${colorVar(p.color)}"><b>${esc(p.name)}</b>
+    <small>${[p.due && !p.done ? `📅 ${dueTxt(p.due)}` : '', `${s.done}/${s.total} tareas`, nn ? `${nn} ${nn === 1 ? 'nota' : 'notas'}` : ''].filter(Boolean).join(' · ')}</small>
+    <span class="pbar"><i style="width:${pct}%"></i></span></button>`;
+}
+function listasHubHTML(byCat) {
+  const n = k => tasks.filter(t => !t.done && byCat(t) && listHit(k, t)).length;
+  const card = (k, icon, name, cnt, cls = '') => `<button class="lcard ${cls}" data-act="lsel" data-k="${k}"><span class="li">${icon}</span><b>${cnt}</b><span>${name}</span></button>`;
+  let h = `<div class="lcards">${card('sinfecha', '📥', 'Sin fecha', n('sinfecha'))}${card('flag', '🚩', 'Con bandera', n('flag'), 'red')}${card('someday', '💭', 'Algún día', n('someday'))}${card('compra', '🛒', 'Compra', shop.filter(s => !s.done).length)}</div>`;
+  const ps = projects.filter(p => !p.done).sort((a, b) => (a.due || '9999').localeCompare(b.due || '9999') || a.order - b.order), doneP = projects.filter(p => p.done);
+  h += `<h2 class="group"><span>Proyectos</span><button class="btn ghost small" data-act="pnew">+ Nuevo</button></h2>`;
+  h += ps.length ? `<div class="plist">${ps.map(projCardHTML).join('')}</div>` : '<p class="hint" style="margin:0 2px 8px">Un proyecto junta las tareas y notas de algo grande: un trabajo, una mudanza, un viaje…</p>';
+  if (doneP.length) h += `<details class="box-card"><summary>Terminados (${doneP.length})</summary><div class="plist">${doneP.map(projCardHTML).join('')}</div></details>`;
+  h += `<h2 class="group"><span>Mis listas</span><button class="btn ghost small" data-act="fnew">+ Nueva</button></h2>`;
+  h += extra.filters.length ? `<div class="lrows">${extra.filters.map(f => `<button class="lrow" data-act="lsel" data-k="f:${f.id}"><span class="li">☰</span><span>${esc(f.name)}</span><b>${tasks.filter(t => filterMatch(f, t)).length}</b><span class="go">›</span></button>`).join('')}</div>`
+    : '<p class="hint" style="margin:0 2px 8px">Una lista inteligente se rellena sola: por ejemplo, lo de Estudio con bandera, o todo lo que tiene ubicación.</p>';
+  const tagc = {}; tasks.filter(t => !t.done).forEach(t => (t.tags || []).forEach(g => { tagc[g] = (tagc[g] || 0) + 1; }));
+  const tags = Object.keys(tagc).sort((a, b) => a.localeCompare(b, 'es'));
+  h += `<h2 class="group"><span>Etiquetas</span></h2>` + (tags.length ? `<div class="chips wrap">${tags.map(g => `<button class="chip" data-act="lsel" data-k="t:${esc(g)}">@${esc(g)} <small>${tagc[g]}</small></button>`).join('')}</div>`
+    : '<p class="hint" style="margin:0 2px 8px">Escribe @algo en una tarea (p. ej. @ordenador o @llamar) para agruparlas aquí.</p>');
+  return h;
+}
+function listViewHTML(byCat) {
+  const k = listSel;
+  const head = (board) => `<div class="lhead"><button class="btn ghost small" data-act="lback">‹ Listas</button>${board !== undefined ? `<div class="segs mini"><button type="button" class="seg ${board ? '' : 'on'}" data-act="lboard" data-v="0">Lista</button><button type="button" class="seg ${board ? 'on' : ''}" data-act="lboard" data-v="1">Tablero</button></div>` : ''}</div>`;
+  if (k === 'compra') return { html: head() + shopHTML(), count: 0, doneCount: 0 };
+  const p = k.startsWith('p:') ? projects.find(x => x.id === k.slice(2)) : null;
+  if (k.startsWith('p:') && !p) { listSel = null; return { html: listasHubHTML(byCat), count: 0, doneCount: 0 }; }
+  const board = boards.has(k), hit = tasks.filter(t => byCat(t) && listHit(k, t));
+  const pend = hit.filter(t => !t.done).sort(sortTasks), done = hit.filter(t => t.done).sort((a, b) => (b.doneAt || 0) - (a.doneAt || 0));
+  let html = head(board) + (p ? projHeadHTML(p) : '');
+  if (board) html += boardHTML(pend, done);
+  else {
+    if (!pend.length) html += `<div class="empty"><strong>${p ? 'Sin tareas pendientes' : 'Nada por aquí'}</strong><span>Pulsa + para añadir una.</span></div>`;
+    else html += k === 'sinfecha' || k === 'someday' ? `<ul class="list">${listItemsHTML(pend)}</ul>` : groupedOrFlat(pend);
+    if (showDone && done.length) html += `<h2 class="group"><span>Hechas</span><span>${done.length}</span></h2><ul class="list">${done.slice(0, 50).map(taskHTML).join('')}</ul>`;
+  }
+  if (p) {
+    const pn = notes.filter(n => n.project === p.id).sort((a, b) => b.updated - a.updated);
+    html += `<h2 class="group"><span>Notas del proyecto</span><button class="btn ghost small" data-act="pnote" data-id="${p.id}">+ Nota</button></h2>${pn.length ? `<div class="ngrid">${pn.map(noteCardHTML).join('')}</div>` : '<p class="hint" style="margin:0 2px">Apuntes, ideas, fotos… todo lo del proyecto en un sitio.</p>'}`;
+  }
+  return { html, count: pend.length, doneCount: board ? 0 : done.length };
+}
+function projHeadHTML(p) {
+  const s = projStats(p.id), pct = s.total ? Math.round(s.done / s.total * 100) : 0;
+  return `<div class="phead" style="--c:${colorVar(p.color)}"><div class="pht"><b>${p.done ? '✓ ' : ''}${esc(p.name)}</b><button class="iconbtn" data-act="pedit" data-id="${p.id}" aria-label="Editar proyecto">${PENCIL}</button></div>
+    ${p.due ? `<small>📅 ${longDate(p.due)}${p.done ? '' : ' · ' + dueTxt(p.due)}</small>` : ''}
+    <div class="dprog"><span class="pbar"><i style="width:${pct}%"></i></span>${s.done}/${s.total} tareas · ${pct}%</div>
+    ${p.notes ? `<p class="dnotes">${esc(p.notes)}</p>` : ''}</div>`;
+}
+// --- Tablero: Por hacer · Haciendo · Hecho ---
+function boardHTML(pend, done) {
+  const ids = new Set(pend.map(t => t.id)), roots = l => l.filter(t => !t.parentId || !ids.has(t.parentId));
+  const todo = roots(pend).filter(t => t.status !== 'doing'), doing = roots(pend).filter(t => t.status === 'doing'), fin = roots(done).slice(0, 30);
+  const card = t => {
+    const par = t.parentId ? tasks.find(x => x.id === t.parentId) : null, pr = progressOf(t.id);
+    const meta = [t.date ? friendlyDate(t.date) : '', t.time || '', pr.total ? `${pr.done}/${pr.total}` : '', ...(t.tags || []).map(g => '@' + g)].filter(Boolean).join(' · ');
+    return `<div class="kcard${t.done ? ' done' : ''}" data-act="details" data-id="${t.id}" style="--c:${colorVar(catOf(t.cat).color)}"><b>${t.flag ? '🚩 ' : ''}${esc(par ? par.title : t.title)}</b>${par ? `<small>${esc(t.title)}</small>` : ''}${meta ? `<small>${esc(meta)}</small>` : ''}</div>`;
+  };
+  return `<div class="board">${[['todo', 'Por hacer', todo], ['doing', 'Haciendo', doing], ['done', 'Hecho', fin]].map(([st, name, l]) =>
+    `<section class="kcol" data-st="${st}"><h3>${name} <span>${l.length}</span></h3>${l.map(card).join('') || '<p class="free">Nada</p>'}</section>`).join('')}</div>
+    <p class="hint" style="text-align:center">Mantén pulsada una tarjeta y llévala a otra columna (o suéltala sin moverla para ver más opciones).</p>`;
+}
+// --- Proyectos ---
+let projId = null, projColor = 'azul', projDelArmed = false;
+function openProject(id) {
+  const p = id ? projects.find(x => x.id === id) : null;
+  projId = p ? p.id : null; projColor = p ? p.color : COLORS[projects.length % COLORS.length]; projDelArmed = false;
+  $('#projTitle').textContent = p ? 'Editar proyecto' : 'Nuevo proyecto';
+  $('#projName').value = p ? p.name : ''; $('#projDue').value = p ? p.due : ''; $('#projNotes').value = p ? p.notes : '';
+  $('#projDone').hidden = !p; $('#projDone').textContent = p?.done ? 'Volver a abrirlo' : '✓ Proyecto terminado';
+  $('#projDel').hidden = !p; $('#projDel').textContent = 'Borrar proyecto';
+  renderProjForm(); openSheet('#projSheet');
+  if (!p) setTimeout(() => $('#projName').focus(), 60);
+}
+function renderProjForm() {
+  $('#projColors').innerHTML = COLORS.map(c => `<button type="button" class="swatch${projColor === c ? ' on' : ''}" data-pc="${c}" style="background:${colorVar(c)}" aria-label="${c}"></button>`).join('');
+  $('#projDueText').textContent = $('#projDue').value ? longDate($('#projDue').value) : 'Sin fecha límite';
+}
+$('#projColors').addEventListener('click', e => { const b = e.target.closest('[data-pc]'); if (b) { projColor = b.dataset.pc; renderProjForm(); } });
+$('#projDue').addEventListener('change', renderProjForm);
+$('#projSheet').addEventListener('submit', e => {
+  e.preventDefault();
+  const name = $('#projName').value.trim(); if (!name) { $('#projName').focus(); return; }
+  const old = projId ? projects.find(x => x.id === projId) : null;
+  const p = { ...(old || { id: 'p' + uid(), created: Date.now(), order: Date.now(), done: false }), name, color: projColor, due: $('#projDue').value, notes: $('#projNotes').value.trim() };
+  saveRow('projects', p); closeSheets();
+  if (!old) { view = 'sinfecha'; listSel = 'p:' + p.id; $('#scroller').scrollTop = 0; }
+  render();
+});
+$('#projDone').addEventListener('click', () => { const p = projects.find(x => x.id === projId); if (!p) return; saveRow('projects', { ...p, done: !p.done }); closeSheets(); showToast(p.done ? `Abierto otra vez: ${p.name}` : `🎉 ¡Proyecto terminado! ${p.name}`); render(); });
+$('#projDel').addEventListener('click', () => {
+  const p = projects.find(x => x.id === projId); if (!p) return;
+  if (!projDelArmed) { projDelArmed = true; $('#projDel').textContent = 'Toca otra vez: las tareas y notas se quedan, solo sin proyecto'; return; }
+  const tl = tasks.filter(t => t.project === p.id), nl = notes.filter(n => n.project === p.id), ts = snapshot(tl);
+  tl.forEach(t => { t.project = ''; }); if (tl.length) store.putMany(tl).catch(writeFailed);
+  nl.forEach(n => saveRow('notes', { ...n, project: '' }));
+  dropRow('projects', p.id); closeSheets(); if (listSel === 'p:' + p.id) listSel = null;
+  showToast(`Proyecto borrado: ${p.name}`, () => { saveRow('projects', p); restore(ts); nl.forEach(n => saveRow('notes', n)); });
+  render();
+});
+function projOptions(sel) { return `<option value="">Sin proyecto</option>` + projects.filter(p => !p.done || p.id === sel).map(p => `<option value="${p.id}"${p.id === sel ? ' selected' : ''}>📁 ${esc(p.name)}</option>`).join(''); }
+
+// --- Compra ---
+let shopEdit = null;
+const shopRowHTML = s => `<div class="shoprow${s.done ? ' done' : ''}" style="--c:var(--accent)"><button class="check" data-act="shoptoggle" data-id="${s.id}" aria-label="${s.done ? 'Sacar del carro' : 'Al carro'}: ${esc(s.name)}">${TICK('var(--surface)')}</button><span class="sn" data-act="shopedit" data-id="${s.id}">${esc(s.name)}</span></div>`
+  + (shopEdit === s.id ? `<div class="shopedit"><span class="label">¿En qué sección va?</span><div class="chips wrap">${SHOP_SECS.map(([k, i, n]) => `<button type="button" class="chip ${s.sec === k ? 'on' : ''}" data-act="shopsec" data-id="${s.id}" data-sec="${k}">${i} ${n}</button>`).join('')}</div><button type="button" class="btn danger small" data-act="shopdel" data-id="${s.id}">Quitar de la lista</button></div>` : '');
+function shopHTML() {
+  const pend = shop.filter(s => !s.done), done = shop.filter(s => s.done);
+  let h = `<form class="quick" id="shopForm"><input class="inp" type="text" id="shopInput" placeholder="Añadir… (varias con comas: leche, pan, huevos)" aria-label="Añadir a la compra" autocomplete="off" enterkeyhint="done"><button class="btn primary" type="submit">+</button></form>`;
+  if (!shop.length) return h + '<div class="empty"><strong>La lista está vacía</strong><span>Escribe lo que necesitas y lo ordeno por secciones del súper. Toca una cosa para cambiarla de sección.</span></div>';
+  SHOP_SECS.forEach(([sec, icon, name]) => {
+    const l = pend.filter(s => s.sec === sec).sort((a, b) => a.order - b.order); if (!l.length) return;
+    h += `<h2 class="group"><span>${icon} ${name}</span><span>${l.length}</span></h2><div class="shoplist">${l.map(shopRowHTML).join('')}</div>`;
+  });
+  if (!pend.length) h += '<p class="hint" style="text-align:center;margin:10px 0">¡Lo tienes todo! 🛒</p>';
+  if (done.length) h += `<h2 class="group"><span>🛒 En el carro</span><button class="btn ghost small" data-act="shopclear">Vaciar (${done.length})</button></h2><div class="shoplist">${done.sort((a, b) => a.order - b.order).map(shopRowHTML).join('')}</div>`;
+  return h;
+}
+document.addEventListener('submit', e => {
+  if (e.target.id !== 'shopForm') return;
+  e.preventDefault();
+  const names = $('#shopInput').value.split(/[,\n;]+/).map(s => s.trim()).filter(Boolean); if (!names.length) return;
+  const learned = extra.prefs.shopMap || {}, have = new Set(shop.filter(s => !s.done).map(s => shopKey(s.name))); let added = 0;
+  names.forEach((name, i) => {
+    const old = shop.find(s => s.done && shopKey(s.name) === shopKey(name));
+    if (have.has(shopKey(name))) return;
+    if (old) { saveRow('shop', { ...old, done: false, order: Date.now() + i }); added++; return; }
+    saveRow('shop', { id: 's' + uid(), name: cap(name), sec: shopSection(name, learned), done: false, order: Date.now() + i }); added++;
+  });
+  $('#shopInput').value = ''; if (!added) showToast('Ya estaba en la lista');
+  render(); $('#shopInput')?.focus();
+});
+
+// ---------- Tarjeta de nota (en Notas y en los proyectos) ----------
+const noteLines = body => String(body || '').split('\n').map(l => l.replace(/^\[ \] ?/, '☐ ').replace(/^\[x\] ?/i, '☑ ')).filter(l => l.trim());
+const noteName = n => n.journal ? `Diario · ${cap(parseISO(n.journal).toLocaleDateString('es-ES', { weekday: 'long', day: 'numeric', month: 'long' }))}` : (n.title || noteLines(n.body)[0] || 'Nota sin título');
+function noteCardHTML(n) {
+  const lines = noteLines(n.body).slice(n.title || n.journal ? 0 : 1, (n.title || n.journal ? 0 : 1) + 4), p = n.project ? projects.find(x => x.id === n.project) : null;
+  const when = new Date(n.updated).toLocaleDateString('es-ES', { day: 'numeric', month: 'short' });
+  return `<button class="ncard${n.journal ? ' journal' : ''}" data-act="nopen" data-id="${n.id}">${n.photos[0] ? `<img data-file="${n.photos[0]}" alt="">` : ''}
+    <b>${n.pinned ? '📌 ' : n.journal ? '📓 ' : ''}${esc(noteName(n))}</b>${lines.length ? `<span class="nprev">${lines.map(esc).join('<br>')}</span>` : ''}
+    <small>${[when, n.folder ? '📁 ' + esc(n.folder) : '', p ? esc(p.name) : '', n.photos.length > 1 ? `🖼 ${n.photos.length}` : ''].filter(Boolean).join(' · ')}</small></button>`;
+}
+
+// ---------- Fotos y dibujos: se guardan aparte (en "files") y se cargan cuando hacen falta ----------
+const fileCache = new Map();
+async function putFile(data, kind) {
+  const id = 'f' + uid(); fileCache.set(id, data);
+  if (store.fb) await store.fb.setDoc(store.ref('files', id), { data, kind, created: Date.now() });
+  else { try { localStorage.setItem('mis-tareas-file-' + id, data); } catch {} }
+  return id;
+}
+async function getFile(id) {
+  if (fileCache.has(id)) return fileCache.get(id);
+  let d = null;
+  try { if (store.fb) { const s = await store.fb.getDoc(store.ref('files', id)); d = s.exists() ? s.data().data : null; } else d = localStorage.getItem('mis-tareas-file-' + id); }
+  catch (e) { logError(e.message, 'foto'); }
+  if (d) fileCache.set(id, d);
+  return d;
+}
+function delFile(id) { fileCache.delete(id); (store.fb ? store.fb.deleteDoc(store.ref('files', id)) : Promise.resolve(localStorage.removeItem('mis-tareas-file-' + id))).catch(() => {}); }
+function hydrateImgs(root) { (root || document).querySelectorAll('img[data-file]:not([src])').forEach(async img => { const d = await getFile(img.dataset.file); if (d) img.src = d; else img.classList.add('missing'); }); }
+// Achica la foto (máx. 1400 px) para que quepa y cargue rápido
+async function imageToData(file) {
+  const url = URL.createObjectURL(file);
+  try {
+    const img = await new Promise((res, rej) => { const i = new Image(); i.onload = () => res(i); i.onerror = () => rej(new Error('No se pudo abrir la foto')); i.src = url; });
+    let s = Math.min(1, 1400 / Math.max(img.naturalWidth, img.naturalHeight)), q = 0.78;
+    for (let k = 0; k < 7; k++) {
+      const c = document.createElement('canvas'); c.width = Math.max(1, Math.round(img.naturalWidth * s)); c.height = Math.max(1, Math.round(img.naturalHeight * s));
+      const g = c.getContext('2d'); g.fillStyle = '#fff'; g.fillRect(0, 0, c.width, c.height); g.drawImage(img, 0, 0, c.width, c.height);
+      const d = c.toDataURL('image/jpeg', q); if (d.length < 900000) return d;
+      s *= 0.8; q = Math.max(0.5, q - 0.07);
+    }
+    throw new Error('La foto es demasiado grande');
+  } finally { URL.revokeObjectURL(url); }
+}
+// Dónde van las fotos: la nota que estás editando o una tarea
+function photoList(ctx) { return ctx.kind === 'note' ? (noteDraft?.photos || []) : (tasks.find(t => t.id === ctx.id)?.photos || []); }
+function setPhotoList(ctx, list) {
+  if (ctx.kind === 'note') { if (!noteDraft) return; noteDraft.photos = list; renderNotePhotos(); saveNote(); }
+  else { const t = tasks.find(x => x.id === ctx.id); if (!t) return; t.photos = list; store.put(t).catch(writeFailed); render(); }
+}
+async function addPhotos(files, ctx) {
+  const list = [...files].filter(f => f.type.startsWith('image/') || /\.(heic|heif|jpe?g|png|webp)$/i.test(f.name)); if (!list.length) return;
+  showToast(list.length > 1 ? `Guardando ${list.length} fotos…` : 'Guardando la foto…');
+  for (const f of list) {
+    try { const data = await imageToData(f), id = await putFile(data, 'photo'); setPhotoList(ctx, [...photoList(ctx), id]); }
+    catch (e) { logError(e.message, 'foto'); showToast(e.message || 'No se pudo guardar la foto'); return; }
+  }
+  showToast(list.length > 1 ? `${list.length} fotos guardadas` : 'Foto guardada');
+}
+const photosHTML = (ids, ctxAttr) => ids.length ? `<div class="nphotos">${ids.map(id => `<button type="button" class="nphoto" data-photo="${id}" ${ctxAttr}><img data-file="${id}" alt="Foto"></button>`).join('')}</div>` : '';
+// --- Ver una foto en grande ---
+let viewer = null;
+async function openViewer(id, ctx) {
+  viewer = { id, ctx }; const v = $('#photoView');
+  $('#pvImg').removeAttribute('src'); v.hidden = false; $('#pvDel').textContent = 'Borrar';
+  const d = await getFile(id); if (viewer?.id === id && d) $('#pvImg').src = d;
+}
+function closeViewer() { $('#photoView').hidden = true; viewer = null; }
+$('#pvClose').addEventListener('click', closeViewer);
+$('#pvDel').addEventListener('click', () => {
+  if (!viewer) return;
+  if ($('#pvDel').textContent === 'Borrar') { $('#pvDel').textContent = '¿Seguro? Toca otra vez'; return; }
+  const { id, ctx } = viewer; setPhotoList(ctx, photoList(ctx).filter(x => x !== id)); delFile(id); closeViewer();
+});
+$('#pvDraw').addEventListener('click', async () => {
+  if (!viewer) return; const { id, ctx } = viewer, d = await getFile(id); closeViewer();
+  openDraw(d, async nd => { const nid = await putFile(nd, 'draw'); setPhotoList(ctx, photoList(ctx).map(x => x === id ? nid : x)); delFile(id); });
+});
+document.addEventListener('click', e => {
+  const b = e.target.closest('[data-photo]'); if (!b) return;
+  openViewer(b.dataset.photo, b.dataset.ptask ? { kind: 'task', id: b.dataset.ptask } : { kind: 'note' });
+});
+
+// ---------- Dibujar (con el Apple Pencil o con el dedo) ----------
+const DRAW_COLORS = ['#1b1e1c', '#2747c9', '#c92a2a', '#2b8a3e', '#e8590c', 'rgba(255,212,59,.45)'];
+const DRAW_SIZES = [2, 4, 8];
+let draw = null;
+function openDraw(bgData, onSave) {
+  draw = { strokes: [], cur: null, color: DRAW_COLORS[0], size: 4, eraser: false, bg: null, onSave, pen: false };
+  $('#drawPad').hidden = false; document.body.classList.add('drawing');
+  sizeCanvas();
+  if (bgData) { const i = new Image(); i.onload = () => { if (draw) { draw.bg = i; redraw(); } }; i.src = bgData; }
+  renderDrawTools(); redraw();
+}
+function closeDraw() { $('#drawPad').hidden = true; document.body.classList.remove('drawing'); draw = null; }
+function sizeCanvas() {
+  const c = $('#drawCanvas'), r = c.getBoundingClientRect(), dpr = Math.min(2, devicePixelRatio || 1);
+  c.width = Math.round(r.width * dpr); c.height = Math.round(r.height * dpr); Object.assign(draw, { dpr, w: r.width, h: r.height });
+}
+function renderDrawTools() {
+  $('#drawColors').innerHTML = DRAW_COLORS.map((c, i) => `<button type="button" class="dcol${!draw.eraser && draw.color === c ? ' on' : ''}" data-dc="${i}" style="background:${c}" aria-label="${i === 5 ? 'Rotulador' : 'Color'}"></button>`).join('');
+  $('#drawSizes').innerHTML = DRAW_SIZES.map(s => `<button type="button" class="dsz${draw.size === s ? ' on' : ''}" data-ds="${s}" aria-label="Grosor ${s}"><i style="width:${s + 3}px;height:${s + 3}px"></i></button>`).join('');
+  $('#drawEraser').setAttribute('aria-pressed', draw.eraser);
+}
+function paintStroke(g, s) {
+  const p = s.pts; if (!p.length) return;
+  g.lineCap = 'round'; g.lineJoin = 'round'; g.strokeStyle = s.color;
+  if (p.length === 1) { g.fillStyle = s.color; g.beginPath(); g.arc(p[0].x, p[0].y, s.size * (0.5 + p[0].p) / 2, 0, 7); g.fill(); return; }
+  for (let i = 1; i < p.length; i++) { g.lineWidth = s.size * (0.5 + p[i].p); g.beginPath(); g.moveTo(p[i - 1].x, p[i - 1].y); g.lineTo(p[i].x, p[i].y); g.stroke(); }
+}
+function redraw() {
+  if (!draw) return;
+  const g = $('#drawCanvas').getContext('2d');
+  g.setTransform(draw.dpr, 0, 0, draw.dpr, 0, 0); g.fillStyle = '#fff'; g.fillRect(0, 0, draw.w, draw.h);
+  if (draw.bg) { const b = draw.bg, s = Math.min(draw.w / b.naturalWidth, draw.h / b.naturalHeight); g.drawImage(b, (draw.w - b.naturalWidth * s) / 2, (draw.h - b.naturalHeight * s) / 2, b.naturalWidth * s, b.naturalHeight * s); }
+  draw.strokes.forEach(s => paintStroke(g, s)); if (draw.cur) paintStroke(g, draw.cur);
+}
+const drawPt = e => { const r = $('#drawCanvas').getBoundingClientRect(); return { x: e.clientX - r.left, y: e.clientY - r.top, p: e.pointerType === 'pen' ? Math.max(0.1, e.pressure || 0.5) : 0.5 }; };
+// La goma borra trazos enteros (la foto de debajo no se toca)
+function eraseAt(pt) { const r = 12; const n = draw.strokes.length; draw.strokes = draw.strokes.filter(s => !s.pts.some(q => Math.hypot(q.x - pt.x, q.y - pt.y) < r + s.size)); if (draw.strokes.length !== n) redraw(); }
+$('#drawCanvas').addEventListener('pointerdown', e => {
+  if (!draw) return;
+  if (e.pointerType === 'pen') draw.pen = true; else if (draw.pen && e.pointerType === 'touch') return; // con el Pencil, la mano no pinta
+  e.preventDefault(); try { e.target.setPointerCapture(e.pointerId); } catch {}
+  const pt = drawPt(e);
+  if (draw.eraser) { draw.erasing = e.pointerId; eraseAt(pt); return; }
+  draw.cur = { color: draw.color, size: draw.size, pts: [pt], id: e.pointerId }; redraw();
+});
+$('#drawCanvas').addEventListener('pointermove', e => {
+  if (!draw) return;
+  if (draw.erasing === e.pointerId) { (e.getCoalescedEvents?.() || [e]).forEach(x => eraseAt(drawPt(x))); return; }
+  const s = draw.cur; if (!s || s.id !== e.pointerId) return;
+  const g = $('#drawCanvas').getContext('2d'); g.setTransform(draw.dpr, 0, 0, draw.dpr, 0, 0);
+  (e.getCoalescedEvents?.() || [e]).forEach(x => { s.pts.push(drawPt(x)); paintStroke(g, { ...s, pts: s.pts.slice(-2) }); });
+});
+const drawUp = e => { if (!draw) return; if (draw.erasing === e.pointerId) { draw.erasing = null; return; } if (draw.cur && draw.cur.id === e.pointerId) { draw.strokes.push(draw.cur); draw.cur = null; } };
+$('#drawCanvas').addEventListener('pointerup', drawUp);
+$('#drawCanvas').addEventListener('pointercancel', drawUp);
+$('#drawColors').addEventListener('click', e => { const b = e.target.closest('[data-dc]'); if (!b) return; draw.color = DRAW_COLORS[+b.dataset.dc]; draw.eraser = false; if (+b.dataset.dc === 5 && draw.size < 8) draw.size = 8; renderDrawTools(); });
+$('#drawSizes').addEventListener('click', e => { const b = e.target.closest('[data-ds]'); if (!b) return; draw.size = +b.dataset.ds; renderDrawTools(); });
+$('#drawEraser').addEventListener('click', () => { draw.eraser = !draw.eraser; renderDrawTools(); });
+$('#drawUndo').addEventListener('click', () => { draw.strokes.pop(); redraw(); });
+$('#drawClear').addEventListener('click', () => { if (!draw.strokes.length) return; draw.cleared = draw.strokes; draw.strokes = []; redraw(); });
+$('#drawCancel').addEventListener('click', () => { if (draw && draw.strokes.length && $('#drawCancel').textContent === 'Cancelar') { $('#drawCancel').textContent = '¿Descartar?'; setTimeout(() => { $('#drawCancel').textContent = 'Cancelar'; }, 2500); return; } $('#drawCancel').textContent = 'Cancelar'; closeDraw(); });
+$('#drawSave').addEventListener('click', async () => {
+  if (!draw) return;
+  if (!draw.strokes.length && !draw.bg) { closeDraw(); return; }
+  // Sin foto debajo, se recorta a lo dibujado (con un poco de margen)
+  const src = $('#drawCanvas'), D = draw.dpr; let bx = 0, by = 0, bw = src.width, bh = src.height;
+  if (!draw.bg) {
+    const pts = draw.strokes.flatMap(st => st.pts.map(q => [q.x, q.y, st.size])), pad = 24;
+    const x0 = Math.max(0, Math.min(...pts.map(q => q[0] - q[2])) - pad), y0 = Math.max(0, Math.min(...pts.map(q => q[1] - q[2])) - pad);
+    const x1 = Math.min(draw.w, Math.max(...pts.map(q => q[0] + q[2])) + pad), y1 = Math.min(draw.h, Math.max(...pts.map(q => q[1] + q[2])) + pad);
+    const cw = Math.max(200, x1 - x0), ch = Math.max(160, y1 - y0);
+    bx = Math.round(Math.max(0, Math.min(x0, draw.w - cw)) * D); by = Math.round(Math.max(0, Math.min(y0, draw.h - ch)) * D); bw = Math.round(Math.min(cw, draw.w) * D); bh = Math.round(Math.min(ch, draw.h) * D);
+  }
+  const s = Math.min(1, 1600 / bw), c = document.createElement('canvas');
+  c.width = Math.round(bw * s); c.height = Math.round(bh * s); c.getContext('2d').drawImage(src, bx, by, bw, bh, 0, 0, c.width, c.height);
+  let data = c.toDataURL('image/png'); if (data.length > 900000) data = c.toDataURL('image/jpeg', 0.85);
+  const cb = draw.onSave; closeDraw();
+  try { await cb(data); showToast('Dibujo guardado'); } catch (e) { logError(e.message, 'dibujo'); showToast('No se pudo guardar el dibujo'); }
+});
+addEventListener('resize', () => { if (draw) { sizeCanvas(); redraw(); } });
+
+// ---------- Notas ----------
+let noteFolder = '', noteQuery = '', folderAdding = false;
+const noteFolders = () => [...new Set([...(extra.prefs.noteFolders || []), ...notes.map(n => n.folder).filter(Boolean)])].sort((a, b) => a.localeCompare(b, 'es'));
+const journalOf = d => notes.find(n => n.journal === d);
+const JOURNAL_TPL = '¿Qué ha ido bien hoy?\n\n\n¿Qué podría haber ido mejor?\n\n\nAlgo que agradezco:\n\n\nMañana quiero:\n';
+const journalEmpty = n => n.journal && n.body.trim() === JOURNAL_TPL.trim();
+function openJournal(d) { const n = journalOf(d); if (n) openNote(n.id); else openNote(null, { id: 'j' + d, journal: d, body: JOURNAL_TPL }); }
+function notesViewHTML() {
+  const today = todayISO(), jt = journalOf(today), folders = noteFolders(), q = fold(noteQuery.trim());
+  let h = `<div class="nbar"><input class="inp" type="search" id="noteSearch" placeholder="🔍 Buscar en las notas" value="${esc(noteQuery)}" autocomplete="off" aria-label="Buscar en las notas"></div>`;
+  if (on('diario') && !q) h += `<button class="hableft" data-act="journal" data-d="${today}"><span>📓</span><span><b>Diario de hoy</b><small>${jt && !journalEmpty(jt) ? 'Ya has escrito hoy · toca para seguir' : '¿Qué tal ha ido el día?'}</small></span><span class="go">›</span></button>`;
+  h += `<div class="chips nfold">${[['', 'Todas'], ['📌', '📌 Fijadas'], ...(on('diario') ? [['📓', '📓 Diario']] : []), ...folders.map(f => [f, '📁 ' + f])].map(([v, l]) => `<button class="chip" data-act="nfolder" data-v="${esc(v)}" aria-pressed="${noteFolder === v}">${esc(l)}</button>`).join('')}<button class="chip edit" data-act="nnewfolder">+ Carpeta</button></div>`;
+  if (folderAdding) h += `<form class="partadd" id="folderForm"><input class="inp" type="text" id="folderInput" placeholder="Nombre de la carpeta" maxlength="40" autocomplete="off"><button class="btn primary" type="submit">Crear</button></form>`;
+  let list = notes.filter(n => noteFolder === '📓' ? n.journal : noteFolder === '📌' ? n.pinned : noteFolder ? n.folder === noteFolder : true)
+    .filter(n => !q || fold(`${n.title} ${n.body} ${n.folder}`).includes(q))
+    .filter(n => !journalEmpty(n));
+  list.sort(noteFolder === '📓' ? (a, b) => b.journal.localeCompare(a.journal) : (a, b) => (b.pinned - a.pinned) || b.updated - a.updated);
+  if (!list.length) h += `<div class="empty"><strong>${q ? `Nada con “${esc(noteQuery)}”` : noteFolder === '📓' ? 'Aún no has escrito en el diario' : 'Aún no hay notas'}</strong><span>${q ? '' : 'Pulsa + para escribir una. Puedes poner listas con casillas, fotos y dibujos.'}</span></div>`;
+  else h += `<div class="ngrid">${list.map(noteCardHTML).join('')}</div>`;
+  if (noteFolder && !'📌📓'.includes(noteFolder) && !list.length) h += `<button class="btn ghost block" data-act="ndelfolder">Quitar la carpeta “${esc(noteFolder)}”</button>`;
+  return h;
+}
+document.addEventListener('submit', e => {
+  if (e.target.id !== 'folderForm') return; e.preventDefault();
+  const name = $('#folderInput').value.trim().slice(0, 40); folderAdding = false;
+  if (name) { extra.prefs = { ...extra.prefs, noteFolders: [...new Set([...(extra.prefs.noteFolders || []), name])] }; store.saveExtra('prefs').catch(writeFailed); noteFolder = name; }
+  render();
+});
+document.addEventListener('input', e => { if (e.target.id === 'noteSearch') { noteQuery = e.target.value; render(); } });
+// --- Editor: bloques de texto y casillas ---
+let noteDraft = null, nBlocks = [], noteTimer = null, nFocus = 0, noteDelArmed = false;
+const parseBlocks = body => {
+  const out = [];
+  String(body || '').split('\n').forEach(line => {
+    const m = line.match(/^\[( |x)\] ?(.*)$/i);
+    if (m) out.push({ t: 'check', on: m[1].toLowerCase() === 'x', v: m[2] });
+    else { const last = out[out.length - 1]; if (last && last.t === 'text') last.v += '\n' + line; else out.push({ t: 'text', v: line }); }
+  });
+  if (!out.length || out[out.length - 1].t === 'check') out.push({ t: 'text', v: '' });
+  return out;
+};
+const serializeBlocks = bl => bl.map(b => b.t === 'check' ? `[${b.on ? 'x' : ' '}] ${b.v.replace(/\n/g, ' ')}` : b.v).join('\n');
+function openNote(id, preset = {}) {
+  let n = id ? notes.find(x => x.id === id) : null;
+  if (!n) n = { id: preset.id || 'n' + uid(), ...cleanNote({ folder: preset.journal ? '' : preset.folder ?? (noteFolder && !'📌📓'.includes(noteFolder) && view === 'notas' ? noteFolder : ''), project: preset.project || '', journal: preset.journal || '', body: preset.body || '', title: '' }) };
+  noteDraft = structuredClone(n); nBlocks = parseBlocks(n.body); nFocus = 0; noteDelArmed = false;
+  $('#noteTitle').value = n.title; $('#noteTitle').hidden = !!n.journal;
+  const folders = noteFolders();
+  $('#noteFolder').innerHTML = `<option value="">Sin carpeta</option>${folders.map(f => `<option value="${esc(f)}">📁 ${esc(f)}</option>`).join('')}`; $('#noteFolder').value = n.folder;
+  $('#noteProj').innerHTML = projOptions(n.project);
+  $('#noteFolder').closest('.grid2').hidden = !!n.journal;
+  renderNoteMeta(); renderNoteBlocks(); renderNotePhotos(); renderNoteLinks();
+  openSheet('#noteSheet');
+  if (!id && !n.journal) setTimeout(() => $('#noteTitle').focus(), 80);
+}
+function renderNoteMeta() {
+  const n = noteDraft, md = n.journal ? extra.mood[n.journal] : null;
+  $('#noteMeta').innerHTML = n.journal ? `📓 <b>${cap(parseISO(n.journal).toLocaleDateString('es-ES', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' }))}</b>${md?.m ? ` · ánimo ${'●'.repeat(md.m)}${'○'.repeat(Math.max(0, 5 - md.m))}` : ''}` : (notes.some(x => x.id === n.id) ? `Editada ${new Date(n.updated).toLocaleString('es-ES', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })}` : 'Nota nueva');
+  $('#notePin').setAttribute('aria-pressed', !!n.pinned); $('#notePin').classList.toggle('on', !!n.pinned);
+  $('#noteDel').textContent = noteDelArmed ? '¿Borrar?' : '🗑';
+}
+const autosize = ta => { ta.style.height = 'auto'; ta.style.height = ta.scrollHeight + 'px'; };
+function renderNoteBlocks(focusI, atEnd = true) {
+  $('#noteBlocks').innerHTML = nBlocks.map((b, i) => b.t === 'check'
+    ? `<div class="nb-c${b.on ? ' on' : ''}" data-i="${i}"><button type="button" class="nbx" data-nb="tick" aria-pressed="${b.on}" aria-label="Hecho">${TICK('var(--surface)')}</button><input class="nb-ci" data-nb="v" value="${esc(b.v)}" enterkeyhint="next" aria-label="Elemento de la lista"></div>`
+    : `<textarea class="nb-t" data-nb="v" data-i="${i}" rows="1" placeholder="${nBlocks.length === 1 ? 'Escribe aquí…' : ''}" aria-label="Texto">${esc(b.v)}</textarea>`).join('');
+  $('#noteBlocks').querySelectorAll('textarea').forEach(autosize);
+  if (focusI !== undefined) { const el = $('#noteBlocks').querySelector(`[data-i="${focusI}"]`); const f = el?.matches('textarea') ? el : el?.querySelector('input'); if (f) { f.focus(); const L = atEnd ? f.value.length : 0; try { f.setSelectionRange(L, L); } catch {} } }
+}
+const blockI = el => +el.closest('[data-i]').dataset.i;
+$('#noteBlocks').addEventListener('focusin', e => { if (e.target.closest('[data-i]')) nFocus = blockI(e.target); });
+$('#noteBlocks').addEventListener('input', e => { if (e.target.dataset.nb !== 'v') return; nBlocks[blockI(e.target)].v = e.target.value; if (e.target.matches('textarea')) autosize(e.target); scheduleNoteSave(); });
+$('#noteBlocks').addEventListener('click', e => { const b = e.target.closest('[data-nb=tick]'); if (!b) return; const i = blockI(b); nBlocks[i].on = !nBlocks[i].on; renderNoteBlocks(); scheduleNoteSave(); });
+$('#noteBlocks').addEventListener('keydown', e => {
+  const el = e.target; if (el.dataset.nb !== 'v') return;
+  const i = blockI(el), b = nBlocks[i];
+  if (b.t === 'check' && e.key === 'Enter') {
+    e.preventDefault();
+    if (!b.v.trim()) { nBlocks[i] = { t: 'text', v: '' }; if (nBlocks[i + 1]?.t === 'text' && !nBlocks[i + 1].v) nBlocks.splice(i + 1, 1); renderNoteBlocks(i); }
+    else { nBlocks.splice(i + 1, 0, { t: 'check', on: false, v: '' }); renderNoteBlocks(i + 1); }
+    scheduleNoteSave();
+  } else if (e.key === 'Backspace' && !el.value && i > 0) {
+    e.preventDefault(); nBlocks.splice(i, 1); renderNoteBlocks(i - 1); scheduleNoteSave();
+  }
+});
+$('#noteCheck').addEventListener('click', () => {
+  const i = Math.min(nFocus, nBlocks.length - 1), b = nBlocks[i];
+  if (b && b.t === 'text' && !b.v.trim()) { nBlocks[i] = { t: 'check', on: false, v: '' }; if (i === nBlocks.length - 1) nBlocks.push({ t: 'text', v: '' }); renderNoteBlocks(i); }
+  else { nBlocks.splice(i + 1, 0, { t: 'check', on: false, v: '' }); renderNoteBlocks(i + 1); }
+  scheduleNoteSave();
+});
+function renderNotePhotos() { $('#notePhotos').innerHTML = photosHTML(noteDraft?.photos || [], ''); hydrateImgs($('#notePhotos')); }
+function scheduleNoteSave() { clearTimeout(noteTimer); noteTimer = setTimeout(() => saveNote(), 700); }
+function saveNote(final) {
+  clearTimeout(noteTimer); if (!noteDraft) return;
+  const n = noteDraft;
+  n.title = $('#noteTitle').value.trim(); n.body = serializeBlocks(nBlocks).replace(/\n+$/, '\n'); n.folder = $('#noteFolder').value; n.project = $('#noteProj').value;
+  const exists = notes.find(x => x.id === n.id);
+  const empty = !n.title && !n.body.trim() && !n.photos.length && !n.links.length;
+  if (empty || (journalEmpty(n) && !n.photos.length && !n.links.length)) { if (final && exists) dropRow('notes', n.id); return; }
+  const same = exists && ['title', 'body', 'folder', 'project', 'pinned'].every(k => exists[k] === n[k]) && String(exists.photos) === String(n.photos) && JSON.stringify(exists.links) === JSON.stringify(n.links);
+  if (same) return;
+  n.updated = Date.now(); saveRow('notes', structuredClone(n));
+}
+$('#noteTitle').addEventListener('input', scheduleNoteSave);
+$('#noteFolder').addEventListener('change', () => saveNote());
+$('#noteProj').addEventListener('change', () => saveNote());
+$('#noteDone').addEventListener('click', () => { closeSheets(); render(); });
+$('#notePin').addEventListener('click', () => { noteDraft.pinned = !noteDraft.pinned; renderNoteMeta(); saveNote(); });
+$('#noteDel').addEventListener('click', () => {
+  if (!noteDelArmed) { noteDelArmed = true; renderNoteMeta(); setTimeout(() => { noteDelArmed = false; if (noteDraft) renderNoteMeta(); }, 3000); return; }
+  const n = notes.find(x => x.id === noteDraft.id), files = [...noteDraft.photos]; noteDraft = null; closeSheets();
+  if (!n) { files.forEach(delFile); render(); return; }
+  dropRow('notes', n.id); let undone = false;
+  showToast(`Nota borrada: ${noteName(n)}`, () => { undone = true; saveRow('notes', n); });
+  setTimeout(() => { if (!undone && !notes.some(x => x.id === n.id)) files.forEach(delFile); }, 6000);
+  render();
+});
+$('#notePhotoIn').addEventListener('change', e => { addPhotos(e.target.files, { kind: 'note' }); e.target.value = ''; });
+$('#noteDraw').addEventListener('click', () => openDraw(null, async data => { const id = await putFile(data, 'draw'); setPhotoList({ kind: 'note' }, [...photoList({ kind: 'note' }), id]); }));
+$('#noteLink').addEventListener('click', () => { saveNote(); openLinkPicker({ k: 'note', id: noteDraft.id }); });
+function renderNoteLinks() { $('#noteLinks').innerHTML = linksHTML(noteDraft.links, { k: 'note', id: noteDraft.id }); }
+
+// ---------- Enlaces entre notas, tareas, proyectos, libros y películas ----------
+const LINK_ICON = { note: '📝', task: '☑️', proj: '📁', books: '📚', movies: '🎬' };
+function linkTarget(k, id) {
+  if (k === 'note') { const n = notes.find(x => x.id === id); return n && noteName(n); }
+  if (k === 'task') return tasks.find(x => x.id === id)?.title;
+  if (k === 'proj') return projects.find(x => x.id === id)?.name;
+  return shelf[k]?.items.find(x => x.id === id)?.title;
+}
+const backlinks = (k, id) => [...notes.filter(n => n.links.some(l => l.k === k && l.id === id)).map(n => ({ k: 'note', id: n.id })), ...tasks.filter(t => (t.links || []).some(l => l.k === k && l.id === id)).map(t => ({ k: 'task', id: t.id }))];
+function linksHTML(links, src) {
+  const out = (links || []).map(l => ({ ...l, t: linkTarget(l.k, l.id) })).filter(l => l.t), back = src ? backlinks(src.k, src.id).map(l => ({ ...l, t: linkTarget(l.k, l.id) })).filter(l => l.t && !out.some(o => o.k === l.k && o.id === l.id)) : [];
+  if (!out.length && !back.length) return '';
+  const chip = (l, rm) => `<span class="lchip"><button type="button" data-golink="${l.k}" data-id="${l.id}">${LINK_ICON[l.k]} ${esc(l.t)}</button>${rm ? `<button type="button" class="x" data-unlink="${l.k}" data-id="${l.id}" aria-label="Quitar enlace">✕</button>` : ''}</span>`;
+  return `${out.length ? `<div class="links"><span class="label">🔗 Enlaces</span>${out.map(l => chip(l, !!src)).join('')}</div>` : ''}${back.length ? `<div class="links"><span class="label">Enlazado desde</span>${back.map(l => chip(l, false)).join('')}</div>` : ''}`;
+}
+let linkSrc = null;
+function openLinkPicker(src) { linkSrc = src; $('#linkSearch').value = ''; renderLinkResults(); openSheet('#linkSheet'); setTimeout(() => $('#linkSearch').focus(), 80); }
+function linkCands(q) {
+  const f = s => !q || fold(s || '').includes(fold(q)), out = [], cur = linkSrc ? (linkSrc.k === 'note' ? noteDraft?.links : tasks.find(t => t.id === linkSrc.id)?.links) || [] : [];
+  const add = (k, id, t, sub) => { if (linkSrc && k === linkSrc.k && id === linkSrc.id) return; if (cur.some(l => l.k === k && l.id === id)) return; out.push({ k, id, t, sub }); };
+  notes.filter(n => !journalEmpty(n) && f(noteName(n) + ' ' + n.body)).sort((a, b) => b.updated - a.updated).forEach(n => add('note', n.id, noteName(n), n.folder));
+  projects.filter(p => f(p.name)).forEach(p => add('proj', p.id, p.name, p.done ? 'terminado' : 'proyecto'));
+  tasks.filter(t => !t.parentId && (!t.done || q) && f(t.title)).sort(sortTasks).forEach(t => add('task', t.id, t.title, t.date ? friendlyDate(t.date) : 'sin fecha'));
+  for (const k of ['books', 'movies']) shelf[k].items.filter(b => f(`${b.title} ${b.author}`)).forEach(b => add(k, b.id, b.title, b.author));
+  return out.slice(0, 40);
+}
+function renderLinkResults() {
+  const l = linkCands($('#linkSearch').value.trim());
+  $('#linkResults').innerHTML = l.length ? l.map(x => `<button type="button" class="lrow" data-pick="${x.k}" data-id="${x.id}"><span class="li">${LINK_ICON[x.k]}</span><span>${esc(x.t)}${x.sub ? `<small>${esc(x.sub)}</small>` : ''}</span></button>`).join('') : '<p class="hint">No encuentro nada con eso.</p>';
+}
+$('#linkSearch').addEventListener('input', renderLinkResults);
+function backFromLinks() { if (linkSrc?.k === 'note' && noteDraft) { openSheet('#noteSheet'); renderNoteLinks(); } else if (linkSrc?.k === 'task') openDetails(linkSrc.id); else closeSheets(); }
+$('#linkBack').addEventListener('click', backFromLinks);
+$('#linkResults').addEventListener('click', e => {
+  const b = e.target.closest('[data-pick]'); if (!b || !linkSrc) return;
+  const l = { k: b.dataset.pick, id: b.dataset.id };
+  if (linkSrc.k === 'note') { noteDraft.links = [...noteDraft.links, l]; saveNote(); }
+  else { const t = tasks.find(x => x.id === linkSrc.id); if (t) { t.links = [...(t.links || []), l]; store.put(t).catch(writeFailed); } }
+  backFromLinks();
+});
+function openLink(k, id) {
+  if (k === 'note') { if (noteDraft && $('#noteSheet').classList.contains('show')) saveNote(); openNote(id); }
+  else if (k === 'task') openDetails(id);
+  else if (k === 'proj') { closeSheets(); if (query) { query = ''; $('#searchInput').value = ''; $('#searchBar').hidden = true; } view = 'sinfecha'; listSel = 'p:' + id; $('#scroller').scrollTop = 0; render(); }
+  else { const S = shelf[k], b = S.items.find(x => x.id === id); if (!b) return; S.tab = b.status; S.open = id; S.adding = false; renderShelf(k); openSheet(SHELF[k].sheet); }
+}
+document.addEventListener('click', e => {
+  const g = e.target.closest('[data-golink]'); if (g) { e.stopPropagation(); openLink(g.dataset.golink, g.dataset.id); return; }
+  const u = e.target.closest('[data-unlink]'); if (!u) return;
+  const k = u.dataset.unlink, id = u.dataset.id, keep = l => !(l.k === k && l.id === id);
+  if (u.closest('#noteSheet')) { noteDraft.links = noteDraft.links.filter(keep); renderNoteLinks(); saveNote(); }
+  else if (u.closest('#detailSheet')) { const t = tasks.find(x => x.id === (detailRoot()?.id)); if (t) { t.links = (t.links || []).filter(keep); store.put(t).catch(writeFailed); renderDetails(); } }
+}, true);
+
 // ---------- Pintar ----------
 const prioRank = { alta: 0, normal: 1, baja: 2 };
 const sortTasks = (a, b) => (a.date || '9999').localeCompare(b.date || '9999') || (a.time || '99').localeCompare(b.time || '99')
-  || prioRank[a.prio || 'normal'] - prioRank[b.prio || 'normal'] || (a.created || 0) - (b.created || 0);
+  || (b.flag ? 1 : 0) - (a.flag ? 1 : 0) || prioRank[a.prio || 'normal'] - prioRank[b.prio || 'normal'] || (a.created || 0) - (b.created || 0);
 function inView(x, v) {
   const t = todayISO();
   if (v === 'hoy') return !x.done && x.date && x.date <= t;
@@ -3074,32 +4060,38 @@ function inView(x, v) {
   return x.done;
 }
 // ---------- Filtros guardados ----------
-function filterMatch(f, t) {
+function filterHit(f, t) {
   const today = todayISO();
   if (f.tags?.length && !f.tags.every(g => (t.tags || []).includes(g))) return false;
   if (f.cat && (t.cat || '') !== f.cat) return false;
-  if (f.prio && t.prio !== f.prio) return false;
+  if ((f.flag || f.prio) && !(t.flag || t.prio === 'alta')) return false;
+  if (f.loc && !t.loc) return false;
+  if (f.proj && t.project !== f.proj) return false;
   if (f.when === 'hoy' && !(t.date && t.date <= today)) return false;
   if (f.when === 'semana' && !(t.date && t.date <= addDays(today, 7))) return false;
+  if (f.when === 'atrasadas' && !(t.date && t.date < today)) return false;
+  if (f.when === 'confecha' && !t.date) return false;
   if (f.when === 'sinfecha' && t.date) return false;
-  return !t.done;
+  return true;
 }
+const filterMatch = (f, t) => filterHit(f, t) && !t.done;
 function renderFilterSheet() {
   $('#fCat').innerHTML = '<option value="">Cualquiera</option>' + cats.map(c => `<option value="${esc(c.id)}">${esc(c.name)}</option>`).join('');
-  const whenTxt = { todo: '', hoy: 'hoy', semana: '7 días', sinfecha: 'sin fecha' };
-  $('#filterList').innerHTML = extra.filters.length ? extra.filters.map(f => `<div class="rwrow"><div><div class="n">⚑ ${esc(f.name)}</div><div class="c">${[...(f.tags || []).map(t => '@' + t), f.cat ? catOf(f.cat).name : '', f.prio ? 'alta' : '', whenTxt[f.when] || ''].filter(Boolean).map(esc).join(' · ') || 'todo'} · ${tasks.filter(t => filterMatch(f, t)).length} tareas</div></div>
+  $('#fProj').innerHTML = projOptions('').replace('Sin proyecto', 'Cualquiera');
+  const whenTxt = { todo: '', hoy: 'hoy', semana: '7 días', sinfecha: 'sin fecha', atrasadas: 'atrasadas', confecha: 'con fecha' };
+  $('#filterList').innerHTML = extra.filters.length ? extra.filters.map(f => `<div class="rwrow"><div><div class="n">☰ ${esc(f.name)}</div><div class="c">${[...(f.tags || []).map(t => '@' + t), f.cat ? catOf(f.cat).name : '', f.flag || f.prio ? '🚩' : '', f.loc ? '📍' : '', f.proj ? '📁 ' + (projects.find(p => p.id === f.proj)?.name || '') : '', whenTxt[f.when] || ''].filter(Boolean).map(esc).join(' · ') || 'todo'} · ${tasks.filter(t => filterMatch(f, t)).length} tareas</div></div>
     <button type="button" class="btn small" data-fl="use" data-id="${f.id}">Ver</button><button type="button" class="x" data-fl="del" data-id="${f.id}" aria-label="Borrar filtro">✕</button></div>`).join('') : '<p class="hint">Aún no tienes filtros.</p>';
 }
 $('#filterForm').addEventListener('submit', e => {
   e.preventDefault();
   const name = $('#fName').value.trim(); if (!name) { $('#fName').focus(); return; }
-  extra.filters.push({ id: 'f' + uid(), name, tags: $('#fTags').value.split(/[,\s]+/).map(normTag).filter(Boolean), cat: $('#fCat').value, prio: $('#fPrio').value, when: $('#fWhen').value });
+  extra.filters.push({ id: 'f' + uid(), name, tags: $('#fTags').value.split(/[,\s]+/).map(normTag).filter(Boolean), cat: $('#fCat').value, flag: $('#fFlag').checked, loc: $('#fLoc').checked, proj: $('#fProj').value, when: $('#fWhen').value });
   store.saveExtra('filters').catch(writeFailed); $('#filterForm').reset(); renderFilterSheet(); render();
 });
 $('#filterList').addEventListener('click', e => {
   const b = e.target.closest('[data-fl]'); if (!b) return;
   if (b.dataset.fl === 'del') { extra.filters = extra.filters.filter(f => f.id !== b.dataset.id); store.saveExtra('filters').catch(writeFailed); renderFilterSheet(); render(); return; }
-  activeFilter = b.dataset.id; closeSheets(); render();
+  closeSheets(); activeFilter = null; view = 'sinfecha'; listSel = 'f:' + b.dataset.id; $('#scroller').scrollTop = 0; render();
 });
 $('#openFilters').addEventListener('click', () => { renderFilterSheet(); openSheet('#filterSheet'); });
 // ---------- Bandeja rápida: apuntar en dos segundos y organizarlo luego ----------
@@ -3122,8 +4114,9 @@ document.addEventListener('submit', e => {
   e.preventDefault();
   const title = $('#quickInput').value.trim(); if (!title) return;
   const p = parseQuick(title, cats), dated = p.date || p.time || p.repeat;
-  const t = { id: uid(), title: p.title || title, cat: p.cat || (p.prio && cats.some(c => c.id === 'urgente') ? 'urgente' : '') || guessCat(p.title || title) || '', date: dated ? (p.date || todayISO()) : '', time: p.time || '', endTime: p.time ? (p.endTime || hhmm(toMin(p.time) + 60)) : '',
+  const t = { id: uid(), title: p.title || title, cat: p.cat || guessCat(p.title || title) || '', flag: !!p.prio, date: dated ? (p.date || todayISO()) : '', time: p.time || '', endTime: p.time ? (p.endTime || hhmm(toMin(p.time) + 60)) : '',
     repeat: p.repeat || '', days: p.days || [], every: p.every || 1, nth: p.nth || null, nthDay: p.nthDay ?? null, tags: (p.tags || []).map(normTag), inbox: !dated, done: false, created: Date.now() };
+  if (t.cat === 'cumple' && t.date && !t.repeat) t.repeat = 'anual';
   alignStart(t);
   tasks.push(t); store.put(t).catch(writeFailed);
   if (dated) showToast(`Apuntada: ${t.title} · ${friendlyDate(t.date).toLowerCase()}${t.time ? ' ' + t.time : ''}`);
@@ -3150,8 +4143,12 @@ function taskHTML(x) {
   const parent = x.parentId ? tasks.find(p => p.id === x.parentId) : null;
   const pr = progressOf(x.id), ppr = parent ? progressOf(parent.id) : null;
   const pct = o => o.total ? Math.round(o.done / o.total * 100) : 0;
+  const proj = x.project && view !== 'sinfecha' ? projects.find(p => p.id === x.project) : null, age = ageOn(x, x.date);
   const meta = [
     `<span class="catn" title="${esc(cat.name)}"><span class="dot" style="background:${c}"></span></span>`,
+    x.flag ? '<span class="flag" title="Con bandera">🚩</span>' : '',
+    x.status === 'doing' && !x.done ? '<span class="doing">▶ Haciendo</span>' : '',
+    age ? `<span>🎂 ${age}</span>` : '',
     x.time ? `<span>${x.time}${x.endTime ? '–' + x.endTime : ''}</span>` : '',
     showDate ? `<span class="${late ? 'late' : ''}">${friendlyDate(x.date)}</span>` : '',
     x.repeat ? `<span>↻ ${repeatLabel(x)}${x.until ? ' hasta ' + friendlyDate(x.until).toLowerCase() : ''}</span>` : '',
@@ -3162,7 +4159,10 @@ function taskHTML(x) {
     !x.date && x.minutes && !x.done ? `<span>${x.minutes} min</span>` : '',
     x.focus ? `<span>⏱ ${fmtDur(x.focus)}</span>` : '',
     x.done && x.pts ? `<span>+${x.pts} ⭐</span>` : '',
-    ...(x.tags || []).map(t => `<span class="tagchip">@${esc(t)}</span>`),
+    ...(x.tags || []).map(t => `<span class="tagchip" data-act="tag" data-t="${esc(t)}">@${esc(t)}</span>`),
+    proj ? `<span class="projchip">📁 ${esc(proj.name)}</span>` : '',
+    (x.photos || []).length ? `<span>🖼 ${x.photos.length}</span>` : '',
+    (x.links || []).length ? `<span>🔗 ${x.links.length}</span>` : '',
   ].join('');
   return `<li class="task ${x.done ? 'done' : ''}" data-id="${x.id}" style="--c:${c}">
     <div class="swipe-bg" aria-hidden="true">
@@ -3219,7 +4219,7 @@ function renderReview() {
   const nextMon = addDays(mon, 7), next = [...Array(7)].map((_, i) => addDays(nextMon, i));
   const ghosts = {};
   tasks.filter(t => t.repeat && !t.done && t.date).forEach(t => { let d = t.date, n = 0; while (n++ < 400) { d = stepDate(t, d); if (d > next[6] || (t.until && d > t.until)) break; if (d >= nextMon) ghosts[d] = (ghosts[d] || 0) + 1; } });
-  const exams = tasks.filter(t => !t.done && t.date && t.date >= today && t.date <= next[6] && (t.prio === 'alta' || children(t.id).length));
+  const exams = tasks.filter(t => !t.done && t.date && t.date >= today && t.date <= next[6] && (t.flag || t.prio === 'alta' || children(t.id).length));
   $('#reviewBody').innerHTML = `<div class="sheet-head"><h3>Repaso de la semana</h3><button type="button" class="btn ghost" data-close-review>Cerrar</button></div>
     <div class="kpis"><div class="kpi"><b>${pts}</b><span>puntos</span></div><div class="kpi"><b>${done}</b><span>tareas hechas</span></div><div class="kpi"><b>${avg}%</b><span>de lo que tocaba</span></div></div>
     <h4>Pendiente (${late.length})</h4>
@@ -3256,10 +4256,12 @@ function renderMain() {
   $('#todayLabel').textContent = new Date().toLocaleDateString('es-ES', { weekday: 'long', day: 'numeric', month: 'long' });
   $('#viewTitle').textContent = query ? 'Buscar' : VIEWS[view];
   $('#ptsToday').textContent = `⭐ ${pointsOn(todayISO())}`;
-  $('#filters').hidden = (view === 'habitos' || view === 'hoy') && !query;
+  $('#filters').hidden = (view === 'habitos' || view === 'hoy' || view === 'notas' || (view === 'sinfecha' && (!listSel || listSel === 'compra'))) && !query;
   if (view !== 'hoy') hoyEdit = false;
   $('#openRewards').hidden = !on('recompensas');
-  $('#fab').setAttribute('aria-label', view === 'habitos' && !query ? 'Nuevo hábito' : 'Nueva tarea');
+  $('#fab').setAttribute('aria-label', view === 'habitos' && !query ? 'Nuevo hábito' : view === 'notas' && !query ? 'Nueva nota' : 'Nueva tarea');
+  if (innerWidth >= 820) $('#miniCal').innerHTML = miniCalHTML();
+  wxRefresh();
   const byCat = x => catFilter === null || (x.cat || '') === catFilter;
   document.querySelectorAll('#tabs button').forEach(b => {
     const v = b.dataset.view; b.setAttribute('aria-selected', !query && v === view);
@@ -3270,11 +4272,11 @@ function renderMain() {
   $('#filters').innerHTML = `<button class="chip" data-filter="*" aria-pressed="${catFilter === null}">Todas</button>` +
     cats.map(c => `<button class="chip" data-filter="${esc(c.id)}" aria-pressed="${catFilter === c.id}"><span class="dot" style="background:${colorVar(c.color)}"></span>${esc(c.name)}</button>`).join('') +
     (hasOrphans ? `<button class="chip" data-filter="" aria-pressed="${catFilter === ''}">Sin categoría</button>` : '') +
-    extra.filters.map(f => `<button class="chip" data-sfilter="${f.id}" aria-pressed="${activeFilter === f.id}">⚑ ${esc(f.name)}</button>`).join('') +
+    extra.filters.map(f => `<button class="chip" data-sfilter="${f.id}" aria-pressed="${activeFilter === f.id}">☰ ${esc(f.name)}</button>`).join('') +
     `<button class="chip edit" data-filter="edit">Editar</button>`;
   const af = activeFilter ? extra.filters.find(f => f.id === activeFilter) : null;
   if (!af) activeFilter = null;
-  if (af && !query) $('#viewTitle').textContent = '⚑ ' + af.name;
+  if (af && !query) $('#viewTitle').textContent = '☰ ' + af.name;
   $('#showDoneBtn').hidden = true; $('#clearDone').hidden = true;
   if (!loaded) { $('#list').innerHTML = `<div class="empty"><strong>Cargando tus tareas…</strong></div>`; $('#stats').textContent = ''; return; }
 
@@ -3294,6 +4296,12 @@ function renderMain() {
     doneCount = tasks.filter(t => t.done && t.date === (calSel || todayISO())).length;
   } else if (view === 'habitos') {
     html = habitsViewHTML();
+  } else if (view === 'sinfecha') {
+    if (!listSel) html = listasHubHTML(byCat);
+    else { const r = listViewHTML(byCat); html = r.html; count = r.count; doneCount = r.doneCount; }
+    $('#viewTitle').textContent = listTitle(listSel);
+  } else if (view === 'notas') {
+    html = notesViewHTML();
   } else if (view === 'semana' && ['dia', 'mes', 'matriz'].includes(agendaMode === 'matriz' && !on('matriz') ? (agendaMode = 'semana') : agendaMode)) {
     html = agendaSwitchHTML() + (agendaMode === 'dia' ? dayHTML(byCat) : agendaMode === 'mes' ? monthCalHTML(byCat) : matrixHTML(byCat)); count = 1;
     doneCount = agendaMode === 'matriz' ? 0 : tasks.filter(t => t.done && t.date === (agendaMode === 'dia' ? addDays(todayISO(), dayOffset) : calSel || todayISO())).length;
@@ -3319,18 +4327,19 @@ function renderMain() {
     $('#clearDone').hidden = !(v === 'hechas' && showDone && done.length);
   }
   // Si estabas escribiendo en la bandeja, no se pierde lo escrito al refrescar
-  const qi = document.activeElement?.id === 'quickInput' ? $('#quickInput').value : null;
+  const ae = document.activeElement, keep = ['quickInput', 'shopInput', 'noteSearch', 'folderInput'].includes(ae?.id) ? { id: ae.id, v: ae.value, s: ae.selectionStart } : null;
   $('#list').innerHTML = html;
-  if (qi !== null && $('#quickInput')) { $('#quickInput').value = qi; $('#quickInput').focus(); }
+  if (keep) { const el = $('#' + keep.id); if (el) { el.value = keep.v; el.focus(); try { el.setSelectionRange(keep.s, keep.s); } catch {} } }
+  hydrateImgs($('#list'));
   if (doneCount && !query && view !== 'habitos') {
     $('#showDoneBtn').hidden = false;
     $('#showDoneBtn').textContent = showDone ? 'Ocultar las hechas' : `Ver las hechas (${doneCount})`;
   }
   const pending = tasks.filter(x => !x.done).length;
   const doneToday = tasks.filter(x => x.done && x.doneAt && isoDate(new Date(x.doneAt)) === todayISO()).length;
-  $('#stats').textContent = view === 'habitos' || view === 'hoy' ? '' : `${pending} pendiente${pending === 1 ? '' : 's'} · ${doneToday} hecha${doneToday === 1 ? '' : 's'} hoy`;
+  $('#stats').textContent = view === 'habitos' || view === 'hoy' || view === 'notas' || (view === 'sinfecha' && (!listSel || listSel === 'compra')) ? '' : `${pending} pendiente${pending === 1 ? '' : 's'} · ${doneToday} hecha${doneToday === 1 ? '' : 's'} hoy`;
   let tipSeen = false; try { tipSeen = localStorage.getItem('tip-swipe') === '1'; } catch {}
-  $('#tip').hidden = tipSeen || !count || view === 'habitos';
+  $('#tip').hidden = tipSeen || !count || view === 'habitos' || view === 'notas';
   if (!clearArmed) $('#clearDone').textContent = 'Borrar las hechas';
   checkAchievements(); publishSummary(); autoGcal();
 }
@@ -3395,11 +4404,32 @@ $('#list').addEventListener('click', e => {
   else if (act === 'timer') openTimer(id);
   else if (act === 'yday') { selectedDay = selectedDay === el.dataset.d ? null : el.dataset.d; const y = $('#scroller').scrollTop; render(); $('#scroller').scrollTop = y; }
   else if (act === 'edit') openDetails(id);
+  else if (act === 'lsel') { listSel = el.dataset.k; showDone = false; $('#scroller').scrollTop = 0; render(); }
+  else if (act === 'lback') { listSel = null; showDone = false; $('#scroller').scrollTop = 0; render(); }
+  else if (act === 'lboard') { el.dataset.v === '1' ? boards.add(listSel) : boards.delete(listSel); saveBoards(); render(); }
+  else if (act === 'pnew') openProject(null);
+  else if (act === 'pedit') openProject(id);
+  else if (act === 'pnote') openNote(null, { project: id });
+  else if (act === 'fnew') { renderFilterSheet(); openSheet('#filterSheet'); setTimeout(() => $('#fName').focus(), 80); }
+  else if (act === 'tag') searchTag(el.dataset.t);
+  else if (act === 'shoptoggle') { const s = shop.find(x => x.id === id); if (s) { saveRow('shop', { ...s, done: !s.done }); navigator.vibrate?.(8); render(); } }
+  else if (act === 'shopedit') { shopEdit = shopEdit === id ? null : id; render(); }
+  else if (act === 'shopsec') { const s = shop.find(x => x.id === id); if (s) { saveRow('shop', { ...s, sec: el.dataset.sec }); extra.prefs = { ...extra.prefs, shopMap: { ...(extra.prefs.shopMap || {}), [shopKey(s.name)]: el.dataset.sec } }; store.saveExtra('prefs').catch(writeFailed); shopEdit = null; render(); } }
+  else if (act === 'shopdel') { const s = shop.find(x => x.id === id); if (s) { dropRow('shop', id); shopEdit = null; showToast(`Quitado: ${s.name}`, () => saveRow('shop', s)); render(); } }
+  else if (act === 'shopclear') { const gone = shop.filter(s => s.done); gone.forEach(s => dropRow('shop', s.id)); showToast(`Carro vaciado (${gone.length})`, () => gone.forEach(s => saveRow('shop', s))); render(); }
+  else if (act === 'nfolder') { noteFolder = el.dataset.v; folderAdding = false; render(); }
+  else if (act === 'nnewfolder') { folderAdding = !folderAdding; render(); setTimeout(() => $('#folderInput')?.focus(), 30); }
+  else if (act === 'ndelfolder') { extra.prefs = { ...extra.prefs, noteFolders: (extra.prefs.noteFolders || []).filter(f => f !== noteFolder) }; store.saveExtra('prefs').catch(writeFailed); noteFolder = ''; render(); }
+  else if (act === 'nopen') openNote(id);
+  else if (act === 'journal') openJournal(el.dataset.d || todayISO());
 });
+function searchTag(tag) {
+  query = '@' + tag; $('#searchBar').hidden = false; $('#searchBtn').setAttribute('aria-pressed', 'true'); $('#searchInput').value = query; $('#scroller').scrollTop = 0; render();
+}
 $('#tabs').addEventListener('click', e => {
   const b = e.target.closest('[data-view]'); if (!b) return;
   if (query) { query = ''; $('#searchInput').value = ''; $('#searchBar').hidden = true; $('#searchBtn').setAttribute('aria-pressed', 'false'); }
-  else if (view === b.dataset.view) { $('#scroller').scrollTo({ top: 0, behavior: 'smooth' }); return; }
+  else if (view === b.dataset.view) { if (view === 'sinfecha' && listSel) { listSel = null; showDone = false; render(); } $('#scroller').scrollTo({ top: 0, behavior: 'smooth' }); return; }
   view = b.dataset.view; showDone = false; activeFilter = null; $('#scroller').scrollTop = 0; render();
 });
 $('#filters').addEventListener('click', e => {

@@ -125,6 +125,8 @@
 
   h2.group { font: 600 15px/1.2 var(--f-display); color: var(--muted); margin: 18px 2px 8px; display: flex; justify-content: space-between; }
   h2.group.late { color: var(--danger); }
+  h2.group > .btn { flex: none; width: auto; margin: -6px 0 -6px auto; align-self: center; }
+  h2.group > span:first-child { flex: 1; min-width: 0; }
   ul.list { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px; }
 
   /* Tarjeta de tarea con deslizamiento */
@@ -173,7 +175,7 @@
     padding: 6px max(8px, var(--safe-r)) calc(6px + var(--safe-b)) max(8px, var(--safe-l));
     background: var(--bar); -webkit-backdrop-filter: blur(18px) saturate(1.6); backdrop-filter: blur(18px) saturate(1.6);
     border-top: 1px solid var(--border); display: flex; justify-content: center; }
-  nav.tabbar .tabs { display: grid; grid-template-columns: repeat(5, 1fr); width: 100%; max-width: 560px; }
+  nav.tabbar .tabs { display: grid; grid-template-columns: repeat(6, 1fr); width: 100%; max-width: 560px; }
   nav.tabbar button { border: 0; background: transparent; display: grid; justify-items: center; gap: 2px; padding: 4px 0; color: var(--muted); font-size: 11px; font-weight: 700; position: relative; }
   nav.tabbar svg { width: 24px; height: 24px; }
   nav.tabbar button[aria-selected="true"] { color: var(--accent); }
@@ -845,6 +847,170 @@
 
   @media (prefers-reduced-motion: reduce) { .sheet, .scrim, li.task.snap .row, .bar i { transition: none; } }
   @media (min-width: 760px) { .sheet { left: 50%; right: auto; width: 560px; transform: translate(-50%, 100%); } .sheet.show { transform: translate(-50%, 0); } }
+  /* v25: calendario */
+  .cg-all { border-bottom: 0; border-top: 1px solid var(--border); margin-top: 6px; padding: 6px 0 4px; min-height: 34px; border-radius: 8px; }
+  .cg-all.drop, .cg-col.drop { background: var(--accent-soft); }
+  .cg-col { -webkit-user-select: none; user-select: none; -webkit-touch-callout: none; }
+  .cchip[data-cdrag] { -webkit-user-select: none; user-select: none; -webkit-touch-callout: none; touch-action: pan-y; }
+  .cchip.lifted { opacity: .35; }
+  .cfloat { position: fixed !important; z-index: 40; pointer-events: none; box-shadow: 0 8px 22px rgba(0,0,0,.25); opacity: .95; }
+  .cfloat[data-t]:not([data-t=""])::after { content: attr(data-t); margin-left: 6px; font-weight: 700; }
+  .cblk.leaving { opacity: .55; outline: 2px dashed var(--accent); }
+  .csel { position: absolute; left: 1px; right: 2px; z-index: 3; border-radius: 6px; background: color-mix(in srgb, var(--accent) 22%, transparent); border: 2px solid var(--accent); font-size: 11px; font-weight: 700; padding: 2px 4px; color: var(--accent); pointer-events: none; }
+  .cgrid.compact .cg-day { font-size: 10px; }
+  .wx { display: inline-flex; gap: 2px; align-items: baseline; font-size: 11px; color: var(--muted); font-weight: 600; margin-left: 6px; }
+  .wx span { opacity: .7; }
+  .cg-day .wx { margin: 0; font-size: 12px; }
+  .wkn { font-size: 12px; color: var(--muted); font-weight: 700; }
+  .mcal.wk { grid-template-columns: 1.5em repeat(7, minmax(0, 1fr)); }
+  .mcal .wn { font-style: normal; font-size: 10px; color: var(--muted); display: grid; place-items: center; }
+  .mcell { position: relative; }
+  .mwx { position: absolute; top: 2px; right: 3px; font-size: 10px; line-height: 1; }
+  .wxline { font-size: 14px; color: var(--muted); margin: 0 2px 8px; }
+  .banner.bday { grid-template-columns: 1fr; background: color-mix(in srgb, var(--k-amarillo) 25%, var(--surface)); }
+  .minical { display: none; }
+  .liftghost { position: fixed; z-index: 40; pointer-events: none; background: var(--surface); border: 2px solid var(--accent); border-radius: 12px; padding: 10px 12px; font-weight: 700; box-shadow: 0 10px 26px rgba(0,0,0,.25); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  li.task.held, .kcard.held { opacity: .5; }
+  li.task, .kcard { -webkit-touch-callout: none; }
+  .mcell.drop { outline: 2px solid var(--accent); background: var(--accent-soft); }
+  /* Menú de una tarea */
+  #ctxBody .mi { width: 24px; text-align: center; }
+  .ctxdate { display: flex; align-items: center; gap: 12px; padding: 12px 14px; position: relative; cursor: pointer; }
+  .ctxdate input { position: absolute; inset: 0; opacity: 0; width: 100%; }
+  /* Bandera, "haciendo", proyecto */
+  .flagchip[aria-pressed="true"] { border-color: var(--danger); background: color-mix(in srgb, var(--danger) 14%, var(--surface)); }
+  .meta .flag { font-size: 12px; }
+  .doing { color: var(--accent); font-weight: 700; }
+  .projchip { border: 0; background: var(--sunken); border-radius: 999px; padding: 1px 8px; font: inherit; font-size: 12px; color: var(--muted); }
+  .tagchip { cursor: pointer; }
+  button.tagchip { border: 0; font: inherit; }
+  .tagsugs { margin-top: -6px; }
+  .chips.wrap { flex-wrap: wrap; }
+  .checkrow { display: flex; gap: 10px; align-items: center; font-size: 15px; }
+  .checkrow input { width: 20px; height: 20px; accent-color: var(--accent); }
+  /* Listas */
+  .lcards { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; margin: 2px 0 10px; }
+  .lcard { display: grid; grid-template-columns: auto 1fr; grid-template-rows: auto auto; gap: 2px 8px; align-items: center; text-align: left; background: var(--surface); border: 1px solid var(--border); border-radius: 16px; padding: 12px; font: inherit; color: inherit; }
+  .lcard .li { font-size: 22px; grid-row: 1; }
+  .lcard b { font-size: 24px; text-align: right; }
+  .lcard > span:last-child { grid-column: 1 / -1; font-weight: 700; color: var(--muted); }
+  .lcard.red b { color: var(--danger); }
+  .lrows { display: grid; gap: 6px; margin-bottom: 8px; }
+  .lrow { display: flex; align-items: center; gap: 10px; text-align: left; background: var(--surface); border: 1px solid var(--border); border-radius: 12px; padding: 11px 12px; font: inherit; color: inherit; width: 100%; }
+  .lrow > span:nth-child(2) { flex: 1; min-width: 0; display: grid; }
+  .lrow small { color: var(--muted); font-size: 12px; }
+  .lrow .go { color: var(--muted); }
+  .plist { display: grid; gap: 8px; margin-bottom: 8px; }
+  .pcard2 { display: grid; gap: 4px; text-align: left; background: var(--surface); border: 1px solid var(--border); border-left: 5px solid var(--c); border-radius: 14px; padding: 12px; font: inherit; color: inherit; }
+  .pcard2.done { opacity: .6; }
+  .pcard2 small { color: var(--muted); font-size: 13px; }
+  .pcard2 .pbar, .phead .pbar { height: 6px; }
+  .lhead { display: flex; justify-content: space-between; align-items: center; gap: 8px; margin-bottom: 8px; }
+  .segs.mini { margin: 0; padding: 3px; flex: none; } .segs.mini .seg { padding: 6px 12px; font-size: 13px; flex: none; }
+  .phead { background: var(--surface); border: 1px solid var(--border); border-top: 5px solid var(--c); border-radius: 16px; padding: 12px 14px; display: grid; gap: 6px; margin-bottom: 10px; }
+  .phead .pht { display: flex; align-items: center; justify-content: space-between; gap: 8px; } .phead .pht b { font-size: 19px; }
+  .phead small { color: var(--muted); }
+  /* Tablero */
+  .board { display: flex; gap: 10px; overflow-x: auto; scroll-snap-type: x mandatory; padding-bottom: 6px; margin: 0 -2px; }
+  .kcol { flex: 0 0 84%; scroll-snap-align: start; background: var(--sunken); border-radius: 16px; padding: 10px; display: flex; flex-direction: column; gap: 8px; min-height: 160px; }
+  .kcol h3 { margin: 0 2px; font-size: 15px; display: flex; justify-content: space-between; } .kcol h3 span { color: var(--muted); }
+  .kcol.drop { outline: 2px solid var(--accent); background: var(--accent-soft); }
+  .kcard { background: var(--surface); border-radius: 12px; border-left: 4px solid var(--c); padding: 10px 12px; display: grid; gap: 2px; cursor: pointer; -webkit-user-select: none; user-select: none; }
+  .kcard small { color: var(--muted); font-size: 12px; }
+  .kcard.done b { text-decoration: line-through; opacity: .6; }
+  /* Compra */
+  .shoplist { display: grid; gap: 4px; margin-bottom: 4px; }
+  .shoprow { display: flex; align-items: center; gap: 12px; background: var(--surface); border-radius: 12px; padding: 9px 12px; }
+  .shoprow .sn { flex: 1; font-size: 16px; cursor: pointer; }
+  .shoprow.done .sn { text-decoration: line-through; color: var(--muted); }
+  .shoprow.done .check { background: var(--c); } .shoprow.done .check svg { opacity: 1; }
+  .shopedit { background: var(--sunken); border-radius: 12px; padding: 10px; display: grid; gap: 8px; margin: -2px 0 4px; }
+  /* Notas */
+  .nbar { margin-bottom: 8px; }
+  .nfold { margin: 0 0 10px; overflow-x: auto; flex-wrap: nowrap; }
+  .ngrid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
+  .ncard { display: grid; gap: 4px; align-content: start; text-align: left; background: var(--surface); border: 1px solid var(--border); border-radius: 14px; padding: 12px; font: inherit; color: inherit; min-height: 96px; overflow: hidden; }
+  .ncard img { width: calc(100% + 24px); margin: -12px -12px 4px; height: 96px; object-fit: cover; background: var(--sunken); }
+  .ncard b { font-size: 15px; overflow: hidden; text-overflow: ellipsis; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; }
+  .ncard .nprev { font-size: 13px; color: var(--muted); overflow: hidden; display: -webkit-box; -webkit-line-clamp: 4; -webkit-box-orient: vertical; }
+  .ncard small { font-size: 11px; color: var(--muted); }
+  .ncard.journal { border-left: 4px solid var(--accent); }
+  .sheet.tall { min-height: 70vh; }
+  .nhbtns { display: flex; gap: 6px; } .nhbtns .iconbtn.on { background: var(--accent-soft); }
+  #noteDel { width: auto; min-width: 40px; padding: 0 10px; border-radius: 20px; font-size: 13px; font-weight: 700; }
+  .ntitle { font-size: 20px; font-weight: 700; background: transparent; padding-left: 2px; }
+  .nblocks { display: grid; gap: 2px; }
+  .nb-t { width: 100%; border: 0; background: transparent; resize: none; font: inherit; font-size: 16px; line-height: 1.45; color: inherit; padding: 4px 2px; min-height: 30px; overflow: hidden; }
+  .nb-t:focus, .nb-ci:focus { outline: none; }
+  .nb-c { display: flex; align-items: center; gap: 10px; padding: 2px 0; }
+  .nbx { width: 24px; height: 24px; border-radius: 50%; border: 2px solid var(--accent); background: transparent; display: grid; place-items: center; padding: 0; flex: none; }
+  .nbx svg { width: 12px; height: 12px; opacity: 0; } .nb-c.on .nbx { background: var(--accent); } .nb-c.on .nbx svg { opacity: 1; }
+  .nb-ci { flex: 1; border: 0; background: transparent; font: inherit; font-size: 16px; color: inherit; padding: 6px 0; min-width: 0; }
+  .nb-c.on .nb-ci { text-decoration: line-through; color: var(--muted); }
+  .ntools { position: sticky; bottom: 0; display: flex; gap: 6px; flex-wrap: wrap; background: var(--surface); padding: 8px 0 2px; border-top: 1px solid var(--border); }
+  .nphotos { display: grid; grid-template-columns: repeat(auto-fill, minmax(96px, 1fr)); gap: 6px; }
+  .nphoto { border: 0; padding: 0; border-radius: 10px; overflow: hidden; aspect-ratio: 1; background: var(--sunken); }
+  .nphoto img { width: 100%; height: 100%; object-fit: cover; display: block; }
+  .nphoto { border: 1px solid var(--border); }
+  .nphoto img[src^="data:image/png"] { object-fit: contain; background: #fff; }
+  .ncard img[src^="data:image/png"] { object-fit: contain; background: #fff; }
+  .nfold { scrollbar-width: none; } .nfold::-webkit-scrollbar { display: none; }
+  img.missing { visibility: hidden; }
+  .links { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+  .links .label { width: 100%; }
+  .lchip { display: inline-flex; align-items: center; background: var(--sunken); border-radius: 999px; overflow: hidden; }
+  .lchip button { border: 0; background: transparent; font: inherit; font-size: 13px; padding: 5px 10px; color: inherit; }
+  .lchip .x { padding: 5px 8px 5px 0; color: var(--muted); }
+  /* Foto en grande y dibujo */
+  .photoview { position: fixed; inset: 0; z-index: 60; background: rgba(0,0,0,.92); display: grid; grid-template-rows: 1fr auto; padding: calc(var(--safe-t) + 10px) 10px calc(var(--safe-b) + 10px); }
+  .photoview img { max-width: 100%; max-height: 100%; margin: auto; object-fit: contain; }
+  .pvbar { display: flex; gap: 8px; justify-content: center; flex-wrap: wrap; }
+  .drawpad { position: fixed; inset: 0; z-index: 70; background: #fff; display: grid; grid-template-rows: auto 1fr; }
+  .dtools { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; padding: calc(var(--safe-t) + 8px) 10px 8px; background: var(--surface); border-bottom: 1px solid var(--border); color: var(--text); }
+  .dcolors, .dsizes { display: flex; gap: 6px; }
+  .dcol { width: 30px; height: 30px; border-radius: 50%; border: 2px solid var(--border); padding: 0; }
+  .dcol.on { outline: 3px solid var(--accent); outline-offset: 1px; }
+  .dsz { width: 30px; height: 30px; border-radius: 50%; border: 1px solid var(--border); background: var(--surface); display: grid; place-items: center; padding: 0; }
+  .dsz i { display: block; border-radius: 50%; background: var(--text); } .dsz.on { border-color: var(--accent); background: var(--accent-soft); }
+  #drawEraser[aria-pressed="true"] { background: var(--accent-soft); outline: 2px solid var(--accent); }
+  #drawSave { margin-left: auto; }
+  #drawCanvas { width: 100%; height: 100%; touch-action: none; display: block; cursor: crosshair; }
+  body.drawing { overflow: hidden; }
+  /* Libros y películas: portadas */
+  .shelfview { margin: 6px 0 2px; align-self: start; width: max-content; }
+  .covers { display: grid; grid-template-columns: repeat(auto-fill, minmax(104px, 1fr)); gap: 12px 10px; }
+  .cov { position: relative; display: grid; gap: 3px; text-align: left; border: 0; background: none; padding: 0; font: inherit; color: inherit; }
+  .cov img, .cov .cph { aspect-ratio: 2 / 3; width: 100%; border-radius: 8px; object-fit: cover; box-shadow: 0 2px 8px rgba(0,0,0,.18); }
+  .cov img { position: absolute; top: 0; left: 0; z-index: 1; height: auto; }
+  .cov .cph { display: grid; place-items: center; padding: 8px; background: linear-gradient(160deg, var(--accent-soft), var(--sunken)); font-size: 12px; font-weight: 700; text-align: center; overflow: hidden; }
+  .cov b { font-size: 12px; line-height: 1.2; overflow: hidden; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; }
+  .cov small { font-size: 11px; color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .cov.on .cph, .cov.on img { outline: 3px solid var(--accent); }
+  .covedit { margin-bottom: 12px; }
+  @media (min-width: 820px) {
+    nav.tabbar { flex-direction: column; overflow-y: auto; }
+    .minical { display: block; margin-top: 18px; width: 100%; font-size: 12px; }
+    .mmhead { display: flex; align-items: center; justify-content: space-between; margin-bottom: 6px; }
+    .mmhead b { font-size: 13px; }
+    .mmhead button { border: 0; background: none; font-size: 18px; color: var(--muted); width: 28px; height: 28px; border-radius: 50%; }
+    .mmgrid { display: grid; grid-template-columns: repeat(7, 1fr); gap: 1px; text-align: center; }
+    .mmgrid i { font-style: normal; color: var(--muted); font-size: 10px; font-weight: 700; }
+    .mmgrid button { border: 0; background: none; font: inherit; font-size: 12px; color: inherit; aspect-ratio: 1; border-radius: 50%; padding: 0; }
+    .mmgrid button.busy { font-weight: 800; }
+    .mmgrid button.today { color: var(--accent); font-weight: 800; }
+    .mmgrid button.sel { background: var(--accent); color: var(--accent-ink); }
+    nav.tabbar .minical button { display: grid; place-items: center; padding: 0; gap: 0; border-radius: 50%; font-size: 12px; font-weight: 600; color: var(--text); }
+    nav.tabbar .minical .mmhead button { font-size: 18px; color: var(--muted); width: 28px; height: 28px; }
+    nav.tabbar .minical .mmgrid button.sel { color: var(--accent-ink); }
+    nav.tabbar .minical .mmgrid button.today:not(.sel) { color: var(--accent); }
+    .lcards { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+    .plist { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    .ngrid { grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); }
+    .board { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); overflow: visible; }
+    .kcol { flex: none; }
+    body[data-view="sinfecha"] .inner, body[data-view="notas"] .inner { max-width: 1000px; }
+    .sheet.tall { width: 680px; }
+  }
 </style>
 </head>
 <body>
@@ -886,9 +1052,10 @@
     <button role="tab" data-view="hoy"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/></svg>Hoy<span class="badge" hidden></span></button>
     <button role="tab" data-view="semana"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="5" width="18" height="16" rx="3"/><path d="M3 10h18M8 3v4M16 3v4"/></svg>Agenda<span class="badge" hidden></span></button>
     <button role="tab" data-view="habitos"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3c2 3 5 5 5 9a5 5 0 0 1-10 0c0-2 1-3.5 2-4.5 0 2 1 3 2 3 0-3-1-5 1-7.5z"/></svg>Hábitos<span class="badge" hidden></span></button>
-    <button role="tab" data-view="sinfecha"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 6h16M4 12h16M4 18h10"/></svg>Sin fecha<span class="badge" hidden></span></button>
+    <button role="tab" data-view="sinfecha"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 6h11M9 12h11M9 18h11"/><circle cx="4.5" cy="6" r="1.2"/><circle cx="4.5" cy="12" r="1.2"/><circle cx="4.5" cy="18" r="1.2"/></svg>Listas<span class="badge" hidden></span></button>
+    <button role="tab" data-view="notas"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 3h10l4 4v14H5z"/><path d="M15 3v4h4M8 12h8M8 16h6"/></svg>Notas<span class="badge" hidden></span></button>
     <button role="tab" data-view="hechas"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M8 12.5l3 3 5-6"/></svg>Progreso<span class="badge" hidden></span></button>
-  </div></nav>
+  </div><div class="minical" id="miniCal"></div></nav>
 </div>
 
 <div class="scrim" id="scrim" hidden></div>
@@ -901,7 +1068,9 @@
     <div class="chips" id="tplChips" hidden></div>
     <input class="inp title" type="text" id="title" placeholder="p. ej. mañana a las 8 correr #entreno" aria-label="Tarea" enterkeyhint="done">
     <div class="detected" id="detected" hidden></div>
-    <div class="field"><span class="label">Categoría</span><div class="chips" id="catChips"></div></div>
+    <div class="field"><span class="label">Categoría</span><div class="chips" id="catChips"></div>
+      <div class="chips"><button type="button" class="chip flagchip" id="flagBtn" aria-pressed="false">🚩 Con bandera</button></div></div>
+    <label class="field" id="bornField" hidden><span class="label">Año de nacimiento (para saber cuántos cumple)</span><input class="inp" type="number" id="born" inputmode="numeric" min="1900" max="2100" placeholder="p. ej. 1996"></label>
     <div class="field">
       <span class="label" id="dateLabel">Fecha</span>
       <div class="daterow">
@@ -910,7 +1079,9 @@
       </div>
       <div class="chips"><button type="button" class="chip" id="tonightBtn" aria-pressed="false" hidden>🌙 Esta noche</button><button type="button" class="chip" id="somedayBtn" aria-pressed="false" hidden>💭 Algún día</button></div>
     </div>
-    <label class="field"><span class="label">Etiquetas</span><input class="inp" type="text" id="tags" placeholder="p. ej. cálculo, urgente (o escribe @cálculo en el título)" aria-label="Etiquetas" autocomplete="off"></label>
+    <label class="field"><span class="label">Etiquetas</span><input class="inp" type="text" id="tags" placeholder="p. ej. cálculo, ordenador (o escribe @cálculo en el título)" aria-label="Etiquetas" autocomplete="off"></label>
+    <div class="chips wrap tagsugs" id="tagSugs" hidden></div>
+    <label class="field"><span class="label">Proyecto</span><select class="inp" id="proj" aria-label="Proyecto"></select></label>
     <div class="grid2" id="timeRow">
       <label class="pickbtn tbtn"><span class="label">Hora de inicio</span><span id="timeText">—</span><input type="time" id="time" aria-label="Hora de inicio"></label>
       <label class="pickbtn tbtn"><span class="label">Hora de fin</span><span id="endText">—</span><input type="time" id="endTime" aria-label="Hora de fin"></label>
@@ -1063,10 +1234,11 @@
     <div class="menu">
       <button type="button" id="openLook"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 3a9 9 0 0 0 0 18z" fill="currentColor"/></svg>Apariencia<span class="go">›</span></button>
       <button type="button" id="openGoal"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3l2.7 5.6 6.1.9-4.4 4.3 1 6.1L12 17l-5.4 2.9 1-6.1-4.4-4.3 6.1-.9z"/></svg>Puntos y objetivos<span class="go">›</span></button>
+      <button type="button" id="openCalPrefs"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="5" width="18" height="16" rx="3"/><path d="M3 10h18M8 3v4M16 3v4"/></svg>Calendario y tiempo<span class="go">›</span></button>
       <button type="button" id="openCats"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7h4l2-3h6l2 3h4v13H3z"/><circle cx="12" cy="13" r="3"/></svg>Categorías<span class="go">›</span></button>
       <button type="button" id="openSections"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/><path d="M14 17.5h7M17.5 14v7"/></svg>Secciones<span class="go">›</span></button>
       <button type="button" id="openProg"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 20V10M10 20V4M16 20v-7M22 20H2"/></svg>Progreso<span class="go">›</span></button>
-      <button type="button" id="openFilters"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 5h16l-6 8v6l-4-2v-4z"/></svg>Filtros<span class="go">›</span></button>
+      <button type="button" id="openFilters"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 5h16l-6 8v6l-4-2v-4z"/></svg>Listas inteligentes<span class="go">›</span></button>
       <button type="button" id="openTpl"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="3" width="16" height="18" rx="2"/><path d="M8 8h8M8 12h8M8 16h5"/></svg>Plantillas<span class="go">›</span></button>
       <button type="button" id="openRewards"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="8" width="18" height="13" rx="2"/><path d="M12 8v13M3 12h18M12 8c-2-4-6-4-6-1.5S9 8 12 8zm0 0c2-4 6-4 6-1.5S15 8 12 8z"/></svg>Recompensas<span class="go">›</span></button>
     </div>
@@ -1300,6 +1472,7 @@
       <div><span>✍️</span><p><b>Apúntalo todo</b> con el botón +. Escribe como hablas: “mañana a las 8 correr #entreno”.</p></div>
       <div><span>☀️</span><p><b>Hoy</b> es tu día en una línea de horas. Toca el círculo para completar algo y la tarea para ver sus detalles.</p></div>
       <div><span>🔥</span><p><b>Hábitos</b> para cumplir, para dejar, tu sueño y tus rutinas, con rachas.</p></div>
+      <div><span>📋</span><p><b>Listas</b> (sin fecha, con bandera 🚩, la compra y tus proyectos) y <b>Notas</b> con casillas, fotos y dibujos. Mantén pulsada una tarea para ver más opciones.</p></div>
       <div><span>⭐</span><p>Cada cosa que haces da <b>puntos</b>: subes de nivel y puedes canjearlos por premios.</p></div>
       <div><span>⚙️</span><p>En <b>⋯ → Personalizar → Secciones</b> puedes apagar lo que no uses.</p></div>
     </div>
@@ -1317,19 +1490,21 @@
 <div class="sheet" id="filterSheet" hidden>
   <div class="grab"></div>
   <div class="inner">
-    <div class="sheet-head"><h3>Filtros</h3><button type="button" class="btn ghost" data-back="#prefSheet">Atrás</button></div>
-    <p class="hint">Un filtro guarda una búsqueda que usas a menudo. Sale en la barra de categorías con ⚑. En el buscador también puedes escribir <b>@etiqueta</b>.</p>
+    <div class="sheet-head"><h3>Listas inteligentes</h3><button type="button" class="btn ghost" data-close>Cerrar</button></div>
+    <p class="hint">Una lista inteligente se rellena sola con las tareas que cumplen lo que elijas. Sale en <b>Listas</b> y en la barra de categorías con ☰. En el buscador también puedes escribir <b>@etiqueta</b>.</p>
     <div class="sublist" id="filterList"></div>
     <form class="box-card" id="filterForm">
-      <h4>Nuevo filtro</h4>
-      <input class="inp" type="text" id="fName" placeholder="Nombre, p. ej. Estudio urgente" maxlength="40" aria-label="Nombre del filtro">
+      <h4>Nueva lista</h4>
+      <input class="inp" type="text" id="fName" placeholder="Nombre, p. ej. Estudio importante" maxlength="40" aria-label="Nombre de la lista">
       <input class="inp" type="text" id="fTags" placeholder="Etiquetas (separadas por comas)" aria-label="Etiquetas">
       <div class="grid2">
         <label class="field"><span class="label">Categoría</span><select class="inp" id="fCat"></select></label>
-        <label class="field"><span class="label">Cuándo</span><select class="inp" id="fWhen"><option value="todo">Cualquier día</option><option value="hoy">Hoy y atrasadas</option><option value="semana">Próximos 7 días</option><option value="sinfecha">Sin fecha</option></select></label>
+        <label class="field"><span class="label">Cuándo</span><select class="inp" id="fWhen"><option value="todo">Cualquier día</option><option value="hoy">Hoy y atrasadas</option><option value="semana">Próximos 7 días</option><option value="atrasadas">Solo atrasadas</option><option value="confecha">Con fecha</option><option value="sinfecha">Sin fecha</option></select></label>
       </div>
-      <label class="field" hidden><span class="label">Prioridad</span><select class="inp" id="fPrio"><option value="">Cualquiera</option><option value="alta">Solo alta</option></select></label>
-      <button class="btn primary" type="submit">Guardar filtro</button>
+      <label class="field"><span class="label">Proyecto</span><select class="inp" id="fProj"></select></label>
+      <label class="checkrow"><input type="checkbox" id="fFlag"> Solo con bandera 🚩</label>
+      <label class="checkrow"><input type="checkbox" id="fLoc"> Solo con ubicación 📍</label>
+      <button class="btn primary" type="submit">Guardar lista</button>
     </form>
   </div>
 </div>
@@ -1396,6 +1571,84 @@
       <button class="btn danger" type="button" id="siriRotate">Cambiar clave</button>
     </div>
   </div>
+</div>
+
+<!-- Hoja: calendario y tiempo -->
+<div class="sheet" id="calPrefSheet" hidden>
+  <div class="grab"></div>
+  <div class="inner">
+    <div class="sheet-head"><h3>Calendario y tiempo</h3><button type="button" class="btn ghost" data-back="#prefSheet">Atrás</button></div>
+    <div id="calPrefBody" style="display:grid;gap:12px"></div>
+  </div>
+</div>
+
+<!-- Hoja: menú de una tarea (al mantenerla pulsada) -->
+<div class="sheet" id="ctxSheet" hidden>
+  <div class="grab"></div>
+  <div class="inner">
+    <div class="sheet-head"><h3 id="ctxTitle"></h3><button type="button" class="btn ghost" data-close>Cerrar</button></div>
+    <div class="menu" id="ctxBody"></div>
+  </div>
+</div>
+
+<!-- Hoja: proyecto -->
+<form class="sheet" id="projSheet" autocomplete="off" hidden>
+  <div class="grab"></div>
+  <div class="inner" id="projForm">
+    <div class="sheet-head"><h3 id="projTitle">Nuevo proyecto</h3><button type="button" class="btn ghost" data-close>Cancelar</button></div>
+    <input class="inp title" type="text" id="projName" placeholder="Nombre, p. ej. TFG, Mudanza, Viaje a Roma" maxlength="80" aria-label="Nombre del proyecto">
+    <div class="field"><span class="label">Color</span><div class="chips wrap" id="projColors"></div></div>
+    <div class="field"><span class="label">Fecha límite</span><label class="pickbtn"><span id="projDueText">Sin fecha límite</span><input type="date" id="projDue" aria-label="Fecha límite"></label></div>
+    <textarea class="inp" id="projNotes" placeholder="De qué va, objetivos, enlaces…" aria-label="Notas del proyecto"></textarea>
+    <button class="btn primary block" type="submit">Guardar</button>
+    <button class="btn block" type="button" id="projDone" hidden>✓ Proyecto terminado</button>
+    <button class="btn danger block" type="button" id="projDel" hidden>Borrar proyecto</button>
+  </div>
+</form>
+
+<!-- Hoja: nota -->
+<div class="sheet tall" id="noteSheet" hidden>
+  <div class="grab"></div>
+  <div class="inner">
+    <div class="sheet-head"><button type="button" class="btn ghost" id="noteDone">‹ Listo</button><div class="nhbtns"><button type="button" class="iconbtn" id="notePin" aria-label="Fijar arriba" aria-pressed="false">📌</button><button type="button" class="iconbtn" id="noteDel" aria-label="Borrar nota">🗑</button></div></div>
+    <p class="hint" id="noteMeta"></p>
+    <input class="inp ntitle" type="text" id="noteTitle" placeholder="Título" maxlength="200" autocomplete="off" aria-label="Título">
+    <div class="grid2"><select class="inp" id="noteFolder" aria-label="Carpeta"></select><select class="inp" id="noteProj" aria-label="Proyecto"></select></div>
+    <div class="nblocks" id="noteBlocks"></div>
+    <div id="notePhotos"></div>
+    <div id="noteLinks"></div>
+    <div class="ntools"><button type="button" class="btn small" id="noteCheck">☐ Lista</button><label class="btn small">📷 Foto<input type="file" id="notePhotoIn" accept="image/*" multiple hidden></label><button type="button" class="btn small" id="noteDraw">✏️ Dibujar</button><button type="button" class="btn small" id="noteLink">🔗 Enlazar</button></div>
+  </div>
+</div>
+
+<!-- Hoja: enlazar -->
+<div class="sheet" id="linkSheet" hidden>
+  <div class="grab"></div>
+  <div class="inner">
+    <div class="sheet-head"><h3>Enlazar con…</h3><button type="button" class="btn ghost" id="linkBack">Atrás</button></div>
+    <input class="inp" type="search" id="linkSearch" placeholder="Busca una nota, tarea, proyecto, libro o película" autocomplete="off" aria-label="Buscar">
+    <div class="lrows" id="linkResults"></div>
+  </div>
+</div>
+
+<!-- Ver una foto -->
+<div class="photoview" id="photoView" hidden>
+  <img id="pvImg" alt="Foto">
+  <div class="pvbar"><button type="button" class="btn" id="pvClose">Cerrar</button><button type="button" class="btn" id="pvDraw">✏️ Dibujar encima</button><button type="button" class="btn danger" id="pvDel">Borrar</button></div>
+</div>
+
+<!-- Dibujar -->
+<div class="drawpad" id="drawPad" hidden>
+  <div class="dtools">
+    <button type="button" class="btn small" id="drawCancel">Cancelar</button>
+    <div class="dcolors" id="drawColors"></div>
+    <div class="dsizes" id="drawSizes"></div>
+    <button type="button" class="iconbtn" id="drawEraser" aria-label="Goma" aria-pressed="false">⌫</button>
+    <button type="button" class="iconbtn" id="drawUndo" aria-label="Deshacer">↶</button>
+    <button type="button" class="iconbtn" id="drawClear" aria-label="Borrar todo">🗑</button>
+    <button type="button" class="btn primary small" id="drawSave">Guardar</button>
+  </div>
+  <canvas id="drawCanvas"></canvas>
 </div>
 
 <!-- Pantalla de acceso -->

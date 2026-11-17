@@ -149,3 +149,35 @@ export const nowHM = () => { const d = new Date(); return `${pad(d.getHours())}:
 export const LEVEL_NAMES = ['Principiante', 'Aprendiz', 'Constante', 'Organizada', 'Enfocada', 'Disciplinada', 'Imparable', 'Experta', 'Maestra', 'Leyenda'];
 export const levelStart = L => 50 * L * (L - 1);
 export function levelOf(xp) { let L = 1; while (levelStart(L + 1) <= xp) L++; return L; }
+
+// ---------- Número de la semana (ISO: la semana que contiene el jueves) ----------
+export function isoWeek(iso) {
+  const d = parseISO(iso); d.setHours(12);
+  d.setDate(d.getDate() + 3 - (d.getDay() + 6) % 7);
+  const w1 = new Date(d.getFullYear(), 0, 4, 12);
+  return 1 + Math.round(((d - w1) / 864e5 - 3 + (w1.getDay() + 6) % 7) / 7);
+}
+
+// ---------- Lista de la compra: cada cosa a su sección del súper ----------
+export const SHOP_SECS = [['fruta', '🍎', 'Fruta y verdura'], ['carne', '🥩', 'Carne y pescado'], ['lacteos', '🧀', 'Lácteos y huevos'], ['pan', '🥖', 'Panadería'],
+  ['despensa', '🥫', 'Despensa'], ['bebidas', '🧃', 'Bebidas'], ['congelados', '🧊', 'Congelados'], ['limpieza', '🧽', 'Limpieza'], ['higiene', '🧴', 'Higiene'], ['otros', '🛍️', 'Otros']];
+export const shopKey = s => String(s || '').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().replace(/\s+/g, ' ').trim();
+// El orden importa: "tomate frito" es despensa antes que verdura, "bebida de avena" lácteo antes que bebida…
+const SHOP_RX = [
+  ['lacteos', /bebida (de )?(avena|soja|almendra|arroz|coco)/],
+  ['congelados', /congelad|helado|pizza|nuggets|varitas|croquetas/],
+  ['despensa', /tomate (frito|triturado)|atun|conserva|arroz|\bpasta\b|macarron|espagueti|fideo|lenteja|garbanzo|alubia|harina|azucar|\bsal\b|aceite|vinagre|cereal|avena|\bcafe\b|\bte\b|infusion|cacao|chocolate|galleta|mermelada|\bmiel\b|especia|oregano|pimienta|caldo|frutos secos|nuez|nueces|almendra|cacahuete|salsa|mayonesa|ketchup|mostaza|legumbre|quinoa|levadura|patatas fritas|snack|aceituna|tortitas/],
+  ['pan', /\bpan\b|barra de pan|baguette|croissant|cruasan|magdalena|bollo|bolleria|tostada|biscote/],
+  ['lacteos', /leche|yogur|queso|mantequilla|\bnata\b|huevo|kefir|bebida (de )?(avena|soja|almendra|arroz)|requeson|cuajada|natillas|\bflan/],
+  ['carne', /pollo|ternera|cerdo|carne|filete|hamburguesa|salchicha|jamon|chorizo|\bpavo|lomo|pescado|salmon|merluza|gamba|langostino|bacalao|sardina|calamar|sepia|mejillon|embutido|fiambre|bacon|beicon|costilla|pechuga|muslo|dorada|lubina/],
+  ['fruta', /manzana|platano|naranja|limon|\bpera|\buva|fresa|kiwi|melon|sandia|pina\b|aguacate|tomate|lechuga|cebolla|\bajo|patata|zanahoria|pepino|pimiento|calabac|berenjena|brocoli|espinaca|champi|\bseta|fruta|verdura|ensalada|rucula|judia verde|judias verdes|puerro|apio|mango|cereza|melocoton|mandarina|arandano|frambuesa|coliflor|calabaza|perejil|cilantro|albahaca|\blima\b|nectarina|ciruela|\bhigo|granada|papaya|maiz/],
+  ['bebidas', /\bagua\b|zumo|refresco|coca.?cola|cerveza|\bvino\b|bebida|gaseosa|tonica|isotonica|kombucha|\bcava\b/],
+  ['limpieza', /detergente|lejia|lavavajillas|suavizante|friegasuelos|fregasuelos|estropajo|bolsas? de basura|papel de cocina|limpia|bayeta|friegaplatos|jabon de lavadora|amoniaco|ambientador|guantes/],
+  ['higiene', /champu|\bgel\b|desodorante|pasta de dientes|dentifrico|cepillo|papel higienico|compresa|tampon|crema|jabon|maquillaje|colonia|cuchilla|algodon|bastoncillo|toallitas|acondicionador|protector solar|panuelos|enjuague|hilo dental|seda dental/],
+];
+export function shopSection(name, learned = {}) {
+  const k = shopKey(name);
+  if (learned && learned[k]) return learned[k];
+  const hit = SHOP_RX.find(([, rx]) => rx.test(k));
+  return hit ? hit[0] : 'otros';
+}
