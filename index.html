@@ -509,6 +509,77 @@
   .erow1 .inp { min-height: 40px; padding: 8px 10px; }
   .erow .pickbtn { min-height: 44px; }
   .prompt { border-color: var(--accent); }
+  /* Calendario */
+  .seg, .cg-day, .cblk, .cchip, .ygrid button, .ymt { border: 0; background-color: transparent; font: inherit; color: inherit; }
+  .seg { color: var(--muted); font-weight: 700; font-size: 14px; }
+  .seg.on { color: var(--text); }
+  .calbar { display: flex; gap: 8px; align-items: center; margin-bottom: 8px; }
+  .calbar .segs { flex: 1; margin: 0; }
+  .cgrid { --cw: calc((100% - 3em) / var(--n)); }
+  .cg-head, .cg-all { display: grid; grid-template-columns: 3em repeat(var(--n), minmax(0, 1fr)); gap: 2px; }
+  .cg-head { position: sticky; top: calc(var(--safe-t) * -1); z-index: 4; background: var(--bg); padding: 4px 0; }
+  .cg-day { display: grid; justify-items: center; font-size: 11px; color: var(--muted); padding: 2px 0; border-radius: 10px; }
+  .cg-day b { font-size: 17px; color: var(--text); }
+  .cg-day.today b { background: var(--accent); color: var(--accent-ink); border-radius: 50%; width: 30px; height: 30px; display: grid; place-items: center; }
+  .cg-all { border-bottom: 1px solid var(--border); padding: 4px 0 6px; align-items: start; }
+  .cg-lbl { font-size: 10px; color: var(--muted); line-height: 1.1; padding-top: 4px; }
+  .cg-allcol { display: grid; gap: 2px; min-width: 0; }
+  .cchip { text-align: left; font-size: 12px; padding: 3px 6px; border-radius: 6px; background: color-mix(in srgb, var(--c) 18%, var(--surface)); border-left: 3px solid var(--c); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .cchip.done, .cblk.done { opacity: .45; text-decoration: line-through; }
+  .cchip.ghost, .cblk.ghost { border-style: dashed; opacity: .75; }
+  .cg-body { position: relative; margin-top: 8px; }
+  .cg-cols { position: absolute; left: 3em; right: 0; top: 0; bottom: 0; display: grid; grid-template-columns: repeat(var(--n), minmax(0, 1fr)); }
+  .cg-col { position: relative; border-left: 1px solid var(--border); cursor: copy; }
+  .cg-col.today { background: color-mix(in srgb, var(--accent) 5%, transparent); }
+  .cblk { position: absolute; z-index: 1; text-align: left; overflow: hidden; border-radius: 6px; padding: 2px 5px; background: color-mix(in srgb, var(--c) 20%, var(--surface)); border-left: 3px solid var(--c); font-size: 12px; line-height: 1.2; display: flex; flex-direction: column; gap: 1px; cursor: pointer; }
+  .cblk b { font-weight: 700; overflow: hidden; text-overflow: ellipsis; }
+  .cblk small { color: var(--muted); font-size: 11px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .cgrid.week .cblk { padding: 1px 3px; font-size: 11px; }
+  .cblk[data-cdrag] { touch-action: pan-y; -webkit-user-select: none; user-select: none; -webkit-touch-callout: none; }
+  .cblk.dragging { z-index: 5; box-shadow: 0 6px 18px rgba(0,0,0,.25); opacity: .95; touch-action: none; }
+  .cres { position: absolute; left: 0; right: 0; height: 9px; cursor: ns-resize; touch-action: none; }
+  .cres.t { top: 0; } .cres.b { bottom: 0; }
+  .cres.b::after { content: ''; position: absolute; left: 50%; bottom: 2px; width: 16px; height: 3px; margin-left: -8px; border-radius: 2px; background: var(--c); opacity: .6; }
+  .lday button { border: 0; background: none; font: inherit; color: inherit; padding: 0; cursor: pointer; }
+  .clist { display: flex; flex-direction: column; gap: 4px; margin-bottom: 6px; }
+  .crow { display: flex; align-items: flex-start; gap: 10px; text-align: left; width: 100%; padding: 8px 10px; border: 0; border-left: 4px solid var(--c); border-radius: 10px; background: var(--surface); font: inherit; color: inherit; cursor: pointer; }
+  .crow.done { opacity: .5; } .crow.done b { text-decoration: line-through; }
+  .crow.ghost { border-left-style: dashed; }
+  .cwhen { flex: 0 0 4.2em; font-size: 13px; font-weight: 600; line-height: 1.25; }
+  .cwhen small { color: var(--muted); font-weight: 400; }
+  .cwhat { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 1px; }
+  .cwhat small { color: var(--muted); font-size: 12px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .crep { color: var(--muted); }
+  .cgrid:not(.week) .cg-all { grid-template-columns: 3em 1fr; }
+  .ycal { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px 12px; }
+  .ymt { font-weight: 700; color: var(--danger); font-size: 14px; padding: 2px 0 4px; text-align: left; }
+  .ygrid { display: grid; grid-template-columns: repeat(7, 1fr); gap: 1px; }
+  .ygrid button, .ygrid span { font-size: 10px; aspect-ratio: 1; display: grid; place-items: center; border-radius: 50%; padding: 0; }
+  .ygrid button.busy { font-weight: 800; color: var(--accent); }
+  .ygrid button.today { background: var(--danger); color: #fff; }
+  .dloc { color: var(--accent); text-decoration: none; font-weight: 600; }
+
+  /* iPad y pantallas grandes: menú a la izquierda, más ancho y Hoy en dos columnas */
+  @media (min-width: 820px) {
+    :root { --tabbar: 0px; --side: 210px; }
+    nav.tabbar { top: 0; bottom: 0; right: auto; width: var(--side); border-top: 0; border-right: 1px solid var(--border); padding: calc(var(--safe-t) + 70px) 12px 12px max(12px, var(--safe-l)); align-items: flex-start; justify-content: flex-start; }
+    nav.tabbar .tabs { grid-template-columns: 1fr; max-width: none; gap: 4px; }
+    nav.tabbar button { display: flex; align-items: center; gap: 12px; justify-items: start; font-size: 16px; padding: 10px 12px; border-radius: 12px; }
+    nav.tabbar button[aria-selected="true"] { background: var(--accent-soft); }
+    nav.tabbar .badge { position: static; margin-left: auto; }
+    .scroller { padding-left: calc(var(--side) + 28px); padding-right: max(28px, var(--safe-r)); padding-bottom: calc(var(--safe-b) + 110px); }
+    .inner { max-width: 760px; }
+    body[data-view="semana"] .inner, body[data-view="hoy"] .inner, body[data-view="hechas"] .inner { max-width: 1180px; }
+    .toast { left: calc(var(--side) + 16px); bottom: calc(var(--safe-b) + 20px); }
+    .fab { bottom: calc(var(--safe-b) + 24px); right: max(28px, var(--safe-r)); }
+    .hoygrid { display: grid; grid-template-columns: minmax(0, 1.5fr) minmax(280px, 1fr); gap: 28px; align-items: start; }
+    .hoyside { position: sticky; top: 8px; }
+    .ycal { grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 22px; }
+    .ygrid button, .ygrid span { font-size: 12px; }
+    .cblk { font-size: 13px; } .cgrid.week .cblk { font-size: 12px; padding: 2px 5px; }
+    .mcal button { min-height: 72px; }
+    .sheet { max-height: 88vh; }
+  }
   .rato-head.wkhead { align-items: center; flex-wrap: nowrap; }
   .hbar { display: flex; justify-content: flex-end; gap: 6px; margin: 6px 0 0; flex-wrap: wrap; }
   .hmove { display: inline-flex; gap: 2px; vertical-align: middle; margin-left: 4px; }
@@ -899,6 +970,7 @@
         <button type="button" class="btn primary" id="splitGo">Crear partes</button>
       </details>
     </div>
+    <input class="inp" type="text" id="loc" placeholder="📍 Ubicación (opcional)" aria-label="Ubicación" maxlength="200" autocomplete="off">
     <textarea class="inp" id="notes" placeholder="Notas" aria-label="Notas"></textarea>
     <button class="btn primary block" type="submit" id="submitBtn">Añadir</button>
     <div class="field" id="calRow" hidden>

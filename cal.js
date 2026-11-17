@@ -58,6 +58,7 @@ export function toICS(t) {
     p.allDay ? `DTEND;VALUE=DATE:${p.end}` : `DTEND:${p.end}`,
     `SUMMARY:${icsText(t.title)}`,
   ];
+  if (t.loc) lines.push(`LOCATION:${icsText(t.loc)}`);
   const d = details(t); if (d) lines.push(`DESCRIPTION:${icsText(d)}`);
   const r = rrule(t); if (r) lines.push(`RRULE:${r}`);
   if (t.remind !== null && t.remind !== undefined && t.remind !== '') {
@@ -74,6 +75,7 @@ export function googleURL(t) {
   const p = parts(t);
   const q = new URLSearchParams({ action: 'TEMPLATE', text: t.title, dates: `${p.start}/${p.end}`, ctz: 'Europe/Madrid' });
   const d = details(t); if (d) q.set('details', d);
+  if (t.loc) q.set('location', t.loc);
   const r = rrule(t); if (r) q.set('recur', 'RRULE:' + r);
   return 'https://calendar.google.com/calendar/render?' + q.toString();
 }

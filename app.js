@@ -50,7 +50,7 @@ let selectedDay = null;
 // Estado del formulario de tarea
 let editingId = null, formCat = 'personal', formDays = [], formParts = [], formNoDate = false, splitDays = [1, 2, 3, 4, 5], formSomeday = false, formTonight = false;
 
-document.documentElement.dataset.v = '22';
+document.documentElement.dataset.v = '24';
 // ---------- Registro de errores (se ve en ⋯ → Ayuda) ----------
 const EKEY = 'mis-tareas-errores';
 function logError(msg, where) {
@@ -110,7 +110,7 @@ function clean(t) {
     notes: String(t.notes || ''), done: !!t.done, doneAt: t.doneAt || null, created: t.created || Date.now(), spawned: !!t.spawned,
     remind: num(t.remind), minutes: Number(t.minutes) > 0 ? Math.min(480, Math.round(Number(t.minutes))) : null,
     points: num(t.points) === null ? null : Math.max(0, Math.min(1000, Math.round(num(t.points)))),
-    parentId: t.parentId || '', order: Number(t.order) || 0, inbox: !!t.inbox && !t.date,
+    parentId: t.parentId || '', order: Number(t.order) || 0, loc: String(t.loc || '').slice(0, 200), inbox: !!t.inbox && !t.date,
     someday: !!t.someday && !t.date, tonight: !!t.tonight && !!t.date,
     tags: Array.isArray(t.tags) ? [...new Set(t.tags.map(normTag).filter(Boolean))].slice(0, 10) : [],
     streak: Number(t.streak) || 0, best: Number(t.best) || 0,
@@ -821,7 +821,7 @@ $('#splitGo').addEventListener('click', () => {
   $('#splitBox').open = false; renderParts();
 });
 
-function openForm(id) {
+function openForm(id, preset) {
   const t = id ? tasks.find(x => x.id === id) : null;
   editingId = t ? t.id : null; tplParts = null; formCatTouched = !!t;
   $('#title').value = t ? t.title : '';
@@ -831,9 +831,11 @@ function openForm(id) {
   formSomeday = t ? !!t.someday : (view === 'sinfecha' && sinfechaMode === 'someday');
   formTonight = t ? !!t.tonight : false;
   $('#tags').value = t ? (t.tags || []).join(', ') : '';
-  $('#date').value = t ? (t.date || todayISO()) : (view === 'semana' && agendaSel ? agendaSel : todayISO());
-  $('#time').value = t ? (t.time || '') : '';
-  $('#endTime').value = t ? (t.endTime || '') : '';
+  $('#date').value = t ? (t.date || todayISO()) : preset?.date || (view === 'semana' ? (calMode === 'mes' ? agendaSel : calSel) || todayISO() : todayISO());
+  if (!t && (preset?.date || view === 'semana')) formNoDate = false;
+  $('#time').value = t ? (t.time || '') : (preset?.time || '');
+  $('#endTime').value = t ? (t.endTime || '') : (preset?.time ? hhmm(toMin(preset.time) + 60) : '');
+  $('#loc').value = t ? (t.loc || '') : '';
   $('#prio').value = t ? (t.prio || 'normal') : 'normal';
   $('#repeat').value = t ? (t.repeat || '') : '';
   formDays = t && Array.isArray(t.days) ? [...t.days] : [];
@@ -880,7 +882,7 @@ $('#taskSheet').addEventListener('submit', e => {
     nthDay: $('#repeat').value === 'mensual' && formMonthMode === 'nth' ? Number($('#nthDay').value) : null,
     minutes: formNoDate && Number($('#minutes').value) > 0 ? Number($('#minutes').value) : null,
     points: $('#points').value === '' ? null : Number($('#points').value),
-    remind: formNoDate || $('#remind').value === '' ? null : Number($('#remind').value), notes: $('#notes').value.trim(), inbox: false,
+    remind: formNoDate || $('#remind').value === '' ? null : Number($('#remind').value), notes: $('#notes').value.trim(), inbox: false, loc: $('#loc').value.trim(),
     tags: readTags(), someday: formNoDate && formSomeday, tonight: !formNoDate && formTonight,
   };
   if (!editingId) {
@@ -1996,7 +1998,7 @@ async function syncGcal(interactive) {
         if (t && t.gcal?.updated === ev.updated) continue;
         const exam = /examen|entrega|parcial|^ex\.? /.test(fold(ev.summary || ''));
         const data = { title: (ev.summary || '(sin título)').slice(0, 300), date: s.date, time: s.time, endTime: s.time && e.date === s.date ? e.time : '', gcal: { id: ev.id, updated: ev.updated } };
-        if (!t) { t = { id, cat: exam ? 'estudio' : 'evento', prio: exam ? 'alta' : 'normal', notes: ev.location || '', done: false, created: Date.now(), ...data }; tasks.push(t); }
+        if (!t) { t = { id, cat: exam ? 'estudio' : 'evento', prio: exam ? 'alta' : 'normal', notes: '', loc: ev.location || '', done: false, created: Date.now(), ...data }; tasks.push(t); }
         else Object.assign(t, data);
         writes.push(t); got++;
       }
@@ -2526,6 +2528,157 @@ function dayHTML(byCat) {
   return html + '</div>';
 }
 // --- Calendario del mes ---
+// ---------- Calendario: día, semana, mes y año (como un calendario de verdad) ----------
+let calMode = (() => { try { return localStorage.getItem('cal-mode') || (innerWidth >= 820 ? 'semana' : 'mes'); } catch { return 'mes'; } })();
+const CAL_MODES = [['dia', 'Día'], ['semana', 'Semana'], ['mes', 'Mes'], ['ano', 'Año'], ['lista', 'Lista']];
+let listDays = 30;
+const calDate = () => calSel || (monthOffset ? monthDate(todayISO(), monthOffset, 1) : todayISO());
+// Lo de un día: tareas (sin las grandes con partes), repeticiones futuras y rutinas
+function calDayItems(byCat, d) {
+  const today = todayISO(), gh = ghostsIn(byCat, d, d)[d] || [];
+  const list = [...tasks.filter(t => byCat(t) && t.date === d && !children(t.id).length && true), ...gh.map(t => ({ ...t, ghost: true }))];
+  const timed = [], allDay = [];
+  list.forEach(t => {
+    const par = t.parentId ? tasks.find(p => p.id === t.parentId) : null;
+    const it = { id: t.id, title: par ? par.title : t.title, sub: par ? t.title : '', color: colorVar(catOf(t.cat).color), done: !!t.done && !t.ghost, ghost: !!t.ghost, loc: t.loc || '' };
+    if (!t.time) { allDay.push(it); return; }
+    const s = toMin(t.time); let e = t.endTime ? toMin(t.endTime) : s + 60; if (e <= s) e += 1440;
+    timed.push({ ...it, s, e });
+  });
+  habits.filter(h => h.kind === 'routine' && applies(h, d) && h.steps.length).forEach(h => {
+    const s = toMin(h.steps[0].time), last = toMin(h.steps[h.steps.length - 1].time);
+    timed.push({ id: h.id, routine: true, title: h.name, sub: '', color: 'var(--accent)', s, e: Math.max(s + 30, last + 30), done: d === today && stepsToday(h).length === h.steps.length });
+  });
+  return { timed: timed.sort((a, b) => a.s - b.s || a.e - b.e), allDay };
+}
+const laneIt = items => { const lanes = []; items.forEach(i => { let l = lanes.findIndex(end => end <= i.s); if (l < 0) { l = lanes.length; lanes.push(0); } lanes[l] = i.e; i.lane = l; }); return Math.max(1, lanes.length); };
+const calBlock = (i, top, nl, compact) => { const drag = !i.ghost && !i.routine;
+  return `<button class="cblk${i.done ? ' done' : ''}${i.ghost ? ' ghost' : ''}" style="top:${top(i.s)}px;height:${Math.max(18, (i.e - i.s) / 60 * HOUR_PX - 2)}px;left:calc(100% * ${i.lane / nl});width:calc(100% / ${nl} - 2px);--c:${i.color}" data-act="${i.routine ? 'rdetails' : 'details'}" data-id="${i.id}"${drag ? ` data-cdrag="${i.id}" data-s="${i.s}" data-e="${i.e}"` : ''}>
+  ${drag ? '<i class="cres t" data-ch="t"></i>' : ''}<b>${esc(i.title)}</b>${!compact && i.sub ? `<small>${esc(i.sub)}</small>` : ''}<small class="ctime">${hhmm(i.s)}${!compact && i.loc ? ' · 📍 ' + esc(i.loc) : ''}</small>${drag ? '<i class="cres b" data-ch="b"></i>' : ''}</button>`; };
+// Lista de lo que viene: día a día, sin rutinas
+function listCalHTML(byCat) {
+  const today = todayISO(); let html = '', n = 0;
+  for (let k = 0; k < listDays; k++) {
+    const d = addDays(today, k), x = calDayItems(byCat, d), items = [...x.allDay.map(i => ({ ...i, s: -1 })), ...x.timed.filter(i => !i.routine)];
+    if (!items.length) continue; n += items.length;
+    const lbl = k === 0 ? 'Hoy' : k === 1 ? 'Mañana' : cap(parseISO(d).toLocaleDateString('es-ES', { weekday: 'long', day: 'numeric', month: 'long' }));
+    html += `<h2 class="group lday"><button type="button" data-act="calgo" data-d="${d}">${lbl}</button><span>${items.length}</span></h2><div class="clist">${items.map(i => `<button class="crow${i.done ? ' done' : ''}${i.ghost ? ' ghost' : ''}" style="--c:${i.color}" data-act="details" data-id="${i.id}"><span class="cwhen">${i.s < 0 ? 'todo el día' : `${hhmm(i.s)}<br><small>${hhmm(i.e % 1440)}</small>`}</span><span class="cwhat"><b>${esc(i.title)}</b>${i.sub ? `<small>${esc(i.sub)}</small>` : ''}${i.loc ? `<small>📍 ${esc(i.loc)}</small>` : ''}</span>${i.ghost ? '<small class="crep">↻</small>' : ''}</button>`).join('')}</div>`;
+  }
+  if (!n) html = `<p class="empty">No tienes nada apuntado en los próximos ${listDays} días.</p>`;
+  return html + `<button class="btn ghost block" data-act="calmore" style="margin-top:10px">Ver ${listDays + 30 > 365 ? 'más' : '30 días más'}</button>`;
+}
+function calGridHTML(byCat, days) {
+  const today = todayISO(), now = toMin(nowHM()), data = days.map(d => calDayItems(byCat, d)), all = data.flatMap(x => x.timed);
+  const startH = Math.min(7, ...all.map(i => Math.floor(i.s / 60))), endH = Math.min(24, Math.max(23, ...all.map(i => Math.ceil(i.e / 60))));
+  const top = m => (m - startH * 60) / 60 * HOUR_PX, H = (endH - startH) * HOUR_PX, multi = days.length > 1;
+  const head = multi ? `<div class="cg-head"><span></span>${days.map(d => { const x = parseISO(d); return `<button class="cg-day${d === today ? ' today' : ''}" data-act="calgo" data-d="${d}"><span>${DAY_LETTER[x.getDay()]}</span><b>${x.getDate()}</b></button>`; }).join('')}</div>` : '';
+  const allDay = data.some(x => x.allDay.length) ? `<div class="cg-all"><span class="cg-lbl">todo el día</span>${data.map((x, k) => `<div class="cg-allcol">${x.allDay.map(i => `<button class="cchip${i.done ? ' done' : ''}${i.ghost ? ' ghost' : ''}" style="--c:${i.color}" data-act="details" data-id="${i.id}">${esc(i.title)}${!multi && i.sub ? ` · <small>${esc(i.sub)}</small>` : ''}</button>`).join('')}</div>`).join('')}</div>` : '';
+  let hours = ''; for (let h = startH; h <= endH; h++) hours += `<div class="tl2h" style="top:${(h - startH) * HOUR_PX}px"><span>${pad(h % 24)}:00</span></div>`;
+  const cols = days.map((d, k) => { const t = data[k].timed, nl = laneIt(t);
+    return `<div class="cg-col${d === today ? ' today' : ''}" data-d="${d}" data-sh="${startH}">${d === today && now >= startH * 60 && now <= endH * 60 ? `<div class="tl2now" style="top:${top(now)}px;left:0"></div>` : ''}${t.map(i => calBlock(i, top, nl, multi)).join('')}</div>`; }).join('');
+  return `<div class="cgrid${multi ? ' week' : ''}" style="--n:${days.length}">${head}${allDay}<div class="cg-body" style="height:${H}px">${hours}<div class="cg-cols">${cols}</div></div></div>`;
+}
+function yearCalHTML(byCat) {
+  const base = parseISO(calDate()), y = base.getFullYear(), today = todayISO(), from = `${y}-01-01`, to = `${y}-12-31`;
+  const busy = new Set(tasks.filter(t => byCat(t) && t.date >= from && t.date <= to).map(t => t.date)); Object.keys(ghostsIn(byCat, from, to)).forEach(d => busy.add(d));
+  return `<div class="ycal">${[...Array(12)].map((_, m) => { const first = new Date(y, m, 1), lead = (first.getDay() + 6) % 7, n = dim(y, m);
+    let cells = '<span></span>'.repeat(lead);
+    for (let day = 1; day <= n; day++) { const d = `${y}-${pad(m + 1)}-${pad(day)}`; cells += `<button class="${d === today ? 'today' : ''}${busy.has(d) ? ' busy' : ''}" data-act="calgo" data-d="${d}">${day}</button>`; }
+    return `<div class="ymonth"><button class="ymt" data-act="calmonth" data-d="${y}-${pad(m + 1)}-01">${cap(first.toLocaleDateString('es-ES', { month: 'long' }))}</button><div class="ygrid">${cells}</div></div>`; }).join('')}</div>`;
+}
+function calendarHTML(byCat) {
+  const d = calDate(), x = parseISO(d), mon = mondayOf(d);
+  const fmt = (v, o) => parseISO(v).toLocaleDateString('es-ES', o);
+  const title = calMode === 'dia' ? cap(fmt(d, { weekday: 'long', day: 'numeric', month: 'long' }))
+    : calMode === 'semana' ? `${fmt(mon, { day: 'numeric', month: 'short' })} – ${fmt(addDays(mon, 6), { day: 'numeric', month: 'short', year: 'numeric' })}`
+    : calMode === 'ano' ? String(x.getFullYear()) : '';
+  let html = `<div class="calbar"><div class="segs">${CAL_MODES.map(([m, l]) => `<button type="button" class="seg ${calMode === m ? 'on' : ''}" data-act="calmode" data-m="${m}">${l}</button>`).join('')}</div><button class="btn small" data-act="caltoday">Hoy</button></div>`;
+  if (calMode === 'mes') return html + monthCalHTML(byCat);
+  if (calMode === 'lista') return html + listCalHTML(byCat);
+  html += `<div class="weeknav"><button class="iconbtn" data-act="calprev" aria-label="Anterior">‹</button><strong>${title}</strong><button class="iconbtn" data-act="calnext" aria-label="Siguiente">›</button></div>`;
+  if (calMode === 'ano') return html + yearCalHTML(byCat);
+  if (calMode === 'semana') return html + calGridHTML(byCat, [...Array(7)].map((_, i) => addDays(mon, i))) + '<p class="hint" style="text-align:center">Toca un hueco para apuntar algo · mantén pulsada una tarea para moverla de hora o de día, o tira de su borde · desliza para cambiar de semana</p>';
+  return html + calGridHTML(byCat, [d]) + '<p class="hint" style="text-align:center">Toca un hueco para apuntar algo · mantén pulsada una tarea para moverla, o tira de su borde para cambiar cuánto dura · desliza para cambiar de día</p>';
+}
+function calNav(n) {
+  const d = calDate();
+  if (calMode === 'mes') { monthOffset += n; calSel = null; }
+  else if (calMode === 'dia') calSel = addDays(d, n);
+  else if (calMode === 'semana') calSel = addDays(d, 7 * n);
+  else calSel = yearDate(d, n);
+  if (calMode !== 'mes') syncMonth();
+  render();
+}
+// El mes que se ve sigue al día elegido
+function syncMonth() { const a = parseISO(calSel || todayISO()), t = parseISO(todayISO()); monthOffset = (a.getFullYear() - t.getFullYear()) * 12 + a.getMonth() - t.getMonth(); }
+// Tocar un hueco del día o de la semana: nueva tarea a esa hora
+$('#list').addEventListener('click', e => {
+  if (suppressClick) return;
+  const col = e.target.closest('.cg-col'); if (!col || suppressClick || e.target.closest('.cblk')) return;
+  const r = col.getBoundingClientRect(), m = Math.floor((+col.dataset.sh * 60 + (e.clientY - r.top) / HOUR_PX * 60) / 30) * 30;
+  openForm(null, { date: col.dataset.d, time: hhmm(Math.max(0, Math.min(1410, m))) });
+});
+// Arrastrar en Día y Semana: mantener pulsado mueve (de hora y de día); los bordes cambian la duración
+let cDrag = null, cPress = null, cMoved = false;
+const CSNAP = 15;
+function cBegin(p) {
+  const t = tasks.find(x => x.id === p.blk.dataset.cdrag); if (!t) return;
+  navigator.vibrate?.(12); calSwipe = null;
+  const col = p.blk.closest('.cg-col');
+  cDrag = { el: p.blk, t, mode: p.mode || 'm', x0: p.x, y0: p.y, s0: +p.blk.dataset.s, e0: +p.blk.dataset.e, col, d0: col.dataset.d, sh: +col.dataset.sh };
+  p.blk.classList.add('dragging'); p.blk.style.left = '0'; p.blk.style.width = 'calc(100% - 2px)';
+}
+$('#list').addEventListener('pointerdown', e => {
+  if (view !== 'semana' || e.button > 0) return;
+  const blk = e.target.closest('.cblk[data-cdrag]'); if (!blk) return;
+  if (e.target.dataset.ch) { e.preventDefault(); cBegin({ blk, mode: e.target.dataset.ch, x: e.clientX, y: e.clientY }); return; }
+  const p = { blk, x: e.clientX, y: e.clientY };
+  p.timer = setTimeout(() => { if (cPress === p) { cPress = null; cBegin(p); } }, HOLD_MS);
+  cPress = p;
+});
+const colAt = x => [...document.querySelectorAll('#list .cg-col')].find(c => { const r = c.getBoundingClientRect(); return x >= r.left && x < r.right; });
+document.addEventListener('touchmove', e => { if (cDrag) e.preventDefault(); }, { passive: false });
+document.addEventListener('pointermove', e => {
+  if (cPress && Math.hypot(e.clientX - cPress.x, e.clientY - cPress.y) > 8) { clearTimeout(cPress.timer); cPress = null; }
+  const d = cDrag; if (!d) return;
+  e.preventDefault(); tlAutoScroll(e.clientY);
+  const dm = Math.round((e.clientY - d.y0) / HOUR_PX * 60 / CSNAP) * CSNAP, len = d.e0 - d.s0;
+  let s = d.s0, en = d.e0;
+  if (d.mode === 'm') {
+    s = Math.max(0, Math.min(1440 - len, d.s0 + dm)); en = s + len;
+    const c = colAt(e.clientX); if (c && c !== d.col) { c.append(d.el); d.col = c; }
+  } else if (d.mode === 't') s = Math.max(0, Math.min(d.e0 - CSNAP, d.s0 + dm));
+  else en = Math.min(1440, Math.max(d.s0 + CSNAP, d.e0 + dm));
+  d.s = s; d.e = en;
+  d.el.style.top = (s - d.sh * 60) / 60 * HOUR_PX + 'px';
+  d.el.style.height = Math.max(18, (en - s) / 60 * HOUR_PX - 2) + 'px';
+  const tm = d.el.querySelector('.ctime'); if (tm) tm.textContent = `${hhmm(s)}–${hhmm(en % 1440)}`;
+}, { passive: false });
+function cDrop(cancel) {
+  if (cPress) { clearTimeout(cPress.timer); cPress = null; return; } // toque corto: se abren los detalles
+  const d = cDrag; if (!d) return; cDrag = null;
+  cMoved = true; suppressClick = true; setTimeout(() => { cMoved = false; suppressClick = false; }, 80);
+  d.el.classList.remove('dragging');
+  const date = d.col.dataset.d;
+  if (cancel || d.s === undefined || (d.s === d.s0 && d.e === d.e0 && date === d.d0)) { render(); return; }
+  const t = d.t, prev = { date: t.date, time: t.time, endTime: t.endTime };
+  t.date = date; t.time = hhmm(d.s); t.endTime = d.e >= 1440 ? '23:59' : hhmm(d.e);
+  store.put(t).catch(writeFailed);
+  const dl = date !== prev.date ? ` · ${cap(parseISO(date).toLocaleDateString('es-ES', { weekday: 'long', day: 'numeric' }))}` : '';
+  showToast(`${t.title}: ${t.time}–${t.endTime}${dl}`, () => { const cur = tasks.find(x => x.id === t.id) || t; Object.assign(cur, prev); store.put(cur).catch(writeFailed); });
+  render();
+}
+document.addEventListener('pointerup', () => cDrop(false));
+document.addEventListener('pointercancel', () => cDrop(true));
+// Deslizar a los lados para cambiar de día, semana, mes o año
+let calSwipe = null;
+$('#list').addEventListener('pointerdown', e => { if (view === 'semana' && calMode !== 'lista' && !e.target.closest('li.task, input, .wkscroll, .sscroll, .cres')) calSwipe = { x: e.clientX, y: e.clientY, t: Date.now() }; });
+$('#list').addEventListener('pointerup', e => {
+  const s = calSwipe; calSwipe = null; if (!s || view !== 'semana' || cDrag || cMoved) return;
+  const dx = e.clientX - s.x, dy = e.clientY - s.y;
+  if (Math.abs(dx) > 70 && Math.abs(dx) > Math.abs(dy) * 1.5 && Date.now() - s.t < 800) { suppressClick = true; setTimeout(() => { suppressClick = false; }, 60); calNav(dx < 0 ? 1 : -1); }
+});
+
 let agendaSel = null;
 function monthCalHTML(byCat) {
   const today = todayISO(), base = parseISO(today), y = base.getFullYear(), m = base.getMonth() + monthOffset;
@@ -2546,7 +2699,7 @@ function monthCalHTML(byCat) {
   const title = cap(first.toLocaleDateString('es-ES', { month: 'long', year: 'numeric' }));
   return `<div class="weeknav"><button class="iconbtn" data-act="mprev" aria-label="Mes anterior">‹</button><strong>${title}</strong><button class="iconbtn" data-act="mnext" aria-label="Mes siguiente">›</button></div>
     <div class="mcal"><b>L</b><b>M</b><b>X</b><b>J</b><b>V</b><b>S</b><b>D</b>${cells}</div>
-    <h2 class="group"><span>${cap(parseISO(sel).toLocaleDateString('es-ES', { weekday: 'long', day: 'numeric', month: 'long' }))}</span><span>${selReal.length + selGh.length || ''}</span></h2>
+    <h2 class="group"><span>${cap(parseISO(sel).toLocaleDateString('es-ES', { weekday: 'long', day: 'numeric', month: 'long' }))}</span><button class="btn ghost small" data-act="calgo" data-d="${sel}">Ver el día ›</button></h2>
     ${selReal.length ? `<ul class="list">${listItemsHTML(selReal)}</ul>` : ''}
     ${selGh.length ? `<div style="display:grid;gap:6px;margin-top:6px">${selGh.map(t => `<button class="ghost" data-act="edit" data-id="${t.id}"><span class="dot" style="background:${colorVar(catOf(t.cat).color)}"></span><span><b>${esc(t.title)}</b>${t.time ? ' · ' + t.time : ''}</span><span>↻</span></button>`).join('')}</div>` : ''}
     ${!selReal.length && !selGh.length ? '<p class="free">Nada este día</p>' : ''}`;
@@ -2592,6 +2745,7 @@ function renderDetails() {
     `<span class="catn"><span class="dot" style="background:${colorVar(c.color)}"></span>${esc(c.name)}</span>`,
     parts.length ? '' : `<span>📅 ${esc(when)}</span>`,
     root.repeat ? `<span>↻ ${repeatLabel(root)}</span>` : '',
+    (t.loc || root.loc) ? `<a class="dloc" href="https://maps.apple.com/?q=${encodeURIComponent(t.loc || root.loc)}" target="_blank" rel="noopener">📍 ${esc(t.loc || root.loc)}</a>` : '',
     parts.length ? '' : `<span>⭐ ${t.parentId ? partPoints(t) : taskPoints(t)}</span>`,
     ...(root.tags || []).map(x => `<span class="tagchip">@${esc(x)}</span>`),
   ].filter(Boolean).join('');
@@ -2716,7 +2870,8 @@ function hoyHTML() {
   const habLeft = habits.filter(h => (h.kind === 'quit' || (h.kind === 'build' && h.freq === 'daily')) && !habitDoneToday(h));
   if (habLeft.length) { const names = habLeft.slice(0, 2).map(h => h.name).join(', ') + (habLeft.length > 2 ? ` y ${habLeft.length - 2} más` : '');
     html += `<button class="hableft" data-act="gohabits"><span>🔥</span><span><b>${habLeft.length} ${habLeft.length === 1 ? 'hábito' : 'hábitos'} por hacer hoy</b><small>${esc(names)}</small></span><span class="go">›</span></button>`; }
-  html += `<div class="hoyhead"><span>${pending ? `${pending} por hacer` : items.length + extras.length ? '¡Todo hecho! 🎉' : 'Nada para hoy'}</span><button class="btn small" data-act="hoyedit">✏️ Editar</button></div>`;
+  let side = '';
+  html += `<div class="hoygrid"><div class="hoymain"><div class="hoyhead"><span>${pending ? `${pending} por hacer` : items.length + extras.length ? '¡Todo hecho! 🎉' : 'Nada para hoy'}</span><button class="btn small" data-act="hoyedit">✏️ Editar</button></div>`;
   if (items.length) html += timelineHTML(items, now, false);
   else html += `<p class="hint" style="margin:8px 2px">${extras.length ? 'No tienes nada con hora hoy. Pulsa “Editar” para ponerle hora a tus tareas.' : 'Nada apuntado para hoy. Pulsa + para añadir algo.'}</p>`;
   const row = (it, cls) => {
@@ -2724,9 +2879,10 @@ function hoyHTML() {
     return `<div class="xrow ${cls}">${ckBtn(it)}<span class="xb" data-act="${it.multi ? 'gopen' : 'details'}" data-id="${it.id}" data-key="${it.key || ''}">${itemText(it)}</span>${it.multi ? `<button class="chev${open ? ' open' : ''}" data-act="gopen" data-key="${it.key}" aria-label="Ver las partes" aria-expanded="${open}">›</button>` : ''}</div>
       ${open ? `<div class="xsub">${it.members.map(m => `<div class="xrow sub ${m.done ? 'done' : ''}">${ckBtn({ ids: [m.id], color: it.color, done: m.done, title: m.title })}<span class="xb" data-act="details" data-id="${m.id}"><b>${esc(m.title)}</b></span></div>`).join('')}</div>` : ''}`;
   };
+  html += '</div><div class="hoyside">';
   if (extras.length) html += `<h2 class="group"><span>Extra</span><span>${extras.length}</span></h2><div class="xlist">${extras.sort((a, b) => a.done - b.done).map(x => row(x, x.done ? 'done' : '')).join('')}</div>`;
   if (late.length) html += `<h2 class="group late"><span>De otros días</span><span>${late.length}</span></h2><div class="latebar"><button class="chip" data-act="mvlate" data-to="hoy">Todas a hoy</button><button class="chip" data-act="mvlate" data-to="manana">A mañana</button><button class="chip" data-act="mvlate" data-to="none">Sin fecha</button></div><div class="xlist">${late.map(t => { const par = t.parentId ? tasks.find(p => p.id === t.parentId) : null; return row({ ids: [t.id], id: t.id, title: par ? par.title : t.title, sub: `${par ? t.title + ' · ' : ''}${friendlyDate(t.date).toLowerCase()}`, color: colorVar(catOf(t.cat).color), done: false }, 'late'); }).join('')}</div>`;
-  return html;
+  return html + '</div></div>';
 }
 // La línea de horas: cada hora mide lo mismo. En modo editar: tocar = cambiar la hora; mantener = arrastrar.
 let tlStartH = 7;
@@ -3096,6 +3252,7 @@ function render() {
   if (view !== 'hoy' || hoyEdit) hoyScrolled = '';
 }
 function renderMain() {
+  document.body.dataset.view = view;
   $('#todayLabel').textContent = new Date().toLocaleDateString('es-ES', { weekday: 'long', day: 'numeric', month: 'long' });
   $('#viewTitle').textContent = query ? 'Buscar' : VIEWS[view];
   $('#ptsToday').textContent = `⭐ ${pointsOn(todayISO())}`;
@@ -3133,7 +3290,7 @@ function renderMain() {
   } else if (view === 'hoy') {
     html = hoyHTML(); count = 0;
   } else if (view === 'semana') {
-    html = monthCalHTML(byCat); count = 0;
+    html = calendarHTML(byCat); count = 0;
     doneCount = tasks.filter(t => t.done && t.date === (calSel || todayISO())).length;
   } else if (view === 'habitos') {
     html = habitsViewHTML();
@@ -3222,9 +3379,15 @@ $('#list').addEventListener('click', e => {
   else if (act === 'areasedit') { areasEdit = !areasEdit; render(); }
   else if (act === 'goal') openGoal();
   else if (act === 'mvlate') moveTasks(lateTasks().filter(t => (view === 'hoy' || byCatNow(t)) && !children(t.id).length), el.dataset.to);
+  else if (act === 'calmore') { listDays = Math.min(366, listDays + 30); render(); }
   else if (act === 'horder') { habOrdering = !habOrdering; render(); }
   else if (act === 'hmove') moveHabit(id, Number(el.dataset.dir));
   else if (act === 'habdone') { try { localStorage.setItem('hab-done', localStorage.getItem('hab-done') === '1' ? '0' : '1'); } catch {} render(); }
+  else if (act === 'calmode') { calMode = el.dataset.m; try { localStorage.setItem('cal-mode', calMode); } catch {} if (calMode === 'mes') syncMonth(); render(); }
+  else if (act === 'caltoday') { calSel = null; monthOffset = 0; render(); }
+  else if (act === 'calprev' || act === 'calnext') calNav(act === 'calnext' ? 1 : -1);
+  else if (act === 'calgo') { calSel = el.dataset.d; calMode = 'dia'; syncMonth(); $('#scroller').scrollTop = 0; render(); }
+  else if (act === 'calmonth') { calSel = el.dataset.d; calMode = 'mes'; syncMonth(); $('#scroller').scrollTop = 0; render(); }
   else if (act === 'gohabits') { view = 'habitos'; $('#scroller').scrollTop = 0; render(); }
   else if (act === 'move') { const t = tasks.find(x => x.id === id); if (t) moveTasks([t], el.dataset.to); }
   else if (act === 'review') openReview();
