@@ -88,6 +88,8 @@ export function parseQuick(text, cats = [], now = new Date()) {
     if (take(/\bpasado manana\b/)) out.date = isoDate(addDays(today, 2));
     else if (take(/(?<!la )\bmanana\b(?! (?:por la|de la))/) || take(/^\s*manana\b/)) out.date = isoDate(addDays(today, 1));
     else if (take(/\bhoy\b/)) out.date = isoDate(today);
+    else if (take(/\banteayer\b/)) out.date = isoDate(addDays(today, -2));
+    else if (take(/\bayer\b/)) out.date = isoDate(addDays(today, -1));
     else if ((m = take(new RegExp(`\\b(?:el\\s+)?(?:dia\\s+)?(\\d{1,2})\\s+de\\s+(${MONTHS.join('|')})(?:\\s+de\\s+(\\d{4}))?\\b`)))) {
       const mo = MONTHS.indexOf(m[2]); let y = m[3] ? +m[3] : today.getFullYear();
       let d = new Date(y, mo, +m[1]);

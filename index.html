@@ -1070,6 +1070,24 @@
   .pbox { display: inline-block; width: 11px; height: 11px; border: 1px solid #000; margin-right: 6px; font-size: 9px; line-height: 10px; text-align: center; vertical-align: -1px; }
   .pfree { color: #999; }
   @media print { body.printing > *:not(#printArea) { display: none !important; } #printArea { position: static; padding: 0; } }
+  /* v29 */
+  .tlfree { margin: 2px 2px 8px; color: var(--muted); font-size: 14px; }
+  .pmonth i.lv-1 { background: var(--sunken); }
+  .xtoggle { display: flex; align-items: center; gap: 10px; width: 100%; text-align: left; background: var(--surface); border: 1px solid var(--border); border-radius: 14px; padding: 11px 14px; margin: 0 0 8px; font: inherit; color: inherit; }
+  .xtoggle span:first-child { flex: 1; font-weight: 700; } .xtoggle b { color: var(--muted); }
+  .xtoggle .chev { color: var(--muted); font-size: 20px; transition: transform .15s; } .xtoggle.open .chev { transform: rotate(90deg); }
+  .xtoggle.late { border-color: color-mix(in srgb, var(--danger) 45%, var(--border)); } .xtoggle.late b { color: var(--danger); }
+  .xtoggle + .xlist, .xtoggle + .latebar { margin-bottom: 10px; }
+  .pmonths { display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 6px; }
+  .pmonth { display: grid; justify-items: center; gap: 4px; border: 1px solid var(--border); background: var(--surface); border-radius: 12px; padding: 7px 0 5px; font: inherit; font-size: 12px; color: inherit; }
+  .pmonth i { width: 18px; height: 18px; border-radius: 5px; display: block; }
+  .pmonth.on { border-color: var(--accent); background: var(--accent-soft); font-weight: 700; } .pmonth.fut { opacity: .45; }
+  .pyear { border: 0; background: none; color: var(--muted); font-size: 20px; padding: 0 8px; } .pyear:disabled { opacity: .25; }
+  #ptsToday small { font-weight: 600; opacity: .75; }
+  #catBtn.on { background: var(--accent-soft); color: var(--accent); }
+  .lcards { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  .lcard { padding: 10px; } .lcard b { font-size: 22px; } .lcard > span:last-child { font-size: 13px; }
+  @media (min-width: 820px) { .lcards { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
 </style>
 </head>
 <body>
@@ -1082,6 +1100,9 @@
           <div class="sub"><span class="d" id="todayLabel"></span><button class="ptsbtn" id="ptsToday" data-goal type="button">⭐ 0</button><span class="sync" id="sync"><i></i><span id="syncText">Cargando…</span></span></div>
         </div>
         <div class="hbtns">
+          <button class="iconbtn" id="catBtn" aria-label="Filtrar por categoría" aria-pressed="false" hidden>
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 5h16l-6 8v6l-4-2v-4z"/></svg>
+          </button>
           <button class="iconbtn" id="searchBtn" aria-label="Buscar" aria-pressed="false">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><path d="M20 20l-3.5-3.5"/></svg>
           </button>
@@ -1097,7 +1118,7 @@
       <div class="filters" id="filters"></div>
       <div id="list"></div>
       <p class="stats" id="stats"></p>
-      <p class="tip" id="tip">Desliza una tarea a la derecha para completarla y a la izquierda para borrarla.</p>
+      <p class="tip" id="tip" hidden>Desliza una tarea a la derecha para completarla y a la izquierda para borrarla.</p>
       <button class="btn showdone" id="showDoneBtn" type="button" hidden>Ver las hechas</button>
       <button class="btn ghost clear" id="clearDone" type="button" hidden>Borrar las hechas</button>
     </div>
@@ -1548,10 +1569,6 @@
 </div>
 
 <!-- Hoja: planificar mi día -->
-<div class="sheet" id="planSheet" hidden>
-  <div class="grab"></div>
-  <div class="inner" id="planBody"></div>
-</div>
 
 <!-- Hoja: filtros -->
 <div class="sheet" id="filterSheet" hidden>

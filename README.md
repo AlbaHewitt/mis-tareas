@@ -62,7 +62,6 @@ Luego, en el iPhone, abre la app desde su icono de la pantalla de inicio → ⋯
 - **Partes agrupadas**: las partes de una misma tarea en un mismo día salen como una sola fila que se despliega. Cada parte da su parte proporcional de los puntos de la tarea (se puede cambiar) y se ordenan arrastrando ⋮⋮.
 - **Bandera 🚩**: en vez de prioridad o de la antigua categoría Urgente, las tareas importantes llevan bandera (también con “!” o “urgente” al escribir); van primero y tienen su lista “Con bandera”. Las tareas que estaban en Urgente pasaron solas a tener bandera y su categoría se adivinó. Si no eliges categoría, se adivina por las palabras (gym → Entreno, estudiar → Estudio, limpiar → Casa, cumple → Cumpleaños…).
 - **Repeticiones flexibles**: cada N días, semanas, meses o años; días de la semana cada N semanas (“una semana sí y otra no”); el primer/segundo/tercer/cuarto/último lunes… de cada mes; y una vez al año. También escritas: “cada 15 días”, “cada dos martes”, “el primer domingo de cada mes”, “una vez al mes”, “entre semana una semana sí y otra no”.
-- **Bandeja rápida**: arriba en Hoy. Si escribes una fecha u hora va directa a su día; si no, a la bandeja para ordenarla luego.
 - **Hábitos por mes y por año** (p. ej. limpiar radiadores una vez al mes), y los grupos de Hábitos se pliegan y despliegan.
 - **Repetir**: si una tarea que se repite se queda sin hacer, pasa sola al siguiente día que le toca. La hora de fin es, por defecto, una hora después del inicio.
 - **Editar Hoy**: tocar una tarea cambia su hora (se guarda con ✓); mantener pulsado la arrastra; “Quitar hora” la devuelve a Sin hora. Las rutinas salen como un solo bloque; sus pasos se ven al tocarlas.
@@ -71,7 +70,7 @@ Luego, en el iPhone, abre la app desde su icono de la pantalla de inicio → ⋯
 - **Agenda (calendario)**: vistas Día, Semana, Mes, Año y Lista (lo que viene, día a día), botón Hoy y deslizar a los lados para cambiar. En Día y Semana, arriba las horas y debajo “Sin hora”. Pellizcar a lo ancho enseña más o menos días (de 1 a 7; en el iPhone empieza en 3) y a lo alto hace las horas más grandes o más pequeñas. Tocar un hueco apunta algo a esa hora; mantener pulsado un hueco y arrastrar elige de qué hora a qué hora. Mantener pulsada una tarea la mueve de hora o de día (o abajo, a Sin hora); las de Sin hora se arrastran a la rejilla para darles hora; tirando del borde cambia lo que dura (todo con Deshacer). En el Mes, se mantiene pulsada una tarea de la lista y se suelta en otro día. Números de semana (S47) y el tiempo de cada día (⋯ → Personalizar → Calendario y tiempo). Las tareas pueden tener ubicación (📍, se abre en Mapas y va al calendario del iPhone y a Google).
 - **Menú al mantener pulsado**: en cualquier lista o en la Agenda, mantener pulsada una tarea y soltar sin moverla abre: hecha, bandera, “la estoy haciendo”, duplicar, copiar a otro día, mover a otro día, editar y borrar.
 - **Cumpleaños**: categoría propia que se repite cada año; con el año de nacimiento sale la edad (🎂 Ana (30)) y Hoy avisa el día antes.
-- **Listas**: la pestaña Listas tiene Sin fecha, Con bandera, Algún día, la Compra, los Proyectos, tus listas inteligentes (se rellenan solas según categoría, etiquetas, bandera, ubicación, proyecto o fecha) y las etiquetas. Cada lista y cada proyecto se ve como lista o como Tablero (Por hacer · Haciendo · Hecho, arrastrando las tarjetas).
+- **Listas**: la pestaña Listas tiene Sin fecha, Con bandera, la Compra, los Proyectos, tus listas inteligentes (se rellenan solas según categoría, etiquetas, bandera, ubicación, proyecto o fecha) y las etiquetas. Cada lista y cada proyecto se ve como lista o como Tablero (Por hacer · Haciendo · Hecho, arrastrando las tarjetas).
 - **Proyectos**: nombre, color, fecha límite y notas; juntan sus tareas (con su progreso) y sus notas.
 - **Compra**: escribe varias cosas separadas por comas y se ordenan solas por secciones del súper; tocando una se cambia de sección (y lo recuerda). Al marcarla va al carro; “Vaciar” limpia el carro.
 - **Notas**: con carpetas, fijadas arriba, búsqueda, listas con casillas, fotos, dibujos (con el Apple Pencil la mano no pinta; la goma borra trazos enteros) y enlaces. El **Diario** es una nota por día con unas preguntas (botón en Hoy y en Notas).
@@ -86,6 +85,9 @@ Luego, en el iPhone, abre la app desde su icono de la pantalla de inicio → ⋯
 - **Búsqueda en todo**: la lupa busca en tareas, notas, proyectos, libros, películas, la compra y los hábitos.
 - **Notas privadas**: el candado 🔓 de una nota hace que solo se abra con Face ID (o Touch ID o el código del dispositivo). Es un candado en el dispositivo: la nota sigue guardada en tu cuenta y en la copia de seguridad.
 - **Listas reutilizables**: en una nota con casillas, “↺ Desmarcar todo” o “⧉ Hacer una copia”. En la Compra, “Añadir desde una lista de Notas”.
+- **Hoy, sin ruido**: arriba, “Tareas sin hora” y “De otros días” plegadas (se despliegan al tocarlas); la línea de horas empieza cerca de lo siguiente (“Libre hasta las 9:00”). Para apuntar, el botón +.
+- **Progreso más corto**: “Tu progreso” junta el año (toca un mes), ese mes y sus semanas (deslizando). “Concentración” va dentro de “Tiempo dedicado”.
+- **Filtro de categorías**: con el embudo de arriba, solo cuando lo necesitas. “Sincronizado” solo sale si hay algún problema.
 - **Avisos**: ⋯ → Avisos. Tareas con hora (X minutos antes, o lo que pongas en “Aviso” de la tarea), cumpleaños (la víspera y el día), hábitos que faltan por la noche y un resumen por la mañana. Pueden llegar con unos minutos de diferencia.
 - **Modo sencillo**: ⋯ → Personalizar. Abajo solo Hoy, Agenda, Hábitos y Listas; Notas y Progreso pasan al menú ⋯.
 - **Traer y llevar tus cosas**: ⋯ → Traer y llevar. Importa calendarios (.ics), Todoist o Excel (.csv), texto o una lista pegada (por ejemplo, tus Recordatorios copiados), sin duplicar. Exporta a Excel (tareas, hábitos, libros y películas), al calendario (.ics), imprime la semana (o la guarda en PDF) y hace la copia de seguridad, también la completa con fotos.
@@ -110,13 +112,11 @@ Luego, en el iPhone, abre la app desde su icono de la pantalla de inicio → ⋯
 - **Concentración por asignatura**: en Progreso, minutos de temporizador por tarea grande, semana y mes.
 - **Apariencia**: ⋯ → Apariencia, modo claro/oscuro/automático y color principal.
 - **Importar rutinas**: ⋯ → Importar copia admite un archivo `{"habits": [...]}` (como `mis-tareas-rutinas.json`, que no se sube a GitHub).
-- **Bandeja rápida**: arriba en Hoy, “Apuntar rápido…”; luego cada cosa se manda a hoy, mañana o sin fecha.
 - **Plantillas**: al editar una tarea, “Guardar como plantilla” (con sus partes en días relativos); al crear una tarea, se elige arriba. Se gestionan en ⋯ → Plantillas.
 - **Estadísticas de sueño**: en Progreso, la media de lo que duermes (la de las noches que se ven en el gráfico) y el gráfico de cada noche.
 - **Copia de seguridad**: ⋯ → Guardar copia guarda todo (tareas, hábitos, categorías, recompensas, plantillas, libros, películas, proyectos, compra, notas y metas; las fotos no). Si pasan 7 días sin copia, Hoy lo recuerda. En el iPhone se puede guardar en Archivos o en Google Drive desde el menú Compartir.
-- **Planificar mi día**: por la mañana eliges qué harás hoy y ves si cabe en tus horas libres; lo que no elijas pasa a mañana.
 - **Etiquetas y listas inteligentes**: escribe @etiqueta en el título o en el campo Etiquetas (salen las que ya usas para tocarlas); tocar una etiqueta busca todo lo que la lleva; las listas inteligentes se crean en Listas → Mis listas.
-- **Algún día y Esta noche**: ideas sin prisa en Listas → Algún día; las tareas de hoy marcadas “Esta noche” salen aparte.
+- **Esta noche**: las tareas de hoy marcadas “Esta noche” salen aparte.
 - **Niveles y logros**: subes de nivel con tus puntos y desbloqueas logros (en Progreso).
 - **Ánimo y energía**: cada día en Hábitos; en Progreso ves cómo cambia con el sueño, el entreno y lo que cumples.
 - **Estimado vs real** y **jardín de concentración** (cada sesión del temporizador planta algo) en Progreso.

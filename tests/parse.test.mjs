@@ -50,3 +50,10 @@ test('repeticiones flexibles', () => {
   const e = p('turno de oficina entre semana una semana sí y otra no'); assert.deepEqual(e.days, [1, 2, 3, 4, 5]); assert.equal(e.every, 2);
   assert.equal(p('reunión el último viernes de cada mes').nth, -1);
 });
+
+test('ayer y anteayer', () => {
+  const now = new Date(2026, 10, 18);
+  assert.equal(parseQuick('ayer enviar factura', [], now).date, '2026-11-17');
+  assert.equal(parseQuick('ayer enviar factura', [], now).title, 'Enviar factura');
+  assert.equal(parseQuick('anteayer llamar', [], now).date, '2026-11-16');
+});
