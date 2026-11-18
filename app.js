@@ -29,7 +29,6 @@ let templates = [];
 let extra = { mood: {}, filters: [], garden: [], prefs: {} };
 // Secciones que se pueden apagar en ⋯ → Ayuda y secciones
 const SECTIONS = [
-  ['repaso', 'Repaso de la semana', 'Aviso de los domingos'],
   ['temporizador', 'Temporizador', 'Botón para concentrarte en una tarea'],
   ['jardin', 'Jardín', 'La planta del temporizador y tu jardín en Progreso'],
   ['recompensas', 'Recompensas', 'Canjear puntos por premios'],
@@ -53,7 +52,7 @@ let selectedDay = null;
 let formFlag = false, formCd = false;
 let editingId = null, formCat = 'personal', formDays = [], formParts = [], formNoDate = false, splitDays = [1, 2, 3, 4, 5], formSomeday = false, formTonight = false;
 
-document.documentElement.dataset.v = '29';
+document.documentElement.dataset.v = '30';
 // ---------- Registro de errores (se ve en ⋯ → Ayuda) ----------
 const EKEY = 'mis-tareas-errores';
 function logError(msg, where) {
@@ -615,7 +614,8 @@ $('#scrim').addEventListener('click', () => closeSheets());
 document.querySelectorAll('[data-close]').forEach(b => b.addEventListener('click', () => closeSheets()));
 document.querySelectorAll('[data-back]').forEach(b => b.addEventListener('click', () => openSheet(b.dataset.back || '#menuSheet')));
 $('#openPrefs').addEventListener('click', () => openSheet('#prefSheet'));
-$('#openSections').addEventListener('click', () => { renderHelp(); openSheet('#secSheet'); });
+$('#openSections').addEventListener('click', () => { renderHelp(); applySimple(); openSheet('#secSheet'); });
+$('#secProg').addEventListener('click', () => { renderProgSheet(); openSheet('#progSheet'); });
 $('#openBooks').addEventListener('click', () => { shelf.books.open = null; shelf.books.adding = false; renderShelf('books'); openSheet('#booksSheet'); });
 $('#openMovies').addEventListener('click', () => { shelf.movies.open = null; shelf.movies.adding = false; renderShelf('movies'); openSheet('#moviesSheet'); });
 // Cuenta: el lápiz de cada dato abre su formulario
@@ -766,7 +766,8 @@ let formCatTouched = false;
 const CAT_WORDS = [['cumple', /\bcumple/i], ['entreno', /\b(gym|gimnasio|entren|correr|running|pesas|yoga|pilates|nadar|piscina|crossfit|spinning|bici|futbol|fútbol|padel|pádel|caminar)/i],
   ['estudio', /\b(estudi|examen|repas|tema \d|apuntes|deberes|practica|práctica|entrega|clase de|leer el tema|ejercicios)/i],
   ['casa', /\b(limpi|lavar|lavadora|tender|planchar|cocinar|compra|super|barrer|fregar|aspir|ordenar|regar|basura|cama|baño)/i],
-  ['evento', /\b(cumple|boda|cena con|comida con|quedar|quedada|concierto|cine|fiesta|viaje|vuelo|reuni)/i]];
+  ['trabajo', /\b(reuni|informe|cliente|oficina|presentaci|jefe|proyecto del trabajo|llamada de trabajo)/i],
+  ['evento', /\b(boda|cena con|comida con|quedar|quedada|concierto|cine|fiesta|viaje|vuelo)/i]];
 const guessCat = title => { const c = CAT_WORDS.find(([id, rx]) => rx.test(title) && cats.some(x => x.id === id)); return c ? c[0] : ''; };
 $('#catChips').addEventListener('click', e => { const b = e.target.closest('[data-cat]'); if (!b) return; formCat = b.dataset.cat; formCatTouched = true; if (formCat === 'cumple' && !formNoDate && !$('#repeat').value) { $('#repeat').value = 'anual'; } renderCatChips(); renderWhen(); });
 $('#flagBtn').addEventListener('click', () => { formFlag = !formFlag; renderCatChips(); });
@@ -1868,7 +1869,7 @@ function renderProgSheet() {
         ${id === 'apartados' ? `<details class="arow-cols"><summary>Color de cada apartado</summary>${areaRows().map(([k, label, def]) => `<div class="arowc" data-ak="${esc(k)}"><span class="dot" style="background:${colorVar(P.areaColor[k] || def)}"></span><span>${esc(label)}</span>${palette(P.areaColor[k] || '', 'data-acol')}</div>`).join('')}</details>`
           : (mode === 'rainbow' || mode === 'custom') && PMODES.includes(id) ? '' : palette(P.color[id] || '', 'data-pcol')}</div>`; }).join('')}</div>`;
 }
-$('#openProg').addEventListener('click', () => { renderProgSheet(); openSheet('#progSheet'); });
+$('#openProg')?.addEventListener('click', () => { renderProgSheet(); openSheet('#progSheet'); });
 $('#progBody').addEventListener('click', e => {
   const t = e.target.closest('[data-ptog]'), c = e.target.closest('button[data-pcol]'), m = e.target.closest('[data-pmode]'), ac = e.target.closest('button[data-acol]'), mv = e.target.closest('[data-pmove]');
   if (!t && !c && !m && !ac && !mv) return;
@@ -2543,7 +2544,7 @@ const lsGet = k => { try { return localStorage.getItem(k); } catch { return null
 let calN = Math.min(7, Math.max(2, lsNum('cal-n', innerWidth >= 820 ? 7 : 3))), calPX = Math.min(160, Math.max(24, lsNum('cal-px', 56)));
 let listDays = 30;
 const calDate = () => calSel || (monthOffset ? monthDate(todayISO(), monthOffset, 1) : todayISO());
-const calPrefs = () => ({ weekNums: true, noWeekend: false, ...(extra.prefs?.cal || {}) });
+const calPrefs = () => ({ weekNums: innerWidth >= 820, noWeekend: false, ...(extra.prefs?.cal || {}) });
 const isWE = d => [0, 6].includes(parseISO(d).getDay());
 function gridDays() {
   if (calMode === 'dia') return [calDate()];
@@ -2885,12 +2886,9 @@ function renderDetails() {
       <ul class="dparts">${parts.map(p => `<li class="${p.done ? 'done' : ''} ${p.id === t.id && t.parentId ? 'me' : ''}" style="--c:${colorVar(c.color)}"><button class="check" data-dact="toggle" data-id="${p.id}" aria-label="${p.done ? 'Marcar como pendiente' : 'Completar'}: ${esc(p.title)}">${TICK('var(--surface)')}</button>
         <span><b>${esc(p.title)}</b><small>${p.date ? friendlyDate(p.date) : 'Sin fecha'}${p.time ? ' · ' + p.time : ''} · ⭐ ${partPoints(p)}</small></span></li>`).join('')}</ul>`
       : `<button class="btn primary block" type="button" data-dact="toggle" data-id="${t.id}">${t.done ? 'Marcar como pendiente' : '✓ Hecha'}</button>`}
-    ${!t.done && !parts.length ? `<div class="chips dmove"><span class="label">Mover a</span>${t.date !== todayISO() ? `<button type="button" class="chip" data-dact="move" data-to="hoy" data-id="${t.id}">Hoy</button>` : ''}<button type="button" class="chip" data-dact="move" data-to="manana" data-id="${t.id}">Mañana</button><button type="button" class="chip" data-dact="move" data-to="lunes" data-id="${t.id}">El lunes</button>${t.date ? `<button type="button" class="chip" data-dact="move" data-to="none" data-id="${t.id}">Sin fecha</button>` : ''}</div>` : ''}
-    <div class="chips dmove"><button type="button" class="chip${root.flag ? ' on' : ''}" data-dact="flag" data-id="${root.id}">🚩 ${root.flag ? 'Quitar bandera' : 'Bandera'}</button>${!t.done && !parts.length ? `<button type="button" class="chip${t.status === 'doing' ? ' on' : ''}" data-dact="doing" data-id="${t.id}">${t.status === 'doing' ? '⏸ Ya no la hago' : '▶ La estoy haciendo'}</button>` : ''}<button type="button" class="chip" data-dact="dup" data-id="${t.id}">⧉ Duplicar</button></div>
     ${photosHTML(root.photos || [], `data-ptask="${root.id}"`)}
     ${linksHTML(root.links, { k: 'task', id: root.id })}
-    <div class="chips dmove"><label class="chip">📷 Foto<input type="file" accept="image/*" multiple hidden data-dphoto="${root.id}"></label><button type="button" class="chip" data-dact="draw" data-id="${root.id}">✏️ Dibujo</button><button type="button" class="chip" data-dact="link" data-id="${root.id}">🔗 Enlazar</button></div>
-    <div class="grid2"><button class="btn" type="button" data-dact="edit" data-id="${root.id}">${PENCIL} Editar</button>${on('temporizador') && !t.done && !parts.length ? `<button class="btn" type="button" data-dact="timer" data-id="${t.id}">⏱ Concentrarme</button>` : '<span></span>'}</div>`;
+    <div class="grid2"><button class="btn" type="button" data-dact="edit" data-id="${root.id}">${PENCIL} Editar</button><button class="btn" type="button" data-dact="more" data-id="${t.id}">⋯ Más</button></div>`;
   hydrateImgs(body);
 }
 const detailRoot = () => { const t = tasks.find(x => x.id === detailId); return t ? (t.parentId ? tasks.find(p => p.id === t.parentId) || t : t) : null; };
@@ -2907,6 +2905,7 @@ $('#detailBody').addEventListener('click', e => {
   else if (dact === 'flag') { const t = tasks.find(x => x.id === id); if (t) { setFlag(t, !t.flag); renderDetails(); } }
   else if (dact === 'doing') { const t = tasks.find(x => x.id === id); if (t) { setStatus(t, t.status === 'doing' ? '' : 'doing'); renderDetails(); } }
   else if (dact === 'dup') { closeSheets(); duplicateTask(id); }
+  else if (dact === 'more') openCtx(id);
   else if (dact === 'draw') openDraw(null, async data => { const fid = await putFile(data, 'draw'); setPhotoList({ kind: 'task', id }, [...photoList({ kind: 'task', id }), fid]); renderDetails(); });
   else if (dact === 'link') openLinkPicker({ k: 'task', id });
   else if (dact === 'tag') { closeSheets(); searchTag(el.dataset.t); }
@@ -3007,7 +3006,7 @@ const itemText = it => `<b>${esc(it.title)}${it.sub ? `<small class="tsub">${esc
 function hoyHTML() {
   const now = toMin(nowHM()), { items, extras, late } = hoyItems(hoyEdit);
   const w = wxOf(todayISO());
-  let html = (w && !hoyEdit ? `<div class="wxline">${w.i} <b>${w.max}°</b> / ${w.min}° · ${esc(calPrefs().wx.name)}</div>` : '') + (hoyEdit ? '' : countdownHTML()) + timerBannerHTML() + backupBannerHTML() + (hoyEdit ? '' : birthdayHTML() + monthBannerHTML() + closeBannerHTML()) + (on('repaso') ? reviewBannerHTML() : '') + sleepPromptHTML() + moodPromptHTML();
+  let html = (w && !hoyEdit ? `<div class="wxline">${w.i} <b>${w.max}°</b> / ${w.min}° · ${esc(calPrefs().wx.name)}</div>` : '') + (hoyEdit ? '' : countdownHTML()) + timerBannerHTML() + backupBannerHTML() + (hoyEdit ? '' : birthdayHTML() + monthBannerHTML() + closeBannerHTML()) + sleepPromptHTML() + moodPromptHTML();
   if (hoyEdit) return html + hoyEditHTML(items, extras);
   const pending = items.filter(i => !i.done).length + extras.filter(i => !i.done).length;
   const habLeft = habits.filter(h => (h.kind === 'quit' || (h.kind === 'build' && h.freq === 'daily')) && !habitDoneToday(h));
@@ -3371,21 +3370,33 @@ function renderCtx() {
     parts ? '' : b('done', '✓', t.done ? 'Marcar como pendiente' : 'Marcar como hecha'),
     b('flag', '🚩', t.flag ? 'Quitar la bandera' : 'Poner bandera'),
     !t.done && !parts ? b('doing', t.status === 'doing' ? '⏸' : '▶', t.status === 'doing' ? 'Ya no la estoy haciendo' : 'La estoy haciendo') : '',
+    !t.done && !parts.length && t.date !== todayISO() ? b('mv-hoy', '↪', 'Pasar a hoy') : '',
+    !t.done && !parts.length ? b('mv-manana', '↪', 'Pasar a mañana') : '',
+    !t.done && !parts.length && t.date ? b('mv-none', '↪', 'Quitarle la fecha') : '',
     b('dup', '⧉', 'Duplicar'),
     `<label class="ctxdate"><span class="mi">📅</span>Copiar a otro día…<input type="date" data-ctxd="copy" aria-label="Copiar a otro día"></label>`,
     `<label class="ctxdate"><span class="mi">↪</span>Mover a otro día…<input type="date" data-ctxd="move" value="${t.date || ''}" aria-label="Mover a otro día"></label>`,
+    `<label class="ctxdate"><span class="mi">📷</span>Añadir una foto<input type="file" accept="image/*" multiple data-ctxphoto="${t.parentId ? t.parentId : t.id}" aria-label="Añadir una foto"></label>`,
+    b('draw', '✏️', 'Dibujar'),
+    b('link', '🔗', 'Enlazar con una nota, proyecto, libro…'),
+    on('temporizador') && !t.done && !parts.length ? b('timer', '⏱', 'Concentrarme en ella') : '',
     b('edit', '✎', 'Editar'),
     b('del', '🗑', 'Borrar', 'danger'),
   ].join('');
 }
 $('#ctxBody').addEventListener('click', e => {
   const lab = e.target.closest('.ctxdate');
-  if (lab) { if (e.target.tagName !== 'INPUT') { const i = lab.querySelector('input'); try { i.showPicker(); } catch { i.focus(); } } return; }
+  if (lab) { const i = lab.querySelector('input'); if (e.target.tagName !== 'INPUT' && i.type === 'date') { try { i.showPicker(); } catch { i.focus(); } } return; }
   const b = e.target.closest('[data-ctx]'); if (!b) return;
   const t = tasks.find(x => x.id === ctxId); if (!t) return;
   const a = b.dataset.ctx;
-  if (a === 'edit') { openForm(t.parentId && !children(t.id).length ? t.id : t.id); return; }
+  const root = t.parentId ? tasks.find(p => p.id === t.parentId) || t : t;
+  if (a === 'edit') { openForm(t.id); return; }
+  if (a === 'link') { openLinkPicker({ k: 'task', id: root.id }); return; }
+  if (a === 'draw') { closeSheets(); openDraw(null, async data => { const fid = await putFile(data, 'draw'); setPhotoList({ kind: 'task', id: root.id }, [...photoList({ kind: 'task', id: root.id }), fid]); }); return; }
   closeSheets();
+  if (a === 'timer') { openTimer(t.id); return; }
+  if (a.startsWith('mv-')) { moveTasks([t], a.slice(3)); return; }
   if (a === 'done') toggle(t.id);
   else if (a === 'flag') setFlag(t, !t.flag);
   else if (a === 'doing') setStatus(t, t.status === 'doing' ? '' : 'doing');
@@ -3393,6 +3404,7 @@ $('#ctxBody').addEventListener('click', e => {
   else if (a === 'del') remove(t.id);
 });
 $('#ctxBody').addEventListener('change', e => {
+  if (e.target.dataset.ctxphoto) { closeSheets(); addPhotos(e.target.files, { kind: 'task', id: e.target.dataset.ctxphoto }); e.target.value = ''; return; }
   const k = e.target.dataset.ctxd; if (!k || !e.target.value) return;
   const t = tasks.find(x => x.id === ctxId); if (!t) return;
   closeSheets();
@@ -4091,7 +4103,17 @@ function renderCloseDay() {
     ${habLeft.length ? `<h4>Hábitos de hoy</h4><div class="chips wrap">${habLeft.map(h => `<button class="chip" data-cd="hab" data-id="${h.id}">${h.kind === 'quit' ? '🚫 ' : ''}${esc(h.name)} ✓</button>`).join('')}</div>` : ''}
     ${on('animo') ? `<h4>¿Qué tal hoy?</h4><div class="moodrow">${MOODS.map((em, i) => `<button class="${m.m === i + 1 ? 'on' : ''}" data-cd="mood" data-v="${i + 1}" aria-label="${MOOD_TXT[i]}">${em}</button>`).join('')}</div>` : ''}
     ${on('diario') ? `<button type="button" class="btn block" data-cd="journal">📓 ${j && !journalEmpty(j) ? 'Seguir con el diario' : 'Escribir el diario'}</button>` : ''}
+    ${new Date().getDay() === 0 ? nextWeekHTML() : ''}
     <button type="button" class="btn primary block" data-cd="finish">🌙 Día cerrado</button>`;
+}
+// La semana que viene (los domingos, al cerrar el día)
+function nextWeekHTML() {
+  const mon = addDays(mondayOf(todayISO()), 7), days = [...Array(7)].map((_, i) => addDays(mon, i)), sun = days[6];
+  const gh = ghostsIn(() => true, mon, sun), n = d => tasks.filter(t => !t.done && t.date === d && !children(t.id).length).length + (gh[d] || []).length;
+  const big = tasks.filter(t => !t.done && t.date >= mon && t.date <= sun && (t.flag || t.cd || children(t.id).length)).sort(sortTasks);
+  return `<h4>La semana que viene</h4><div class="nextweek">${days.map(d => `<div><span>${DAY_LETTER[parseISO(d).getDay()]} ${parseISO(d).getDate()}</span><b>${n(d)}</b></div>`).join('')}</div>
+    ${big.length ? `<p class="hint">Importante: ${big.slice(0, 5).map(t => `${esc(t.title)} (${friendlyDate(t.date).toLowerCase()})`).join(' · ')}</p>` : ''}
+    <button type="button" class="btn block" data-cd="orgnext">✨ Organizar el lunes</button>`;
 }
 function openCloseDay() { renderCloseDay(); openSheet('#closeSheet'); }
 $('#closeBody').addEventListener('click', e => {
@@ -4100,6 +4122,7 @@ $('#closeBody').addEventListener('click', e => {
   if (a === 'close') { closeSheets(); return; }
   if (a === 'finish') { lsSet('closed-' + todayISO(), '1'); closeSheets(); showToast('🌙 Día cerrado. ¡Buen descanso!'); render(); return; }
   if (a === 'journal') { openJournal(todayISO()); return; }
+  if (a === 'orgnext') { const mon = addDays(mondayOf(todayISO()), 7); orgExtra = new Set(); orgPlan = buildOrg(mon); renderOrg(); openSheet('#orgSheet'); return; }
   if (a === 'done' && t) toggle(t.id);
   else if ((a === 'next' || a === 'none') && t) moveTasks([t], a === 'next' ? 'manana' : 'none');
   else if (a === 'allnext') moveTasks(tasks.filter(x => !x.done && x.date && x.date <= todayISO() && !children(x.id).length), 'manana');
@@ -4620,7 +4643,7 @@ $('#filterList').addEventListener('click', e => {
   if (b.dataset.fl === 'del') { extra.filters = extra.filters.filter(f => f.id !== b.dataset.id); store.saveExtra('filters').catch(writeFailed); renderFilterSheet(); render(); return; }
   closeSheets(); activeFilter = null; view = 'sinfecha'; listSel = 'f:' + b.dataset.id; $('#scroller').scrollTop = 0; render();
 });
-$('#openFilters').addEventListener('click', () => { renderFilterSheet(); openSheet('#filterSheet'); });
+$('#openFilters')?.addEventListener('click', () => { renderFilterSheet(); openSheet('#filterSheet'); });
 // ---------- Bandeja rápida: apuntar en dos segundos y organizarlo luego ----------
 const doneInView = (x, v) => x.done && (v === 'hoy' ? x.doneAt && isoDate(new Date(x.doneAt)) === todayISO() : v === 'sinfecha' ? !x.date : v === 'hechas');
 const currentStreak = t => (t.date && t.date < todayISO()) ? 0 : (t.streak || 0);
@@ -4755,6 +4778,7 @@ function renderMain() {
   document.body.dataset.view = view; applySimple();
   $('#todayLabel').textContent = new Date().toLocaleDateString('es-ES', { weekday: 'long', day: 'numeric', month: 'long' });
   $('#viewTitle').textContent = query ? 'Buscar' : VIEWS[view];
+  $('#ptsToday').hidden = !['hoy', 'hechas'].includes(view) || !!query;
   $('#ptsToday').innerHTML = `⭐ ${pointsOn(todayISO())}<small> hoy</small>`; $('#ptsToday').setAttribute('aria-label', `Puntos de hoy: ${pointsOn(todayISO())} de tu objetivo de ${stats.goal}. Toca para cambiar el objetivo`);
   const catPlace = query || !(view === 'habitos' || view === 'hoy' || view === 'notas' || (view === 'sinfecha' && (!listSel || listSel === 'compra')));
   $('#catBtn').hidden = !catPlace; $('#catBtn').classList.toggle('on', catFilter !== null); $('#catBtn').setAttribute('aria-pressed', catBarOpen || catFilter !== null);
@@ -4830,7 +4854,7 @@ function renderMain() {
   }
   const pending = tasks.filter(x => !x.done).length;
   const doneToday = tasks.filter(x => x.done && x.doneAt && isoDate(new Date(x.doneAt)) === todayISO()).length;
-  $('#stats').textContent = view === 'habitos' || view === 'hoy' || view === 'notas' || (view === 'sinfecha' && (!listSel || listSel === 'compra')) ? '' : `${pending} pendiente${pending === 1 ? '' : 's'} · ${doneToday} hecha${doneToday === 1 ? '' : 's'} hoy`;
+  $('#stats').hidden = true; $('#stats').textContent = view === 'habitos' || view === 'hoy' || view === 'notas' || (view === 'sinfecha' && (!listSel || listSel === 'compra')) ? '' : `${pending} pendiente${pending === 1 ? '' : 's'} · ${doneToday} hecha${doneToday === 1 ? '' : 's'} hoy`;
   let tipSeen = lsGet('tip-swipe') === '1';
   if (!tipSeen && count && view !== 'habitos' && view !== 'notas') { const f = Number(lsGet('tip-first')) || 0; if (!f) lsSet('tip-first', String(Date.now())); else if (Date.now() - f > 864e5) { lsSet('tip-swipe', '1'); tipSeen = true; } }
   $('#tip').hidden = tipSeen || !count || view === 'habitos' || view === 'notas';

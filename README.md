@@ -88,6 +88,8 @@ Luego, en el iPhone, abre la app desde su icono de la pantalla de inicio → ⋯
 - **Hoy, sin ruido**: arriba, “Tareas sin hora” y “De otros días” plegadas (se despliegan al tocarlas); la línea de horas empieza cerca de lo siguiente (“Libre hasta las 9:00”). Para apuntar, el botón +.
 - **Progreso más corto**: “Tu progreso” junta el año (toca un mes), ese mes y sus semanas (deslizando). “Concentración” va dentro de “Tiempo dedicado”.
 - **Filtro de categorías**: con el embudo de arriba, solo cuando lo necesitas. “Sincronizado” solo sale si hay algún problema.
+- **Detalles de una tarea**: lo que es, ✓ Hecha, Editar y ⋯ Más (mover, bandera, haciendo, duplicar, copiar, foto, dibujo, enlazar, concentrarme y borrar; es el mismo menú que al mantenerla pulsada).
+- **Qué se ve**: ⋯ → Personalizar → Qué se ve: el modo sencillo, las secciones y los apartados de Progreso, todo en un sitio.
 - **Avisos**: ⋯ → Avisos. Tareas con hora (X minutos antes, o lo que pongas en “Aviso” de la tarea), cumpleaños (la víspera y el día), hábitos que faltan por la noche y un resumen por la mañana. Pueden llegar con unos minutos de diferencia.
 - **Modo sencillo**: ⋯ → Personalizar. Abajo solo Hoy, Agenda, Hábitos y Listas; Notas y Progreso pasan al menú ⋯.
 - **Traer y llevar tus cosas**: ⋯ → Traer y llevar. Importa calendarios (.ics), Todoist o Excel (.csv), texto o una lista pegada (por ejemplo, tus Recordatorios copiados), sin duplicar. Exporta a Excel (tareas, hábitos, libros y películas), al calendario (.ics), imprime la semana (o la guarda en PDF) y hace la copia de seguridad, también la completa con fotos.
@@ -105,7 +107,7 @@ Luego, en el iPhone, abre la app desde su icono de la pantalla de inicio → ⋯
 - **Progreso**: resumen de la semana, gráfico del mes, el año en cuadraditos (una fila por mes) y cuadraditos por apartado.
 - **Plan de examen**: en una tarea con fecha, “Repartir en varias partes” propone acabar el día antes y reparte las partes hasta ahí; la tarea muestra “faltan 16 días · vas 1 por detrás”.
 - **Recompensas**: ⋯ → Recompensas. Premios con su precio en ⭐ que canjeas con tu saldo (ganados − gastados).
-- **Replanificar**: en Hoy, el grupo Atrasadas tiene “Todas a hoy / A mañana / Sin fecha”. Los domingos aparece el Repaso de la semana (también en Agenda).
+- **Replanificar**: en Hoy, “De otros días” tiene “Todas a hoy / A mañana / Sin fecha”. Los domingos, Cerrar el día enseña también la semana que viene.
 - **Temporizador**: al editar una tarea, “Empezar a concentrarme”: pomodoro 25/5, 50/10 o libre. Cada minuto concentrada suma 1 ⭐ y se guarda en la tarea.
 - **Rutinas con horario**: un tipo de hábito con pasos a su hora (p. ej. rutina de noche). Se marcan paso a paso; cada paso puntúa los minutos hasta el siguiente.
 - **Ahora toca**: en Hoy, lo que está pasando según las horas (tareas y pasos de rutinas) y lo siguiente.
