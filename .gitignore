@@ -2,3 +2,7 @@
 mis-tareas-importar.json
 mis-tareas-*.json
 .claude/
+
+# Claves privadas (nunca se suben)
+claves-privadas/
+tools/avisos/node_modules/

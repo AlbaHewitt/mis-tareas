@@ -1,6 +1,7 @@
 import { firebaseConfig } from './config.js';
 import { parseQuick, fold } from './parse.js';
 import { toICS, googleURL } from './cal.js';
+import { parseICS, parseCSV, rowsToTasks, linesToTitles, toCSV } from './io.js';
 import { DAY_ORDER, DAY_LETTER, MONTHS_SHORT, normTag, pad, isoDate, todayISO, parseISO, addDays, dim, mondayOf, toMin, uid, esc, cap, monthDate, stepDate, nextDate, alignStart, friendlyDate, longDate, repeatLabel, durationMin, autoPoints, taskPoints, isLate, habitPoints, habitOK, weekCount, PERIODIC, periodStart, periodCount, prevPeriod, applies, WD_NAME, habitStreak, habitBest, wakeTarget, bedMin, fmtDur, judgeSleep, nowHM, LEVEL_NAMES, levelStart, levelOf, isoWeek, SHOP_SECS, shopSection, shopKey } from './logic.js';
 
 const FB = 'https://www.gstatic.com/firebasejs/10.12.2/';
@@ -54,7 +55,7 @@ let selectedDay = null;
 let formFlag = false, formCd = false;
 let editingId = null, formCat = 'personal', formDays = [], formParts = [], formNoDate = false, splitDays = [1, 2, 3, 4, 5], formSomeday = false, formTonight = false;
 
-document.documentElement.dataset.v = '27';
+document.documentElement.dataset.v = '28';
 // ---------- Registro de errores (se ve en ⋯ → Ayuda) ----------
 const EKEY = 'mis-tareas-errores';
 function logError(msg, where) {
@@ -685,6 +686,13 @@ function renderCatChips() {
   $('#flagBtn').setAttribute('aria-pressed', formFlag);
   $('#bornField').hidden = formCat !== 'cumple';
 }
+// Resumen de lo que hay dentro de "Más opciones" (para verlo aunque esté cerrado)
+function renderMoreSum() {
+  const pn = projects.find(p => p.id === $('#proj').value)?.name, bits = [$('#loc').value.trim() ? '📍' : '', ...readTags().map(g => '@' + g), pn ? '📁 ' + pn : '', $('#remind').value !== '' ? '🔔' : '', $('#points').value !== '' ? '⭐ ' + $('#points').value : '', $('#notes').value.trim() ? '📝' : ''].filter(Boolean);
+  $('#moreSum').textContent = bits.length ? '· ' + bits.join(' ') : '(ubicación, etiquetas, proyecto, aviso, notas…)';
+}
+$('#moreOpts').addEventListener('input', renderMoreSum);
+$('#moreOpts').addEventListener('change', renderMoreSum);
 // Etiquetas que ya usas, para añadirlas con un toque
 function renderTagSugs() {
   const have = new Set(readTags()), all = [...new Set(tasks.flatMap(t => t.tags || []))].filter(g => !have.has(g)).sort((x, y) => x.localeCompare(y, 'es')).slice(0, 14);
@@ -939,6 +947,9 @@ function openForm(id, preset) {
   $('#tplChips').hidden = !!t || !templates.length;
   $('#tplChips').innerHTML = templates.map(p => `<button type="button" class="chip" data-tpl="${p.id}">📋 ${esc(p.name)}</button>`).join('');
   renderCatChips(); renderParts(); renderDetected(); renderTagSugs();
+  // "Más opciones" se abre sola si la tarea ya usa alguna
+  const has = t && ((t.tags || []).length || t.project || t.loc || t.minutes || (t.remind !== null && t.remind !== undefined) || (t.points !== null && t.points !== undefined) || t.notes);
+  $('#moreOpts').open = !!(has || lk.startsWith('t:') || lk.startsWith('p:')); renderMoreSum();
   openSheet('#taskSheet');
   if (!t) setTimeout(() => $('#title').focus(), 60);
 }
@@ -1193,7 +1204,7 @@ let undoAction = null, toastTimer = null;
 function showToast(text, action) {
   undoAction = action || null;
   $('#toastText').textContent = text;
-  $('#toastUndo').hidden = !action;
+  $('#toastUndo').hidden = !action; $('#toastUndo').textContent = 'Deshacer';
   $('#toast').hidden = false;
   clearTimeout(toastTimer);
   toastTimer = setTimeout(() => { $('#toast').hidden = true; undoAction = null; }, 4500);
@@ -1315,10 +1326,14 @@ const matches = (t, q) => q.startsWith('@') ? (t.tags || []).some(g => g.startsW
 // ---------- Copias ----------
 // Copia completa: tareas, hábitos, categorías, puntos, recompensas y plantillas.
 // En el iPhone se abre el menú Compartir: elige "Guardar en Archivos" o Google Drive.
-async function exportBackup() {
-  const name = `mis-tareas-copia-${todayISO()}.json`;
+async function exportBackup(full) {
+  const name = `mis-tareas-copia${full ? '-completa' : ''}-${todayISO()}.json`;
   const data = { app: 'mis-tareas', version: 2, exported: new Date().toISOString(),
     tasks: tasks.map(t => ({ id: t.id, ...clean(t) })), habits, cats, stats, rewards, templates, books: shelf.books.items, movies: shelf.movies.items, projects, shop, notes, goals };
+  if (full) {
+    const ids = [...new Set([...notes.flatMap(n => n.photos), ...tasks.flatMap(t => t.photos || [])])];
+    data.files = {}; for (const id of ids) { const d = await getFile(id); if (d) data.files[id] = d; }
+  }
   const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
   const file = new File([blob], name, { type: 'application/json' });
   const done = () => { try { localStorage.setItem('last-backup', String(Date.now())); } catch {} render(); };
@@ -1326,7 +1341,7 @@ async function exportBackup() {
   const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = name; a.click();
   setTimeout(() => URL.revokeObjectURL(a.href), 1000); done();
 }
-$('#exportBtn').addEventListener('click', exportBackup);
+$('#exportBtn')?.addEventListener('click', () => exportBackup());
 // Recordatorio semanal de copia
 function backupBannerHTML() {
   if (!tasks.length) return '';
@@ -1335,12 +1350,11 @@ function backupBannerHTML() {
   const days = Math.floor((Date.now() - last) / 864e5);
   return days >= 7 ? `<div class="banner"><span>Hace ${days} días de tu última copia de seguridad</span><button class="btn primary small" data-act="backup">Guardar</button></div>` : '';
 }
-$('#importBtn').addEventListener('click', () => $('#importFile').click());
-$('#importFile').addEventListener('change', async e => {
-  const f = e.target.files[0]; e.target.value = ''; if (!f) return;
-  const info = $('#importInfo');
+$('#importBtn')?.addEventListener('click', () => $('#importFile').click());
+$('#importFile').addEventListener('change', async e => { const f = e.target.files[0]; e.target.value = ''; if (f) importJSONText(await f.text(), $('#importInfo')); });
+async function importJSONText(text, info = $('#ioInfo') || $('#importInfo')) {
   try {
-    const data = JSON.parse(await f.text());
+    const data = JSON.parse(text);
     // Copia completa de la app
     if (data && data.app === 'mis-tareas' && Array.isArray(data.tasks)) {
       const list = data.tasks.filter(x => x && x.title).map(x => ({ ...x, id: String(x.id || uid()).replace(/[^\w.~:@+-]/g, '_') }));
@@ -1353,6 +1367,7 @@ $('#importFile').addEventListener('change', async e => {
       let nShelf = 0;
       for (const k in SHELF) (data[k] || []).forEach(b => { if (!b?.id || !b.title) return; nShelf++; saveItem(k, { id: String(b.id).replace(/[^\w.~:@+-]/g, '_'), ...cleanItem(k, b) }); });
       for (const k in ROWS) (Array.isArray(data[k]) ? data[k] : []).forEach(r => { if (r?.id) saveRow(k, { ...r, id: String(r.id).replace(/[^\w.~:@+-]/g, '_') }); });
+      if (data.files && typeof data.files === 'object') for (const [fid, d] of Object.entries(data.files)) if (/^f[\w-]+$/.test(fid) && typeof d === 'string' && d.startsWith('data:image/')) await putFileAt(fid, d).catch(() => {});
       info.textContent = list.length || (data.habits || []).length || !nShelf ? `Copia restaurada: ${list.length} tareas y ${(data.habits || []).length} hábitos${nShelf ? `, y ${nShelf} libros y películas` : ''}. Los puntos no se tocan para no sumarlos dos veces.` : `Listo: ${(data.books || []).length} libros y ${(data.movies || []).length} películas añadidos.`;
       render(); return;
     }
@@ -1374,7 +1389,7 @@ $('#importFile').addEventListener('change', async e => {
     info.textContent = `Listo: ${list.length} tareas importadas.`;
     render();
   } catch { info.textContent = 'Ese archivo no es una copia de Mis Tareas.'; }
-});
+}
 
 // ---------- Hábitos ----------
 // --- Rutina de sueño: se apunta cada mañana; la noche cuenta en el día en que te levantas ---
@@ -3142,7 +3157,7 @@ const itemText = it => `<b>${esc(it.title)}${it.sub ? `<small class="tsub">${esc
 function hoyHTML() {
   const now = toMin(nowHM()), { items, extras, late } = hoyItems(hoyEdit);
   const w = wxOf(todayISO());
-  let html = (w && !hoyEdit ? `<div class="wxline">${w.i} <b>${w.max}°</b> / ${w.min}° · ${esc(calPrefs().wx.name)}</div>` : '') + (hoyEdit ? '' : countdownHTML()) + timerBannerHTML() + backupBannerHTML() + (hoyEdit ? '' : birthdayHTML() + closeBannerHTML()) + (on('repaso') ? reviewBannerHTML() : '') + (on('planificar') && !hoyEdit ? planBannerHTML() : '') + sleepPromptHTML() + moodPromptHTML();
+  let html = (w && !hoyEdit ? `<div class="wxline">${w.i} <b>${w.max}°</b> / ${w.min}° · ${esc(calPrefs().wx.name)}</div>` : '') + (hoyEdit ? '' : countdownHTML()) + timerBannerHTML() + backupBannerHTML() + (hoyEdit ? '' : birthdayHTML() + monthBannerHTML() + closeBannerHTML()) + (on('repaso') ? reviewBannerHTML() : '') + (on('planificar') && !hoyEdit ? planBannerHTML() : '') + sleepPromptHTML() + moodPromptHTML();
   if (hoyEdit) return html + hoyEditHTML(items, extras);
   const pending = items.filter(i => !i.done).length + extras.filter(i => !i.done).length;
   if (on('bandeja')) html += inboxHTML();
@@ -3756,6 +3771,11 @@ async function putFile(data, kind) {
   if (store.fb) await store.fb.setDoc(store.ref('files', id), { data, kind, created: Date.now() });
   else { try { localStorage.setItem('mis-tareas-file-' + id, data); } catch {} }
   return id;
+}
+async function putFileAt(id, data) {
+  fileCache.set(id, data);
+  if (store.fb) await store.fb.setDoc(store.ref('files', id), { data, kind: 'photo', created: Date.now() });
+  else { try { localStorage.setItem('mis-tareas-file-' + id, data); } catch {} }
 }
 async function getFile(id) {
   if (fileCache.has(id)) return fileCache.get(id);
@@ -4424,6 +4444,277 @@ $('#shopFromBody').addEventListener('click', e => {
   closeSheets(); showToast(k ? `${k} cosas añadidas a la compra` : 'Ya estaba todo en la lista'); render();
 });
 
+// ---------- Avisos en el móvil ----------
+// La app guarda en tu cuenta "a dónde mandar" los avisos de este dispositivo; GitHub los manda cada 5 minutos.
+const pushPrefs = () => ({ tasks: true, lead: 10, bday: true, bdayHour: 20, habits: true, habitHour: 21, morning: false, morningHour: 8, ...(extra.prefs?.push || {}) });
+const deviceId = (() => { try { let d = localStorage.getItem('mis-tareas-device'); if (!d) { d = 'd' + uid(); localStorage.setItem('mis-tareas-device', d); } return d; } catch { return 'd-unico'; } })();
+const pushSupported = () => 'serviceWorker' in navigator && 'PushManager' in window && 'Notification' in window;
+const standalone = () => matchMedia('(display-mode: standalone)').matches || navigator.standalone === true;
+const isIOS = () => /iPad|iPhone|iPod/.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+let pushMsg = '', pushHere = null;
+async function pushState() {
+  if (!pushSupported()) return null;
+  try { const reg = await navigator.serviceWorker.getRegistration(); const sub = await reg?.pushManager.getSubscription(); return !!sub && Notification.permission === 'granted'; } catch { return null; }
+}
+function setPushPref(ch) { extra.prefs = { ...extra.prefs, push: { ...pushPrefs(), tz: Intl.DateTimeFormat().resolvedOptions().timeZone, ...ch } }; store.saveExtra('prefs').catch(writeFailed); }
+const b64ToBytes = s => { const p = '='.repeat((4 - s.length % 4) % 4), b = atob((s + p).replace(/-/g, '+').replace(/_/g, '/')); return Uint8Array.from(b, c => c.charCodeAt(0)); };
+async function pushEnable() {
+  if (!store.fb) { pushMsg = 'Los avisos necesitan tu cuenta (sincronización activada).'; return renderPush(); }
+  if (!pushSupported()) { pushMsg = isIOS() && !standalone() ? 'En el iPhone o el iPad, los avisos solo funcionan si abres la app desde su icono de la pantalla de inicio (Compartir → Añadir a pantalla de inicio).' : 'Este navegador no permite avisos.'; return renderPush(); }
+  try {
+    const perm = await Notification.requestPermission();
+    if (perm !== 'granted') { pushMsg = 'No has dado permiso. Puedes darlo en Ajustes del iPhone → Notificaciones → Tareas.'; return renderPush(); }
+    const reg = await navigator.serviceWorker.ready;
+    const sub = await reg.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: b64ToBytes(firebaseConfig.vapidPublicKey) });
+    await store.fb.setDoc(store.ref('push', deviceId), { sub: JSON.parse(JSON.stringify(sub)), ua: navigator.userAgent.slice(0, 160), created: Date.now() });
+    setPushPref({ off: false });
+    pushMsg = '¡Listo! Este dispositivo recibirá los avisos.'; pushHere = true;
+  } catch (e) { logError(e.message, 'avisos'); pushMsg = 'No se pudieron activar los avisos: ' + (e.message || 'error'); }
+  renderPush();
+}
+async function pushDisable() {
+  try { const reg = await navigator.serviceWorker.getRegistration(); const sub = await reg?.pushManager.getSubscription(); await sub?.unsubscribe(); } catch {}
+  if (store.fb) store.fb.deleteDoc(store.ref('push', deviceId)).catch(() => {});
+  pushHere = false; pushMsg = 'Este dispositivo ya no recibirá avisos.'; renderPush();
+}
+async function renderPush() {
+  if (pushHere === null) pushHere = await pushState();
+  const P = pushPrefs(), sw = (k, name, desc, extraHTML = '') => `<div class="secrow"><span><b>${name}</b><small>${desc}</small>${extraHTML}</span><button type="button" class="switch" role="switch" aria-checked="${!!P[k]}" data-pp="${k}" aria-label="${name}"></button></div>`;
+  const sel = (k, opts) => `<select class="inp mini" data-ppv="${k}">${opts.map(([v, l]) => `<option value="${v}"${String(P[k]) === String(v) ? ' selected' : ''}>${l}</option>`).join('')}</select>`;
+  const hours = from => [...Array(24 - from)].map((_, i) => [from + i, `${pad(from + i)}:00`]);
+  $('#pushBody').innerHTML = `
+    <div class="pushstate ${pushHere ? 'on' : ''}"><b>${pushHere ? '🔔 Avisos activados en este dispositivo' : '🔕 Avisos apagados en este dispositivo'}</b>
+      <small>${pushHere ? 'Puedes activarlos también en tus otros dispositivos.' : isIOS() && !standalone() ? 'Abre la app desde su icono de la pantalla de inicio para poder activarlos.' : 'Te llegarán aunque la app esté cerrada.'}</small></div>
+    ${pushHere ? `<div class="grid2"><button type="button" class="btn" data-pa="test">Enviar uno de prueba</button><button type="button" class="btn ghost" data-pa="off">Apagar aquí</button></div>` : '<button type="button" class="btn primary block" data-pa="on">🔔 Activar los avisos</button>'}
+    ${pushMsg ? `<p class="hint">${esc(pushMsg)}</p>` : ''}
+    <h4>Qué te aviso</h4>
+    ${sw('tasks', 'Tareas con hora', 'Antes de empezar (o lo que pongas en “Aviso” de cada tarea)', `<span class="pprow">${sel('lead', [[0, 'A la hora'], [5, '5 min antes'], [10, '10 min antes'], [15, '15 min antes'], [30, '30 min antes'], [60, '1 hora antes']])}</span>`)}
+    ${sw('bday', 'Cumpleaños', 'La víspera y el mismo día a las 9:00', `<span class="pprow">La víspera a las ${sel('bdayHour', hours(12))}</span>`)}
+    ${sw('habits', 'Hábitos que faltan', 'Si te queda alguno del día', `<span class="pprow">A las ${sel('habitHour', hours(12))}</span>`)}
+    ${sw('morning', 'Resumen de la mañana', 'Lo que tienes hoy', `<span class="pprow">A las ${sel('morningHour', hours(5).slice(0, 8))}</span>`)}
+    <p class="hint">Los manda GitHub cada 5 minutos, así que pueden llegar con unos minutos de diferencia. Si cambias algo aquí, vale para todos tus dispositivos.</p>`;
+}
+$('#pushBody').addEventListener('click', e => {
+  const t = e.target.closest('[data-pp]'), a = e.target.closest('[data-pa]');
+  if (t) { setPushPref({ [t.dataset.pp]: !pushPrefs()[t.dataset.pp] }); renderPush(); return; }
+  if (!a) return;
+  if (a.dataset.pa === 'on') pushEnable();
+  else if (a.dataset.pa === 'off') pushDisable();
+  else if (a.dataset.pa === 'test') { setPushPref({ test: Date.now() }); pushMsg = 'Aviso de prueba pedido: te llegará en unos minutos.'; renderPush(); }
+});
+$('#pushBody').addEventListener('change', e => { const k = e.target.dataset.ppv; if (k) setPushPref({ [k]: Number(e.target.value) }); });
+$('#openPush').addEventListener('click', () => { pushMsg = ''; pushHere = null; renderPush(); openSheet('#pushSheet'); });
+
+// ---------- Modo sencillo ----------
+const simpleOn = () => !!extra.prefs?.simple;
+function applySimple() { document.body.classList.toggle('simple', simpleOn()); $('#simpleSwitch')?.setAttribute('aria-checked', simpleOn()); }
+$('#simpleSwitch').addEventListener('click', () => { extra.prefs = { ...extra.prefs, simple: !simpleOn() }; store.saveExtra('prefs').catch(writeFailed); if (simpleOn() && ['notas', 'hechas'].includes(view)) view = 'hoy'; applySimple(); render(); });
+$('#menuNotes').addEventListener('click', () => { closeSheets(); view = 'notas'; $('#scroller').scrollTop = 0; render(); });
+$('#menuProg').addEventListener('click', () => { closeSheets(); view = 'hechas'; $('#scroller').scrollTop = 0; render(); });
+
+// ---------- Guardar archivos (compartir en el iPhone; descargar en el ordenador) ----------
+async function saveFile(name, blob) {
+  const file = new File([blob], name, { type: blob.type });
+  if (navigator.canShare?.({ files: [file] })) { try { await navigator.share({ files: [file], title: name }); return true; } catch (e) { if (e.name === 'AbortError') return false; } }
+  const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = name; document.body.append(a); a.click(); a.remove();
+  setTimeout(() => URL.revokeObjectURL(a.href), 2000); return true;
+}
+
+// ---------- Traer y llevar tus cosas ----------
+let ioPending = null; // lo que se va a importar (para confirmarlo antes)
+function renderIO() {
+  const P = ioPending;
+  $('#ioBody').innerHTML = P ? `<div class="box-card"><h4>${esc(P.label)}</h4><p class="hint">${P.list.length} ${P.list.length === 1 ? 'tarea' : 'tareas'}${P.skipped ? ` · ${P.skipped} ya las tenías` : ''}</p>
+      <div class="sublist">${P.list.slice(0, 8).map(t => `<div class="revrow"><div class="n">${esc(t.title)}</div><div class="m">${t.date ? friendlyDate(t.date) + (t.time ? ' · ' + t.time : '') : 'sin fecha'}${t.repeat ? ' · ↻' : ''}${t.done ? ' · hecha' : ''}</div></div>`).join('')}${P.list.length > 8 ? `<p class="hint">y ${P.list.length - 8} más…</p>` : ''}</div>
+      <div class="grid2"><button type="button" class="btn" data-io="cancel">Cancelar</button><button type="button" class="btn primary" data-io="doimport"${P.list.length ? '' : ' disabled'}>Importar ${P.list.length}</button></div></div>`
+    : `<h4>Traer</h4>
+    <div class="menu">
+      <button type="button" data-io="pick" data-accept=".ics,text/calendar">📅 Un calendario (.ics)<small>De Google Calendar, Outlook o el iPhone</small></button>
+      <button type="button" data-io="pick" data-accept=".csv,text/csv">✅ Todoist o Excel (.csv)<small>Una fila por tarea</small></button>
+      <button type="button" data-io="paste">📋 Pegar una lista<small>Copia tus Recordatorios o una nota y pégalos aquí</small></button>
+      <button type="button" data-io="pick" data-accept=".txt,text/plain">📄 Un archivo de texto (.txt)<small>Una tarea por línea</small></button>
+      <button type="button" data-io="pick" data-accept="application/json,.json">💾 Una copia de Mis Tareas (.json)</button>
+    </div>
+    <form class="box-card" id="pasteForm" hidden><textarea class="inp" id="pasteText" rows="6" placeholder="Una tarea por línea. Puedes escribir fechas: “mañana dentista a las 10”"></textarea>
+      <div class="chips"><button type="button" class="chip on" data-pasteto="none">Sin fecha</button><button type="button" class="chip" data-pasteto="hoy">Para hoy</button></div>
+      <button class="btn primary" type="submit">Ver lo que se va a importar</button></form>
+    <h4>Llevar</h4>
+    <div class="menu">
+      <button type="button" data-io="backup">💾 Copia de seguridad<small>Todo menos las fotos (archivo pequeño)</small></button>
+      <button type="button" data-io="fullbackup">🖼 Copia completa con fotos<small>Más grande; incluye fotos y dibujos</small></button>
+      <button type="button" data-io="csv-tasks">📊 Tareas para Excel (.csv)</button>
+      <button type="button" data-io="csv-habits">📊 Hábitos para Excel (.csv)</button>
+      <button type="button" data-io="csv-shelf">📊 Libros y películas para Excel (.csv)</button>
+      <button type="button" data-io="print">🖨 Imprimir la semana o guardarla en PDF</button>
+      <button type="button" data-io="ics">📅 Todo lo que tiene fecha, al calendario (.ics)</button>
+    </div>
+    <p class="hint" id="ioInfo"></p>`;
+}
+let pasteTo = 'none';
+$('#ioBody').addEventListener('click', async e => {
+  const b = e.target.closest('[data-io], [data-pasteto]'); if (!b) return;
+  if (b.dataset.pasteto) { pasteTo = b.dataset.pasteto; $('#ioBody').querySelectorAll('[data-pasteto]').forEach(x => x.classList.toggle('on', x === b)); return; }
+  const a = b.dataset.io, info = t => { const el = $('#ioInfo'); if (el) el.textContent = t; };
+  if (a === 'pick') { $('#ioFile').accept = b.dataset.accept; $('#ioFile').click(); }
+  else if (a === 'paste') { $('#pasteForm').hidden = !$('#pasteForm').hidden; $('#pasteText').focus(); }
+  else if (a === 'cancel') { ioPending = null; renderIO(); }
+  else if (a === 'doimport') doImport();
+  else if (a === 'backup') exportBackup();
+  else if (a === 'fullbackup') { info('Preparando la copia con fotos…'); exportBackup(true).then(() => info('')); }
+  else if (a === 'csv-tasks') exportCSV('tasks');
+  else if (a === 'csv-habits') exportCSV('habits');
+  else if (a === 'csv-shelf') exportCSV('shelf');
+  else if (a === 'print') { closeSheets(); setTimeout(printWeek, 300); }
+  else if (a === 'ics') { const l = tasks.filter(t => t.date && !t.done && !t.parentId); if (!l.length) { info('No hay tareas pendientes con fecha.'); return; } saveFile('mis-tareas.ics', new Blob([toICS(l, catOf)], { type: 'text/calendar' })); }
+});
+$('#ioBody').addEventListener('submit', e => {
+  if (e.target.id !== 'pasteForm') return; e.preventDefault();
+  const titles = linesToTitles($('#pasteText').value); if (!titles.length) return;
+  prepareImport('Lista pegada', titles.map(title => ({ title, date: pasteTo === 'hoy' ? todayISO() : '', parse: true })));
+});
+$('#openIO').addEventListener('click', () => { ioPending = null; renderIO(); openSheet('#ioSheet'); });
+$('#ioFile').addEventListener('change', async e => {
+  const f = e.target.files[0]; e.target.value = ''; if (!f) return;
+  const text = await f.text(), name = f.name.toLowerCase();
+  try {
+    if (name.endsWith('.json') || /^\s*[[{]/.test(text)) { importJSONText(text); return; }
+    if (name.endsWith('.ics') || /BEGIN:VCALENDAR/.test(text)) prepareImport(`Calendario: ${f.name}`, parseICS(text, { since: addDays(todayISO(), -30) }).map(t => ({ ...t, id: t.uid ? 'ics-' + t.uid.replace(/[^\w.~:@+-]/g, '_').slice(0, 120) : undefined })));
+    else if (name.endsWith('.csv') || name.endsWith('.tsv')) prepareImport(`Tabla: ${f.name}`, rowsToTasks(parseCSV(text)).map(t => ({ ...t, parse: !!t.when })));
+    else prepareImport(`Texto: ${f.name}`, linesToTitles(text).map(title => ({ title, parse: true })));
+  } catch (err) { logError(err.message, 'importar'); $('#ioInfo').textContent = 'No he podido leer ese archivo.'; }
+});
+// Se completan las tareas (categoría adivinada, fechas escritas…) y se enseñan antes de guardarlas
+function prepareImport(label, raw) {
+  let skipped = 0;
+  const list = raw.filter(t => t.title).map(t => {
+    let x = { ...t };
+    if (x.parse) { const p = parseQuick(x.when ? `${x.title} ${x.when}` : x.title, cats); x = { ...x, title: p.title || x.title, date: p.date || x.date || '', time: p.time || x.time || '', endTime: p.endTime || '', repeat: p.repeat || '', days: p.days || [], every: p.every || 1, nth: p.nth || null, nthDay: p.nthDay ?? null, flag: x.flag || !!p.prio, tags: [...(x.tags || []), ...(p.tags || [])], cat: p.cat || '' }; if (x.repeat && !x.date) x.date = todayISO(); }
+    return { id: x.id || uid(), title: x.title, cat: x.cat || guessCat(x.title) || '', date: x.date || '', time: x.date ? x.time || '' : '', endTime: x.date && x.time ? (x.endTime || hhmm(toMin(x.time) + 60)) : '',
+      repeat: x.date ? x.repeat || '' : '', days: x.days || [], every: x.every || 1, nth: x.nth || null, nthDay: x.nthDay ?? null, until: x.until || '', loc: x.loc || '', notes: x.notes || '', flag: !!x.flag,
+      tags: (x.tags || []).map(normTag).filter(Boolean), done: !!x.done, doneAt: x.done ? Date.now() : null, created: Date.now() };
+  }).filter(t => { if (tasks.some(o => o.id === t.id || (fold(o.title) === fold(t.title) && (o.date || '') === t.date && (o.time || '') === t.time))) { skipped++; return false; } return true; });
+  list.forEach(alignStart);
+  ioPending = { label, list, skipped }; renderIO();
+}
+function doImport() {
+  const l = ioPending?.list || []; if (!l.length) return;
+  tasks.push(...l); store.putMany(l).catch(writeFailed);
+  const ids = new Set(l.map(t => t.id)); ioPending = null; closeSheets(); render();
+  showToast(`${l.length} ${l.length === 1 ? 'tarea importada' : 'tareas importadas'}`, () => { tasks = tasks.filter(t => !ids.has(t.id)); ids.forEach(id => store.remove(id).catch(writeFailed)); });
+}
+// --- CSV para Excel ---
+function exportCSV(kind) {
+  const d = todayISO(), yn = v => v ? 'Sí' : '';
+  if (kind === 'tasks') {
+    const rows = [['Título', 'Parte de', 'Fecha', 'Inicio', 'Fin', 'Categoría', 'Proyecto', 'Hecha', 'Hecha el', 'Bandera', 'Etiquetas', 'Repetición', 'Ubicación', 'Notas']];
+    [...tasks].sort(sortTasks).forEach(t => { const par = t.parentId ? tasks.find(p => p.id === t.parentId) : null;
+      rows.push([t.title, par?.title || '', t.date || '', t.time || '', t.endTime || '', catOf(t.cat).name, projects.find(p => p.id === t.project)?.name || '', yn(t.done), t.doneAt ? isoDate(new Date(t.doneAt)) : '', yn(t.flag), (t.tags || []).join(', '), t.repeat ? repeatLabel(t) : '', t.loc || '', t.notes || '']); });
+    return saveFile(`mis-tareas-tareas-${d}.csv`, new Blob([toCSV(rows)], { type: 'text/csv' }));
+  }
+  if (kind === 'habits') {
+    const y = d.slice(0, 4), rows = [['Hábito', 'Tipo', 'Cada cuánto', 'Racha', 'Récord', `Días cumplidos en ${y}`, 'Último día cumplido']];
+    habits.forEach(h => { const ok = Object.entries(h.log).filter(([k, v]) => v === 1).map(([k]) => k).sort();
+      rows.push([h.name, { build: 'Para hacer', quit: 'Para dejar', sleep: 'Sueño', routine: 'Rutina' }[h.kind], { daily: 'Cada día', weekly: 'Por semana', monthly: 'Por mes', yearly: 'Por año' }[h.freq] || '', habitStreak(h), habitBest(h), ok.filter(k => k.startsWith(y)).length, ok.pop() || '']); });
+    return saveFile(`mis-tareas-habitos-${d}.csv`, new Blob([toCSV(rows)], { type: 'text/csv' }));
+  }
+  const rows = [['Tipo', 'Título', 'Autor o dirección', 'Año', 'Categoría', 'Estado', 'Nota', 'Empezado', 'Terminado', 'Páginas']];
+  for (const k of ['books', 'movies']) [...shelf[k].items].sort((a, b) => bcmp(a.title, b.title)).forEach(b => rows.push([k === 'books' ? 'Libro' : 'Película', b.title, b.author, b.year || '', b.genre, SHELF[k].st[b.status], b.rating || '', b.started, b.finished, b.pages || '']));
+  return saveFile(`mis-tareas-libros-y-peliculas-${d}.csv`, new Blob([toCSV(rows)], { type: 'text/csv' }));
+}
+// --- Imprimir la semana (o guardarla en PDF desde el menú de imprimir) ---
+function printWeek() {
+  const mon = mondayOf(calDate()), days = [...Array(7)].map((_, i) => addDays(mon, i));
+  $('#printArea').innerHTML = `<h1>Semana del ${parseISO(days[0]).toLocaleDateString('es-ES', { day: 'numeric', month: 'long' })} al ${parseISO(days[6]).toLocaleDateString('es-ES', { day: 'numeric', month: 'long', year: 'numeric' })}</h1>
+    <div class="pweek">${days.map(d => { const x = calDayItems(() => true, d), items = [...x.timed.filter(i => !i.routine), ...x.allDay.map(i => ({ ...i, s: -1 }))].sort((a, b) => a.s - b.s);
+      return `<section><h2>${cap(parseISO(d).toLocaleDateString('es-ES', { weekday: 'long', day: 'numeric' }))}</h2>${items.map(i => `<p><span class="pbox">${i.done ? '✓' : ''}</span>${i.s >= 0 ? `<b>${hhmm(i.s)}</b> ` : ''}${esc(i.title)}${i.sub ? ` · <small>${esc(i.sub)}</small>` : ''}</p>`).join('') || '<p class="pfree">—</p>'}</section>`; }).join('')}</div>`;
+  document.body.classList.add('printing');
+  setTimeout(() => { try { window.print(); } catch { showToast('Este dispositivo no deja imprimir desde la app'); } }, 100);
+}
+addEventListener('afterprint', () => document.body.classList.remove('printing'));
+$('#printArea').addEventListener('click', () => document.body.classList.remove('printing'));
+
+// ---------- Resumen del mes ----------
+let sumMonth = null;
+function monthStats(ym) {
+  const [y, m] = ym.split('-').map(Number), from = `${ym}-01`, to = `${ym}-${pad(dim(y, m - 1))}`, inM = d => d && d >= from && d <= to;
+  const today = todayISO(), last = to < today ? to : today, nDays = Math.max(1, Math.round((parseISO(last) - parseISO(from)) / 864e5) + 1);
+  const pts = Object.entries(stats.days).filter(([d]) => inM(d)).reduce((s, [, v]) => s + v, 0);
+  const goalDays = Object.entries(stats.days).filter(([d, v]) => inM(d) && v >= stats.goal).length;
+  const doneT = tasks.filter(t => t.done && !children(t.id).length && inM(t.ptsDay || (t.doneAt ? isoDate(new Date(t.doneAt)) : '')));
+  const byCat = {};
+  tasks.forEach(t => {
+    if (children(t.id).length) return;
+    let mm = Object.entries(t.focusLog || {}).filter(([d]) => inM(d)).reduce((s, [, v]) => s + v, 0);
+    const dd = t.done ? (t.ptsDay || (t.doneAt ? isoDate(new Date(t.doneAt)) : '')) : '';
+    if (!mm && t.done && inM(dd)) mm = durationMin(t) || Number(t.minutes) || 0;
+    if (!mm) return; const root = t.parentId ? tasks.find(p => p.id === t.parentId) || t : t; byCat[root.cat || ''] = (byCat[root.cat || ''] || 0) + mm;
+  });
+  const daily = habits.filter(h => h.kind === 'build' && h.freq === 'daily');
+  const habPct = daily.length ? Math.round(daily.reduce((s, h) => s + Object.entries(h.log).filter(([d, v]) => v === 1 && inM(d)).length, 0) / (daily.length * nDays) * 100) : null;
+  const habTop = daily.map(h => [h.name, Object.entries(h.log).filter(([d, v]) => v === 1 && inM(d)).length]).sort((a, b) => b[1] - a[1]).slice(0, 3);
+  const read = shelf.books.items.filter(b => b.status === 'read' && inM(b.finished)), seen = shelf.movies.items.filter(b => b.status === 'read' && inM(b.finished));
+  const moods = Object.entries(extra.mood).filter(([d, v]) => inM(d) && v.m).map(([, v]) => v.m);
+  const journal = notes.filter(n => inM(n.journal) && !journalEmpty(n)).length;
+  return { ym, label: cap(new Date(y, m - 1, 1).toLocaleDateString('es-ES', { month: 'long', year: 'numeric' })), pts, goalDays, nDays, done: doneT.length, flagged: doneT.filter(t => t.flag).length,
+    cats: Object.entries(byCat).sort((a, b) => b[1] - a[1]), mins: Object.values(byCat).reduce((s, v) => s + v, 0), habPct, habTop, read, seen,
+    mood: moods.length ? moods.reduce((s, v) => s + v, 0) / moods.length : null, journal };
+}
+function renderMonthSum() {
+  const S = monthStats(sumMonth), maxC = Math.max(1, ...S.cats.map(c => c[1])), cur = todayISO().slice(0, 7);
+  $('#monthBody').innerHTML = `<div class="sheet-head"><h3>Resumen del mes</h3><button type="button" class="btn ghost" data-ms="close">Cerrar</button></div>
+    <div class="weeknav"><button class="iconbtn" data-ms="prev" aria-label="Mes anterior">‹</button><strong>${S.label}</strong><button class="iconbtn" data-ms="next" aria-label="Mes siguiente"${sumMonth >= cur ? ' disabled' : ''}>›</button></div>
+    <div class="kpis"><div class="kpi"><b>${S.pts.toLocaleString('es-ES')}</b><span>puntos</span></div><div class="kpi"><b>${S.done}</b><span>tareas hechas</span></div><div class="kpi"><b>${S.goalDays}</b><span>días con objetivo</span></div></div>
+    ${S.mins ? `<h4>Tiempo dedicado · ${fmtDur(S.mins)}</h4><div class="focusrows">${S.cats.slice(0, 6).map(([c, mm]) => `<div class="focusrow"><span>${esc(catOf(c).name)}</span><span>${fmtDur(mm)}</span><div class="bar"><i style="width:${mm / maxC * 100}%;background:${colorVar(catOf(c).color)}"></i></div></div>`).join('')}</div>` : ''}
+    ${S.habPct !== null ? `<h4>Hábitos · ${S.habPct}% cumplidos</h4><p class="hint">${S.habTop.filter(x => x[1]).map(([n, k]) => `${esc(n)}: ${k} días`).join(' · ') || 'Este mes aún no has cumplido ninguno.'}</p>` : ''}
+    ${S.read.length || S.seen.length ? `<h4>Libros y películas</h4><p class="hint">${[...S.read.map(b => '📚 ' + esc(b.title)), ...S.seen.map(b => '🎬 ' + esc(b.title))].join(' · ')}</p>` : ''}
+    ${S.mood !== null ? `<p class="hint">Ánimo medio: ${MOODS[Math.round(S.mood) - 1]} ${MOOD_TXT[Math.round(S.mood) - 1].toLowerCase()}${S.journal ? ` · ${S.journal} ${S.journal === 1 ? 'día' : 'días'} en el diario` : ''}</p>` : S.journal ? `<p class="hint">${S.journal} días en el diario</p>` : ''}
+    <button type="button" class="btn primary block" data-ms="image">🖼 Guardar como imagen</button>`;
+}
+function openMonthSum(ym) { const t = todayISO(); sumMonth = ym || (Number(t.slice(8)) <= 7 ? monthDate(t, -1, 1).slice(0, 7) : t.slice(0, 7)); renderMonthSum(); openSheet('#monthSheet'); lsSet('msum-' + monthDate(t, -1, 1).slice(0, 7), '1'); }
+$('#monthBody').addEventListener('click', e => {
+  const b = e.target.closest('[data-ms]'); if (!b) return;
+  const a = b.dataset.ms;
+  if (a === 'close') { closeSheets(); render(); return; }
+  if (a === 'prev' || a === 'next') { sumMonth = monthDate(sumMonth + '-01', a === 'next' ? 1 : -1, 1).slice(0, 7); renderMonthSum(); return; }
+  if (a === 'image') monthImage(monthStats(sumMonth));
+});
+function monthBannerHTML() {
+  const t = todayISO(), prev = monthDate(t, -1, 1).slice(0, 7);
+  if (Number(t.slice(8)) > 7) return '';
+  try { if (localStorage.getItem('msum-' + prev) === '1') return ''; } catch {}
+  return `<div class="banner"><span>📅 Ya está tu resumen de ${new Date(prev + '-01T12:00').toLocaleDateString('es-ES', { month: 'long' })}</span><button class="btn primary small" data-act="monthsum">Verlo</button></div>`;
+}
+// Imagen para guardar o compartir (dibujada a mano en un lienzo)
+async function monthImage(S) {
+  const W = 1080, H = 1350, c = document.createElement('canvas'); c.width = W; c.height = H;
+  const g = c.getContext('2d'), acc = getComputedStyle(document.documentElement).getPropertyValue('--accent').trim() || '#2747c9';
+  const font = (w, s) => `${w} ${s}px -apple-system, "Segoe UI", system-ui, sans-serif`;
+  g.fillStyle = '#f6f5f1'; g.fillRect(0, 0, W, H);
+  g.fillStyle = acc; g.fillRect(0, 0, W, 200);
+  g.fillStyle = '#fff'; g.font = font(600, 36); g.fillText('Mi resumen de', 70, 90); g.font = font(800, 68); g.fillText(S.label, 70, 165);
+  const kpi = (x, v, l) => { g.fillStyle = '#fff'; roundRect(g, x, 240, 300, 170, 28); g.fill(); g.fillStyle = '#1b1e1c'; g.font = font(800, 64); g.fillText(v, x + 30, 330); g.fillStyle = '#66706a'; g.font = font(600, 28); g.fillText(l, x + 30, 380); };
+  kpi(60, S.pts.toLocaleString('es-ES'), 'puntos'); kpi(390, String(S.done), 'tareas hechas'); kpi(720, String(S.goalDays), 'días con objetivo');
+  let y = 480;
+  if (S.cats.length) {
+    g.fillStyle = '#1b1e1c'; g.font = font(800, 38); g.fillText(`Tiempo dedicado · ${fmtDur(S.mins)}`, 60, y); y += 30;
+    const max = Math.max(...S.cats.map(x => x[1]));
+    S.cats.slice(0, 5).forEach(([cid, mm]) => { const cc = catOf(cid); y += 60; g.fillStyle = '#1b1e1c'; g.font = font(600, 30); g.fillText(cc.name, 60, y); g.fillStyle = '#66706a'; g.textAlign = 'right'; g.fillText(fmtDur(mm), W - 60, y); g.textAlign = 'left';
+      g.fillStyle = '#e4e4de'; roundRect(g, 60, y + 14, W - 120, 16, 8); g.fill(); g.fillStyle = resolveColor(cc.color); roundRect(g, 60, y + 14, Math.max(16, (W - 120) * mm / max), 16, 8); g.fill(); y += 20; });
+    y += 60;
+  }
+  const line = (t, s = 32, w = 600, col = '#1b1e1c') => { if (y > H - 120) return; g.fillStyle = col; g.font = font(w, s); y += wrapText(g, t, 60, y, W - 120, s * 1.3).length * s * 1.3 + 14; };
+  if (S.habPct !== null) { line(`🔥 Hábitos: ${S.habPct}% cumplidos`, 36, 800); if (S.habTop.some(x => x[1])) line(S.habTop.filter(x => x[1]).map(([n, k]) => `${n}: ${k} días`).join(' · '), 28, 500, '#66706a'); }
+  if (S.read.length) line(`📚 ${S.read.map(b => b.title).join(' · ')}`, 30);
+  if (S.seen.length) line(`🎬 ${S.seen.map(b => b.title).join(' · ')}`, 30);
+  if (S.mood !== null) line(`Ánimo medio: ${MOOD_TXT[Math.round(S.mood) - 1]} ${MOODS[Math.round(S.mood) - 1]}`, 30);
+  g.fillStyle = '#9aa29c'; g.font = font(600, 26); g.fillText('Mis Tareas', 60, H - 50);
+  const blob = await new Promise(r => c.toBlob(r, 'image/png'));
+  saveFile(`resumen-${S.ym}.png`, blob);
+}
+function roundRect(g, x, y, w, h, r) { g.beginPath(); g.moveTo(x + r, y); g.arcTo(x + w, y, x + w, y + h, r); g.arcTo(x + w, y + h, x, y + h, r); g.arcTo(x, y + h, x, y, r); g.arcTo(x, y, x + w, y, r); g.closePath(); }
+function wrapText(g, text, x, y, maxW, lh) { const words = String(text).split(' '), lines = []; let cur = ''; words.forEach(w => { const t = cur ? cur + ' ' + w : w; if (g.measureText(t).width > maxW && cur) { lines.push(cur); cur = w; } else cur = t; }); if (cur) lines.push(cur); lines.forEach((l, i) => g.fillText(l, x, y + i * lh)); return lines; }
+const resolveColor = c => { const v = colorVar(c); if (!v.startsWith('var(')) return v; return getComputedStyle(document.documentElement).getPropertyValue(v.slice(4, -1)).trim() || '#888'; };
+
 // ---------- Pintar ----------
 const prioRank = { alta: 0, normal: 1, baja: 2 };
 const sortTasks = (a, b) => (a.date || '9999').localeCompare(b.date || '9999') || (a.time || '99').localeCompare(b.time || '99')
@@ -4629,7 +4920,7 @@ function render() {
   if (view !== 'hoy' || hoyEdit) hoyScrolled = '';
 }
 function renderMain() {
-  document.body.dataset.view = view;
+  document.body.dataset.view = view; applySimple();
   $('#todayLabel').textContent = new Date().toLocaleDateString('es-ES', { weekday: 'long', day: 'numeric', month: 'long' });
   $('#viewTitle').textContent = query ? 'Buscar' : VIEWS[view];
   $('#ptsToday').textContent = `⭐ ${pointsOn(todayISO())}`;
@@ -4692,7 +4983,7 @@ function renderMain() {
     const list = tasks.filter(x => byCat(x) && inView(x, v) && v !== 'hechas').sort(sortTasks);
     const done = tasks.filter(x => byCat(x) && doneInView(x, v)).sort((a, b) => (b.doneAt || 0) - (a.doneAt || 0));
     count = list.length; doneCount = v === 'proximas' ? 0 : done.length;
-    if (v === 'hechas') html += progresoHTML();
+    if (v === 'hechas') html += `<button class="hableft" data-act="monthsum"><span>📅</span><span><b>Resumen del mes</b><small>Puntos, tiempo, hábitos, libros… y como imagen</small></span><span class="go">›</span></button>` + progresoHTML();
     if (v === 'hoy') html += (on('bandeja') ? inboxHTML() : '') + (on('ahora') ? nowHTML() : '');
     if (view === 'semana') html += agendaSwitchHTML();
     if (v === 'hoy') html += timerBannerHTML() + (on('planificar') ? planBannerHTML() : '') + (on('animo') ? moodBannerHTML() : '') + (on('repaso') ? reviewBannerHTML() : '') + backupBannerHTML()
@@ -4800,6 +5091,7 @@ $('#list').addEventListener('click', e => {
   else if (act === 'ndelfolder') { extra.prefs = { ...extra.prefs, noteFolders: (extra.prefs.noteFolders || []).filter(f => f !== noteFolder) }; store.saveExtra('prefs').catch(writeFailed); noteFolder = ''; render(); }
   else if (act === 'nopen') openNoteSafe(id);
   else if (act === 'organize') openOrg();
+  else if (act === 'monthsum') openMonthSum();
   else if (act === 'closeday') openCloseDay();
   else if (act === 'goalnew') openGoalSheet(null);
   else if (act === 'goaledit') openGoalSheet(id);
@@ -4834,7 +5126,24 @@ setInterval(dayCheck, 60000);
 document.addEventListener('visibilitychange', () => { if (!document.hidden) dayCheck(); });
 
 // ---------- Funcionar sin conexión ----------
-if ('serviceWorker' in navigator && location.protocol !== 'file:') navigator.serviceWorker.register('sw.js').catch(() => {});
+// La app abre al instante con lo guardado; si hay una versión nueva se instala aparte y se ofrece al momento
+// (o se pone sola la próxima vez que vuelvas a la app, si estaba en segundo plano)
+let swNew = false;
+if ('serviceWorker' in navigator && location.protocol !== 'file:') {
+  const had = !!navigator.serviceWorker.controller;
+  navigator.serviceWorker.register('sw.js').then(reg => {
+    const check = () => reg.update().catch(() => {});
+    document.addEventListener('visibilitychange', () => { if (!document.hidden) check(); });
+    setInterval(check, 60 * 60000);
+  }).catch(() => {});
+  navigator.serviceWorker.addEventListener('controllerchange', () => {
+    if (!had || swNew) return; swNew = true;
+    if (document.hidden) { location.reload(); return; }
+    showToast('Hay una versión nueva de la app', () => location.reload());
+    $('#toastUndo').textContent = 'Actualizar';
+  });
+  document.addEventListener('visibilitychange', () => { if (document.hidden && swNew) location.reload(); });
+}
 
 render();
 initStore().catch(() => { loaded = true; setSync('warn', 'No se pudo conectar'); render(); });

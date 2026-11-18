@@ -41,6 +41,11 @@ jobs:
           mkdir _site
           cp *.html *.js *.webmanifest _site/
           cp -r icons _site/
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - name: Comprimir el código (más rápido de descargar)
+        run: npx -y esbuild@0.24.0 app.js logic.js parse.js cal.js io.js config.js sw.js --minify --target=es2020 --outdir=_site --allow-overwrite
       - uses: actions/configure-pages@v5
       - uses: actions/upload-pages-artifact@v3
         with:

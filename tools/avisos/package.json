@@ -1,0 +1,10 @@
+{
+  "name": "mis-tareas-avisos",
+  "private": true,
+  "type": "module",
+  "description": "Envía los avisos de Mis Tareas (lo ejecuta GitHub cada 5 minutos).",
+  "dependencies": {
+    "firebase-admin": "12.7.0",
+    "web-push": "3.6.7"
+  }
+}

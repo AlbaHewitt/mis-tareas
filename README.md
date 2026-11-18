@@ -31,6 +31,15 @@ App de tareas para iPhone y ordenador: eventos, entrenos, casa, estudio… Se in
 
 Abre la dirección en **Safari** → botón Compartir → **Añadir a pantalla de inicio**. Ábrela siempre desde el icono: así sale a pantalla completa, sin barras de navegador ni zoom.
 
+## Avisos en el móvil (configurar una vez)
+
+Los avisos los manda GitHub cada 5 minutos (`.github/workflows/avisos.yml` y `tools/avisos/`). Necesita dos secretos del repositorio (Settings → Secrets and variables → Actions → New repository secret):
+
+1. `FIREBASE_SERVICE_ACCOUNT`: en la consola de Firebase → ⚙️ Configuración del proyecto → Cuentas de servicio → “Generar nueva clave privada”. Pega el contenido entero del archivo .json que se descarga (y después borra ese archivo).
+2. `VAPID_PRIVATE_KEY`: el texto de `claves-privadas/VAPID_PRIVATE_KEY.txt` (esa carpeta no se sube a GitHub). La clave pública ya está en `config.js`.
+
+Luego, en el iPhone, abre la app desde su icono de la pantalla de inicio → ⋯ → Avisos → Activar. GitHub pausa las tareas programadas si el repositorio pasa 60 días sin cambios; si dejan de llegar, en la pestaña Actions → Avisos → “Enable workflow”.
+
 ## Funciones
 
 - **Escritura rápida**: “mañana a las 8 correr #entreno”, “los lunes y jueves gym”, “examen el 3 de diciembre !” (la `!` es prioridad alta). Lo entiende `parse.js`.
@@ -77,6 +86,11 @@ Abre la dirección en **Safari** → botón Compartir → **Añadir a pantalla d
 - **Búsqueda en todo**: la lupa busca en tareas, notas, proyectos, libros, películas, la compra y los hábitos.
 - **Notas privadas**: el candado 🔓 de una nota hace que solo se abra con Face ID (o Touch ID o el código del dispositivo). Es un candado en el dispositivo: la nota sigue guardada en tu cuenta y en la copia de seguridad.
 - **Listas reutilizables**: en una nota con casillas, “↺ Desmarcar todo” o “⧉ Hacer una copia”. En la Compra, “Añadir desde una lista de Notas”.
+- **Avisos**: ⋯ → Avisos. Tareas con hora (X minutos antes, o lo que pongas en “Aviso” de la tarea), cumpleaños (la víspera y el día), hábitos que faltan por la noche y un resumen por la mañana. Pueden llegar con unos minutos de diferencia.
+- **Modo sencillo**: ⋯ → Personalizar. Abajo solo Hoy, Agenda, Hábitos y Listas; Notas y Progreso pasan al menú ⋯.
+- **Traer y llevar tus cosas**: ⋯ → Traer y llevar. Importa calendarios (.ics), Todoist o Excel (.csv), texto o una lista pegada (por ejemplo, tus Recordatorios copiados), sin duplicar. Exporta a Excel (tareas, hábitos, libros y películas), al calendario (.ics), imprime la semana (o la guarda en PDF) y hace la copia de seguridad, también la completa con fotos.
+- **Resumen del mes**: en Progreso (y en Hoy la primera semana de cada mes): puntos, tareas, tiempo por categoría, hábitos, libros, películas y ánimo, y se guarda como imagen.
+- **Más rápida**: abre al instante con lo guardado; las versiones nuevas se instalan aparte y se ponen al volver a la app (o con “Actualizar”).
 - **Fotos en las tareas**: en los detalles, 📷 Foto o ✏️ Dibujo. Las fotos se guardan achicadas y aparte (no van en la copia de seguridad).
 - **iPad**: el menú pasa a la izquierda con un mini calendario del mes debajo, la Agenda empieza en Semana y Hoy se ve en dos columnas (la línea de horas y, al lado, Extra y lo atrasado). Con teclado: T hoy, ← → antes/después, N nueva, D S M A L vistas, + − tamaño de las horas, 1–6 pestañas, / buscar, Esc cerrar.
 - **Libros y películas en portadas**: “▦ Portadas” los enseña como una galería; las portadas se buscan solas (Open Library y Wikipedia).
