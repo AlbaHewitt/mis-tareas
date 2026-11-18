@@ -1088,6 +1088,12 @@
   .lcards { grid-template-columns: repeat(3, minmax(0, 1fr)); }
   .lcard { padding: 10px; } .lcard b { font-size: 22px; } .lcard > span:last-child { font-size: 13px; }
   @media (min-width: 820px) { .lcards { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
+  /* v31 */
+  .banner .bsub { display: block; font-weight: 400; font-size: 13px; color: var(--muted); margin-top: 2px; }
+  .notemore { display: grid; gap: 8px; background: var(--sunken); border-radius: 14px; padding: 10px; }
+  .notemore .btn { min-height: 40px; }
+  .privtag { align-self: center; font-size: 16px; }
+  #noteDel { min-width: 0; padding: 6px 12px; border-radius: 12px; font-size: 14px; }
 </style>
 </head>
 <body>
@@ -1297,8 +1303,6 @@
       <button type="button" id="openAccount" data-cloud><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8" r="4"/><path d="M4 21a8 8 0 0 1 16 0"/></svg>Cuenta<span class="go">›</span></button>
       <button type="button" id="openPush"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 8a6 6 0 1 1 12 0c0 7 3 9 3 9H3s3-2 3-9"/><path d="M10.3 21a1.9 1.9 0 0 0 3.4 0"/></svg>Avisos<span class="go">›</span></button>
       <button type="button" id="openPrefs"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/></svg>Personalizar<span class="go">›</span></button>
-      <button type="button" id="openBooks"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20V3H6.5A2.5 2.5 0 0 0 4 5.5z"/><path d="M4 19.5A2.5 2.5 0 0 0 6.5 22H20v-5"/></svg>Libros<span class="go">›</span></button>
-      <button type="button" id="openMovies"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M7 4v16M17 4v16M3 9h4M3 15h4M17 9h4M17 15h4"/></svg>Películas<span class="go">›</span></button>
       <button type="button" id="openIO"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M7 4v13M3 13l4 4 4-4M17 20V7M13 11l4-4 4 4"/></svg>Traer y llevar tus cosas<span class="go">›</span></button>
       <button type="button" id="openTrash"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 7h16M9 7V4h6v3M6 7l1 13h10l1-13"/></svg>Borrado recientemente<span class="go">›</span></button>
       <button type="button" id="menuNotes" class="simple-only"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 3h10l4 4v14H5z"/><path d="M15 3v4h4M8 12h8M8 16h6"/></svg>Notas<span class="go">›</span></button>
@@ -1354,7 +1358,7 @@
 <div class="sheet" id="moviesSheet" hidden>
   <div class="grab"></div>
   <div class="inner">
-    <div class="sheet-head"><h3>Películas</h3><button type="button" class="btn ghost" data-back>Atrás</button></div>
+    <div class="sheet-head"><h3>Películas</h3><button type="button" class="btn ghost" data-close>Cerrar</button></div>
     <div id="moviesBody"></div>
   </div>
 </div>
@@ -1363,7 +1367,7 @@
 <div class="sheet" id="booksSheet" hidden>
   <div class="grab"></div>
   <div class="inner">
-    <div class="sheet-head"><h3>Libros</h3><button type="button" class="btn ghost" data-back>Atrás</button></div>
+    <div class="sheet-head"><h3>Libros</h3><button type="button" class="btn ghost" data-close>Cerrar</button></div>
     <div id="booksBody"></div>
   </div>
 </div>
@@ -1460,8 +1464,10 @@
       <input class="inp" type="number" id="hTarget" inputmode="numeric" min="1" max="7" value="3"></label>
     <div class="grid2" id="hQtyField"><label class="field"><span class="label">Cuántos al día (opcional)</span><input class="inp" type="number" id="hQty" inputmode="numeric" min="2" max="1000000" placeholder="p. ej. 8"></label>
       <label class="field"><span class="label">De qué</span><input class="inp" type="text" id="hUnit" maxlength="20" placeholder="vasos, pasos, páginas…" autocomplete="off"></label></div>
+    <details class="moreopts"><summary>Más opciones <span>(puntos)</span></summary><div class="moreinner">
     <label class="field"><span class="label" id="hMinLabel">Minutos (= puntos al cumplirlo)</span>
       <input class="inp" type="number" id="hMin" inputmode="numeric" min="1" max="240" value="10"></label>
+    </div></details>
     <button class="btn primary block" type="submit" id="hSave">Crear hábito</button>
     <button class="btn danger block" type="button" id="hDelete" hidden>Borrar hábito</button>
   </div>
@@ -1534,14 +1540,16 @@
     <div class="sheet-head"><h3>Ayuda</h3><button type="button" class="btn ghost" data-back>Atrás</button></div>
     <details class="box-card" open><summary>Cómo funciona</summary>
       <ul class="steps" style="list-style:disc">
-        <li><b>Apuntar:</b> pulsa <b>+</b> y escribe como hablas: “mañana de 10 a 12 estudiar #estudio @cálculo !”. La <b>!</b> es prioridad alta. Para algo rápido, usa “Apuntar rápido…” en Hoy.</li>
-        <li><b>Completar, ver y editar:</b> toca el círculo para completar; toca la tarea para ver sus detalles y pulsa el lápiz para editarla. En las listas también puedes deslizar: a la derecha, hecha; a la izquierda, borrar. Siempre puedes <b>Deshacer</b>.</li>
-        <li><b>Hoy:</b> una línea con las horas y cada tarea a su hora; lo que no tiene hora sale abajo como “Extra”. Con <b>Editar</b> arrastras las tareas para moverlas o estirarlas.</li>
-        <li><b>Agenda:</b> el mes; toca un día para ver lo que tienes.</li>
-        <li><b>Partes:</b> divide una tarea grande (un examen) en partes repartidas por días. Las de un mismo día salen juntas: tócalas para desplegarlas y marcar cada una. Cada parte da su parte de los puntos.</li>
-        <li><b>Hábitos:</b> para hacer, para dejar, rutina de sueño y rutinas con horario.</li>
-        <li><b>Puntos y progreso:</b> cada tarea da puntos (sus minutos). En Progreso ves tu nivel, tu semana, el mes y el año en cuadraditos.</li>
-        <li><b>Más:</b> temporizador al editar una tarea, libros, recompensas, plantillas, filtros, Siri, calendario y copias en ⋯.</li>
+        <li><b>Apuntar:</b> pulsa <b>+</b> y escribe como hablas: “mañana de 10 a 12 estudiar #estudio @cálculo”. Con <b>!</b> o “urgente” lleva bandera 🚩. También entiende “cada lunes”, “ayer”, “el viernes a las 9”…</li>
+        <li><b>Completar y ver:</b> toca el círculo para completar; toca la tarea para ver sus detalles (✓ Hecha, Editar y ⋯ Más). Mantenerla pulsada abre el mismo menú. En las listas, desliza a la derecha para hecha y a la izquierda para borrar. Siempre puedes Deshacer.</li>
+        <li><b>Hoy:</b> arriba, plegadas, las tareas sin hora y las de otros días; debajo, tu día con sus horas. <b>✨ Organizar</b> les busca hueco; <b>✏️ Editar</b> deja arrastrarlas. Por la noche, <b>Cerrar el día</b>.</li>
+        <li><b>Agenda:</b> Día, 3 días (pellizca para ver más o menos), Mes, Año y Lista. Toca un hueco para apuntar a esa hora o mantén pulsada una tarea para moverla.</li>
+        <li><b>Listas:</b> Sin fecha, Con bandera, la Compra, Libros, Películas, tus proyectos, listas inteligentes y etiquetas.</li>
+        <li><b>Partes:</b> divide algo grande (un examen) en partes repartidas por días; las del mismo día salen juntas.</li>
+        <li><b>Hábitos:</b> para hacer (también contando: 8 vasos…), para dejar, sueño y rutinas con horario.</li>
+        <li><b>Notas:</b> con casillas, fotos, dibujos y el diario.</li>
+        <li><b>Progreso:</b> metas del año, tiempo dedicado y tu progreso por meses y semanas. Cada cosa que haces da ⭐.</li>
+        <li><b>En ⋯:</b> avisos, personalizar (y “Qué se ve”), traer y llevar tus cosas, la papelera y la cuenta.</li>
       </ul>
     </details>
     <div class="box-card"><h4>Registro de errores</h4><p class="hint" id="errInfo"></p><div class="code" id="errList" hidden></div>
@@ -1695,10 +1703,13 @@
 <div class="sheet tall" id="noteSheet" hidden>
   <div class="grab"></div>
   <div class="inner">
-    <div class="sheet-head"><button type="button" class="btn ghost" id="noteDone">‹ Listo</button><div class="nhbtns"><button type="button" class="iconbtn" id="noteLock" aria-label="Nota privada con Face ID" aria-pressed="false">🔓</button><button type="button" class="iconbtn" id="notePin" aria-label="Fijar arriba" aria-pressed="false">📌</button><button type="button" class="iconbtn" id="noteDel" aria-label="Borrar nota">🗑</button></div></div>
+    <div class="sheet-head"><button type="button" class="btn ghost" id="noteDone">‹ Listo</button><div class="nhbtns"><span class="privtag" id="notePrivTag" hidden>🔒</span><button type="button" class="iconbtn" id="notePin" aria-label="Fijar arriba" aria-pressed="false">📌</button><button type="button" class="iconbtn" id="noteMoreBtn" aria-label="Más opciones de la nota" aria-expanded="false">⋯</button></div></div>
     <p class="hint" id="noteMeta"></p>
     <input class="inp ntitle" type="text" id="noteTitle" placeholder="Título" maxlength="200" autocomplete="off" aria-label="Título">
-    <div class="grid2"><select class="inp" id="noteFolder" aria-label="Carpeta"></select><select class="inp" id="noteProj" aria-label="Proyecto"></select></div>
+    <div class="notemore" id="noteMore" hidden>
+      <div class="grid2"><select class="inp" id="noteFolder" aria-label="Carpeta"></select><select class="inp" id="noteProj" aria-label="Proyecto"></select></div>
+      <div class="grid2"><button type="button" class="btn small" id="noteLock" aria-pressed="false">🔒 Hacerla privada (Face ID)</button><button type="button" class="btn danger small" id="noteDel">🗑 Borrar la nota</button></div>
+    </div>
     <div class="nblocks" id="noteBlocks"></div>
     <div id="notePhotos"></div>
     <div id="noteLinks"></div>

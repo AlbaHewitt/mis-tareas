@@ -54,7 +54,7 @@ Luego, en el iPhone, abre la app desde su icono de la pantalla de inicio → ⋯
 - **Hábitos**: para hacer (cada día o X veces por semana), para dejar, y rutina de sueño (hora de acostarse, de levantarse y horas dormidas), con rachas. Al añadir uno no se sugieren los que ya tienes.
 - **¿Qué tal hoy? y ¿Cómo has dormido?**: salen en Hoy hasta que los apuntas. En Progreso solo salen sus estadísticas: el ánimo en cuadraditos del año (más claro, mejor día) y el sueño con su media y un gráfico de líneas que se desliza hacia atrás (punto verde si llegaste a tu mínimo, rojo si no). El lápiz junto al título cambia lo de hoy.
 - **Por apartado**: en Progreso, el lápiz elige qué apartados ver.
-- **Ajustes**: Cuenta (nombre, correo y contraseña, cada uno con su lápiz; Google Calendar y Siri), Personalizar (apariencia, puntos y objetivos, categorías, secciones, filtros, plantillas y recompensas), Libros y Ayuda.
+- **Ajustes**: Cuenta (nombre, correo y contraseña; Google Calendar y Siri), Avisos, Personalizar (apariencia, puntos, calendario y tiempo, categorías, Qué se ve, plantillas y recompensas), Traer y llevar, la papelera y Ayuda.
 - **Libros**: los que quieres leer, el que estás leyendo con su página y su progreso, y los leídos (plegados) con su nota. Por defecto van por orden alfabético del título; se puede buscar y filtrar por autor, categoría y páginas, y ordenar por autor, páginas o los añadidos hace poco.
 - **Películas**: igual que Libros: quiero ver y vistas (plegadas) con su nota; se busca y filtra por dirección, categoría y año (por décadas).
 - **Partes**: en las listas y en Hoy, el título es la tarea grande y la parte sale en pequeño. La categoría se ve solo por su color.
@@ -90,6 +90,9 @@ Luego, en el iPhone, abre la app desde su icono de la pantalla de inicio → ⋯
 - **Filtro de categorías**: con el embudo de arriba, solo cuando lo necesitas. “Sincronizado” solo sale si hay algún problema.
 - **Detalles de una tarea**: lo que es, ✓ Hecha, Editar y ⋯ Más (mover, bandera, haciendo, duplicar, copiar, foto, dibujo, enlazar, concentrarme y borrar; es el mismo menú que al mantenerla pulsada).
 - **Qué se ve**: ⋯ → Personalizar → Qué se ve: el modo sencillo, las secciones y los apartados de Progreso, todo en un sitio.
+- **Por la noche**: en Hoy solo sale “¿Cerramos el día?”; el ánimo y el diario van dentro (el diario también está en Notas).
+- **Libros y Películas**: en Listas, junto a la Compra.
+- **Progreso para empezar**: las tarjetas sin datos (tiempo, ánimo, jardín, por apartado) no salen hasta que tengas algo.
 - **Avisos**: ⋯ → Avisos. Tareas con hora (X minutos antes, o lo que pongas en “Aviso” de la tarea), cumpleaños (la víspera y el día), hábitos que faltan por la noche y un resumen por la mañana. Pueden llegar con unos minutos de diferencia.
 - **Modo sencillo**: ⋯ → Personalizar. Abajo solo Hoy, Agenda, Hábitos y Listas; Notas y Progreso pasan al menú ⋯.
 - **Traer y llevar tus cosas**: ⋯ → Traer y llevar. Importa calendarios (.ics), Todoist o Excel (.csv), texto o una lista pegada (por ejemplo, tus Recordatorios copiados), sin duplicar. Exporta a Excel (tareas, hábitos, libros y películas), al calendario (.ics), imprime la semana (o la guarda en PDF) y hace la copia de seguridad, también la completa con fotos.

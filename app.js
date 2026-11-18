@@ -52,7 +52,7 @@ let selectedDay = null;
 let formFlag = false, formCd = false;
 let editingId = null, formCat = 'personal', formDays = [], formParts = [], formNoDate = false, splitDays = [1, 2, 3, 4, 5], formSomeday = false, formTonight = false;
 
-document.documentElement.dataset.v = '30';
+document.documentElement.dataset.v = '31';
 // ---------- Registro de errores (se ve en ⋯ → Ayuda) ----------
 const EKEY = 'mis-tareas-errores';
 function logError(msg, where) {
@@ -162,7 +162,7 @@ const LKEY = 'mis-tareas-v1', LCATS = 'mis-tareas-cats', LHAB = 'mis-tareas-habi
 // Estanterías: libros y películas comparten forma (título, autor o dirección, categoría, estado, nota…)
 const SHELF = {
   books: { coll: 'books', lkey: 'mis-tareas-libros', sheet: '#booksSheet', body: '#booksBody', who: 'Autor', whoPh: 'Autor', num: 'pages', numLabel: 'Páginas', numPh: 'Páginas', unit: 'págs.',
-    st: { want: 'Quiero leer', reading: 'Leyendo ahora', read: 'Leídos' }, addSt: [['want', 'Quiero leer'], ['reading', 'Lo estoy leyendo'], ['read', 'Ya lo leí']],
+    st: { want: 'Quiero leer', reading: 'Leyendo', read: 'Leídos' }, addSt: [['want', 'Quiero leer'], ['reading', 'Lo estoy leyendo'], ['read', 'Ya lo leí']],
     editSt: [['want', 'Quiero leer'], ['reading', 'Leyendo'], ['read', 'Leído']], one: 'libro', add: 'Añadir un libro', emptyWant: 'Apunta aquí los libros que te apetece leer.',
     numF: { '': 'Todas', s: 'Menos de 200', m: '200 a 400', l: 'Más de 400', x: 'Sin páginas' }, genrePh: 'Categoría (novela, ensayo, fantasía…)' },
   movies: { coll: 'movies', lkey: 'mis-tareas-pelis', sheet: '#moviesSheet', body: '#moviesBody', who: 'Dirección', whoPh: 'Dirección', num: 'year', numLabel: 'Año', numPh: 'Año', unit: '',
@@ -616,8 +616,8 @@ document.querySelectorAll('[data-back]').forEach(b => b.addEventListener('click'
 $('#openPrefs').addEventListener('click', () => openSheet('#prefSheet'));
 $('#openSections').addEventListener('click', () => { renderHelp(); applySimple(); openSheet('#secSheet'); });
 $('#secProg').addEventListener('click', () => { renderProgSheet(); openSheet('#progSheet'); });
-$('#openBooks').addEventListener('click', () => { shelf.books.open = null; shelf.books.adding = false; renderShelf('books'); openSheet('#booksSheet'); });
-$('#openMovies').addEventListener('click', () => { shelf.movies.open = null; shelf.movies.adding = false; renderShelf('movies'); openSheet('#moviesSheet'); });
+$('#openBooks')?.addEventListener('click', () => { shelf.books.open = null; shelf.books.adding = false; renderShelf('books'); openSheet('#booksSheet'); });
+$('#openMovies')?.addEventListener('click', () => { shelf.movies.open = null; shelf.movies.adding = false; renderShelf('movies'); openSheet('#moviesSheet'); });
 // Cuenta: el lápiz de cada dato abre su formulario
 document.querySelectorAll('[data-acc]').forEach(b => b.addEventListener('click', () => {
   const f = $('#' + b.dataset.acc), show = f.hidden;
@@ -1592,7 +1592,7 @@ function habitsViewHTML() {
     <div class="rato-meter" style="max-width:none"><div class="bar"><i style="width:${all.length ? nOk / all.length * 100 : 0}%"></i></div></div></section>` : '';
   if (!all.length) {
     return html + `<div class="empty"><strong>Aún no tienes hábitos</strong><span>Crea los que quieres cumplir y los que quieres dejar.</span>
-      <button class="btn primary" data-act="hseed" style="margin-top:10px">Añadir los que me dijiste</button>
+      <button class="btn primary" data-act="hseed" style="margin-top:10px">Añadir hábitos de ejemplo</button>
       <span class="hint">Leer, 15' de silencio, estirar, 10.000 pasos, meditar, inglés, limpiar fotos · y dejar pantallas antes de dormir y scrollear de más</span></div>
       <button class="btn block" data-act="hsleep">🌙 Añadir mi rutina de sueño (23:30 · 7:15)</button>`;
   }
@@ -1796,6 +1796,7 @@ let areasEdit = false;
 function areasHTML(p) {
   const today = todayISO(), now = parseISO(today), y = now.getFullYear(), m = now.getMonth(), n = dim(y, m);
   const days = [...Array(n)].map((_, i) => `${y}-${pad(m + 1)}-${pad(i + 1)}`);
+  if (!tasks.some(t => t.done) && !habits.some(h => Object.keys(h.log || {}).length)) return '';
   const off = new Set(extra.prefs?.areasOff || []);
   const AC = progPrefs().areaColor;
   const row = (key, label, color, map) => {
@@ -1942,6 +1943,7 @@ $('#list').addEventListener('change', e => {
 let moodEdit = false, moodSel = null;
 function moodProgHTML() {
   const today = todayISO(), y = parseISO(today).getFullYear(), m = extra.mood;
+  if (!Object.keys(m || {}).length) return '';
   let rows = '';
   for (let mo = 0; mo < 12; mo++) {
     rows += `<span class="ml">${MONTHS_SHORT[mo]}</span>`;
@@ -1998,6 +2000,7 @@ function plant(min, ok) {
 }
 function gardenHTML() {
   const m1 = todayISO().slice(0, 8) + '01', list = extra.garden.filter(p => p.d >= m1);
+  if (!extra.garden.length) return '';
   const alive = list.filter(p => p.ok).length;
   return `<section class="summary"><div class="rato-head"><h2>Tu jardín</h2><span class="hint">este mes · ${alive} 🌱${list.length - alive ? ` · ${list.length - alive} 🥀` : ''}</span></div>
     <div class="garden">${list.length ? list.map(p => `<span title="${esc(p.t)} · ${p.min} min">${plantEmoji(p)}</span>`).join('') : '<p class="hint">Este mes aún no has plantado nada. Toca una tarea y pulsa ⏱ Concentrarme: cada sesión planta algo aquí.</p>'}</div>
@@ -3006,7 +3009,8 @@ const itemText = it => `<b>${esc(it.title)}${it.sub ? `<small class="tsub">${esc
 function hoyHTML() {
   const now = toMin(nowHM()), { items, extras, late } = hoyItems(hoyEdit);
   const w = wxOf(todayISO());
-  let html = (w && !hoyEdit ? `<div class="wxline">${w.i} <b>${w.max}°</b> / ${w.min}° · ${esc(calPrefs().wx.name)}</div>` : '') + (hoyEdit ? '' : countdownHTML()) + timerBannerHTML() + backupBannerHTML() + (hoyEdit ? '' : birthdayHTML() + monthBannerHTML() + closeBannerHTML()) + sleepPromptHTML() + moodPromptHTML();
+  const evening = !hoyEdit && closeBannerHTML() !== '';
+  let html = (w && !hoyEdit ? `<div class="wxline">${w.i} <b>${w.max}°</b> / ${w.min}° · ${esc(calPrefs().wx.name)}</div>` : '') + (hoyEdit ? '' : countdownHTML()) + timerBannerHTML() + backupBannerHTML() + (hoyEdit ? '' : birthdayHTML() + monthBannerHTML() + closeBannerHTML()) + sleepPromptHTML() + (evening ? '' : moodPromptHTML());
   if (hoyEdit) return html + hoyEditHTML(items, extras);
   const pending = items.filter(i => !i.done).length + extras.filter(i => !i.done).length;
   const habLeft = habits.filter(h => (h.kind === 'quit' || (h.kind === 'build' && h.freq === 'daily')) && !habitDoneToday(h));
@@ -3029,7 +3033,6 @@ function hoyHTML() {
   if (xl.length) plegados += fold('x', '📋', 'Tareas sin hora', xPend ? xPend : '✓', '', `<div class="xlist">${xl.map(x => row(x, x.done ? 'done' : '')).join('')}</div>`);
   if (late.length) plegados += fold('late', '⏳', 'De otros días', late.length, 'late', `<div class="latebar"><button class="chip" data-act="mvlate" data-to="hoy">Todas a hoy</button><button class="chip" data-act="mvlate" data-to="manana">A mañana</button><button class="chip" data-act="mvlate" data-to="none">Sin fecha</button></div><div class="xlist">${late.map(t => { const par = t.parentId ? tasks.find(p => p.id === t.parentId) : null; return row({ ids: [t.id], id: t.id, title: par ? par.title : t.title, sub: `${par ? t.title + ' · ' : ''}${friendlyDate(t.date).toLowerCase()}`, color: colorVar(catOf(t.cat).color), done: false }, 'late'); }).join('')}</div>`);
   html = html.replace('%%PLEGADOS%%', plegados) + '</div><div class="hoyside">';
-  if (on('diario')) { const j = journalOf(todayISO()); html += `<button class="hableft" data-act="journal" data-d="${todayISO()}"><span>📓</span><span><b>Diario de hoy</b><small>${j && !journalEmpty(j) ? 'Ya has escrito · toca para seguir' : '¿Qué tal ha ido el día?'}</small></span><span class="go">›</span></button>`; }
   return html + '</div></div>';
 }
 // La línea de horas: cada hora mide lo mismo. En modo editar: tocar = cambiar la hora; mantener = arrastrar.
@@ -3492,7 +3495,7 @@ function projCardHTML(p) {
 function listasHubHTML(byCat) {
   const n = k => tasks.filter(t => !t.done && byCat(t) && listHit(k, t)).length;
   const card = (k, icon, name, cnt, cls = '') => `<button class="lcard ${cls}" data-act="lsel" data-k="${k}"><span class="li">${icon}</span><b>${cnt}</b><span>${name}</span></button>`;
-  let h = `<div class="lcards">${card('sinfecha', '📥', 'Sin fecha', n('sinfecha'))}${card('flag', '🚩', 'Con bandera', n('flag'), 'red')}${card('compra', '🛒', 'Compra', shop.filter(s => !s.done).length)}</div>`;
+  let h = `<div class="lcards">${card('sinfecha', '📥', 'Sin fecha', n('sinfecha'))}${card('flag', '🚩', 'Con bandera', n('flag'), 'red')}${card('compra', '🛒', 'Compra', shop.filter(s => !s.done).length)}<button class="lcard" data-act="shelf" data-k="books"><span class="li">📚</span><b>${shelf.books.items.filter(b => b.status !== 'read').length}</b><span>Libros</span></button><button class="lcard" data-act="shelf" data-k="movies"><span class="li">🎬</span><b>${shelf.movies.items.filter(b => b.status !== 'read').length}</b><span>Películas</span></button></div>`;
   const ps = projects.filter(p => !p.done).sort((a, b) => (a.due || '9999').localeCompare(b.due || '9999') || a.order - b.order), doneP = projects.filter(p => p.done);
   h += `<h2 class="group"><span>Proyectos</span><button class="btn ghost small" data-act="pnew">+ Nuevo</button></h2>`;
   h += ps.length ? `<div class="plist">${ps.map(projCardHTML).join('')}</div>` : '<p class="hint" style="margin:0 2px 8px">Un proyecto junta las tareas y notas de algo grande: un trabajo, una mudanza, un viaje…</p>';
@@ -3841,6 +3844,7 @@ function openNote(id, preset = {}) {
   $('#noteFolder').innerHTML = `<option value="">Sin carpeta</option>${folders.map(f => `<option value="${esc(f)}">📁 ${esc(f)}</option>`).join('')}`; $('#noteFolder').value = n.folder;
   $('#noteProj').innerHTML = projOptions(n.project);
   $('#noteFolder').closest('.grid2').hidden = !!n.journal;
+  $('#noteMore').hidden = true; $('#noteMoreBtn').setAttribute('aria-expanded', 'false');
   renderNoteMeta(); renderNoteBlocks(); renderNotePhotos(); renderNoteLinks();
   openSheet('#noteSheet');
   if (!id && !n.journal) setTimeout(() => $('#noteTitle').focus(), 80);
@@ -3849,8 +3853,9 @@ function renderNoteMeta() {
   const n = noteDraft, md = n.journal ? extra.mood[n.journal] : null;
   $('#noteMeta').innerHTML = n.journal ? `📓 <b>${cap(parseISO(n.journal).toLocaleDateString('es-ES', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' }))}</b>${md?.m ? ` · ánimo ${'●'.repeat(md.m)}${'○'.repeat(Math.max(0, 5 - md.m))}` : ''}` : (notes.some(x => x.id === n.id) ? `Editada ${new Date(n.updated).toLocaleString('es-ES', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })}` : 'Nota nueva');
   $('#notePin').setAttribute('aria-pressed', !!n.pinned); $('#notePin').classList.toggle('on', !!n.pinned);
-  $('#noteDel').textContent = noteDelArmed ? '¿Borrar?' : '🗑';
-  $('#noteLock').setAttribute('aria-pressed', !!n.locked); $('#noteLock').classList.toggle('on', !!n.locked); $('#noteLock').textContent = n.locked ? '🔒' : '🔓';
+  $('#noteDel').textContent = noteDelArmed ? '¿Seguro? Toca otra vez para borrarla' : '🗑 Borrar la nota';
+  $('#noteLock').setAttribute('aria-pressed', !!n.locked); $('#noteLock').classList.toggle('on', !!n.locked); $('#noteLock').textContent = n.locked ? '🔒 Privada (se abre con Face ID) · quitar' : '🔒 Hacerla privada (Face ID)';
+  $('#notePrivTag').hidden = !n.locked;
   const checks = nBlocks.some(b => b.t === 'check'); $('#noteReset').hidden = !checks; $('#noteCopy').hidden = !checks;
 }
 const autosize = ta => { ta.style.height = 'auto'; ta.style.height = ta.scrollHeight + 'px'; };
@@ -3907,6 +3912,7 @@ $('#noteLock').addEventListener('click', async () => {
   noteDraft.locked = !noteDraft.locked; renderNoteMeta(); saveNote(); showToast(noteDraft.locked ? '🔒 Nota privada: se abrirá con Face ID' : 'La nota ya no es privada');
 });
 $('#noteReset').addEventListener('click', resetChecks);
+$('#noteMoreBtn').addEventListener('click', () => { const m = $('#noteMore'); m.hidden = !m.hidden; $('#noteMoreBtn').setAttribute('aria-expanded', String(!m.hidden)); });
 $('#noteCopy').addEventListener('click', copyNote);
 $('#notePin').addEventListener('click', () => { noteDraft.pinned = !noteDraft.pinned; renderNoteMeta(); saveNote(); });
 $('#noteDel').addEventListener('click', () => {
@@ -4086,7 +4092,7 @@ $('#orgBody').addEventListener('click', e => {
 const closedToday = () => { try { return localStorage.getItem('closed-' + todayISO()) === '1'; } catch { return false; } };
 function closeBannerHTML() {
   if (new Date().getHours() < 19 || closedToday() || hoyEdit) return '';
-  return `<div class="banner"><span>🌙 ¿Cerramos el día?</span><button class="btn primary small" data-act="closeday">Cerrar el día</button></div>`;
+  return `<div class="banner"><span>🌙 ¿Cerramos el día?<small class="bsub">Lo que queda, tus hábitos, qué tal te ha ido y el diario</small></span><button class="btn primary small" data-act="closeday">Cerrar el día</button></div>`;
 }
 function renderCloseDay() {
   const today = todayISO(), doneT = tasks.filter(t => t.done && t.doneAt && isoDate(new Date(t.doneAt)) === today && !children(t.id).length);
@@ -4239,6 +4245,7 @@ function timeHTML() {
     byCat[root.cat || ''] = (byCat[root.cat || ''] || 0) + m;
     if (root.project) byProj[root.project] = (byProj[root.project] || 0) + m;
   });
+  if (!Object.keys(byCat).length && timeRange === 'semana' && !tasks.some(t => (t.done && (t.ptsDay || '') >= today.slice(0, 8) + '01' && (durationMin(t) || t.minutes)) || Object.keys(t.focusLog || {}).some(d => d >= today.slice(0, 8) + '01'))) return '';
   const cl = Object.entries(byCat).sort((a, b) => b[1] - a[1]), pl = Object.entries(byProj).sort((a, b) => b[1] - a[1]), tot = cl.reduce((s, x) => s + x[1], 0), max = Math.max(1, ...cl.map(x => x[1]), ...pl.map(x => x[1]));
   const row = (name, m, col) => `<div class="focusrow"><span>${esc(name)}</span><span>${fmtDur(m)}</span><div class="bar"><i style="width:${m / max * 100}%;background:${col}"></i></div></div>`;
   return `<section class="summary"><div class="rato-head"><h2>Tiempo dedicado</h2><div class="segs mini"><button type="button" class="seg ${timeRange === 'semana' ? 'on' : ''}" data-act="trange" data-v="semana">Semana</button><button type="button" class="seg ${timeRange === 'mes' ? 'on' : ''}" data-act="trange" data-v="mes">Mes</button></div></div>
@@ -4883,6 +4890,7 @@ $('#list').addEventListener('click', e => {
   else if (act === 'plan') openOrg();
   else if (act === 'pmonth') { progYM = el.dataset.ym; selectedDay = null; const y = $('#scroller').scrollTop; render(); $('#scroller').scrollTop = y; }
   else if (act === 'pyear') { const ym = progYM || todayISO().slice(0, 7), y = Number(ym.slice(0, 4)) + Number(el.dataset.d), now = todayISO().slice(0, 7); progYM = `${y}-12` > now && y === Number(now.slice(0, 4)) ? now : `${y}-${y < Number(now.slice(0, 4)) ? '12' : ym.slice(5)}`; selectedDay = null; render(); }
+  else if (act === 'shelf') { const k = el.dataset.k; shelf[k].open = null; shelf[k].adding = false; renderShelf(k); openSheet(SHELF[k].sheet); }
   else if (act === 'xtog') { const k = 'hoy-' + el.dataset.k; lsSet(k, lsGet(k) === '1' ? '0' : '1'); const y = $('#scroller').scrollTop; render(); $('#scroller').scrollTop = y; }
   else if (act === 'unfilter') { activeFilter = null; render(); }
   else if (act === 'mood') setMood(el.dataset.k, Number(el.dataset.v));
