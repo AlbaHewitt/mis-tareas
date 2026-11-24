@@ -2624,6 +2624,8 @@ function calendarHTML(byCat) {
   if (calMode === 'ano') return html + yearCalHTML(byCat);
   return html + calGridHTML(byCat, days) + `<p class="hint" style="text-align:center">Toca un hueco para apuntar algo, o mantén pulsado y arrastra para elegir las horas · mantén pulsada una tarea para moverla (o suéltala sin moverla para ver más opciones) · pellizca para ver más o menos ${calMode === 'dia' ? 'días' : 'días u horas'}</p>`;
 }
+// El mismo día y mes, n años antes o después (el 29 de febrero pasa al 28 si ese año no lo tiene)
+function yearDate(d, n) { const x = parseISO(d), y = x.getFullYear() + n, m = x.getMonth(); return isoDate(new Date(y, m, Math.min(x.getDate(), dim(y, m)))); }
 function calNav(n) {
   const d = calDate();
   if (calMode === 'mes') { monthOffset += n; calSel = null; }
