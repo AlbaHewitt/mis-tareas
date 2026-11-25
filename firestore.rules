@@ -19,9 +19,44 @@ service cloud.firestore {
         && request.resource.data.siriKey == siriKeyOf(userId);
     }
 
+    // Salud (pasos y sueño de la app Salud): un documento por día. Lo escribe el atajo de Atajos
+    // sin iniciar sesión si trae la clave de Siri; todo son textos cortos.
+    function shortStr(d, k) { return !(k in d) || (d[k] is string && d[k].size() <= 20); }
+    match /users/{userId}/salud/{day} {
+      allow read, delete: if owner(userId);
+      allow create, update: if day.matches('^[0-9]{4}-[0-9]{2}-[0-9]{2}$')
+        && request.resource.data.keys().hasOnly(['pasos', 'acostarse', 'levantarse', 'siriKey'])
+        && shortStr(request.resource.data, 'pasos') && shortStr(request.resource.data, 'acostarse') && shortStr(request.resource.data, 'levantarse')
+        && (owner(userId) || (request.auth == null
+          && exists(/databases/$(database)/documents/users/$(userId)/settings/siri)
+          && request.resource.data.siriKey == siriKeyOf(userId)));
+    }
+
     // Hábitos y ajustes: solo la dueña
     match /users/{userId}/{coll}/{docId} {
       allow read, write: if owner(userId) && coll != 'tasks';
+    }
+
+    // Compra compartida: el código (largo y secreto) es la lista. Solo sus miembros la ven y la cambian.
+    // Para unirse hay que saber el código y solo puedes añadirte a ti; para salir, solo quitarte a ti.
+    match /shared/{code} {
+      function members() { return resource.data.members; }
+      function onlyMembers() { return request.resource.data.diff(resource.data).affectedKeys().hasOnly(['members']); }
+      allow get: if request.auth != null && request.auth.uid in members();
+      allow create: if request.auth != null && code.size() >= 20
+        && request.resource.data.keys().hasOnly(['owner', 'members', 'creada'])
+        && request.resource.data.owner == request.auth.uid && request.resource.data.members == [request.auth.uid];
+      allow update: if request.auth != null && onlyMembers() && (
+        // Unirse
+        (request.resource.data.members.hasAll(members()) && request.resource.data.members.removeAll(members()).hasOnly([request.auth.uid]) && request.resource.data.members.size() <= 10)
+        // Salir
+        || (request.auth.uid in members() && request.resource.data.members == members().removeAll([request.auth.uid])));
+      allow delete: if request.auth != null && resource.data.owner == request.auth.uid;
+      match /shop/{item} {
+        function member() { return request.auth != null && request.auth.uid in get(/databases/$(database)/documents/shared/$(code)).data.members; }
+        allow read, delete: if member();
+        allow create, update: if member() && request.resource.data.name is string && request.resource.data.name.size() <= 120;
+      }
     }
 
     // Resumen del día para "¿Qué tengo hoy?": se lee sabiendo la clave (no se puede listar)

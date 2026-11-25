@@ -1,4 +1,4 @@
-// Manda los avisos que tocan ahora. Lo ejecuta GitHub cada 5 minutos (.github/workflows/avisos.yml).
+// Manda los avisos que tocan ahora. Lo ejecuta GitHub (.github/workflows/avisos.yml), despertado cada 5 minutos por tools/despertador.
 // Necesita dos secretos del repositorio: FIREBASE_SERVICE_ACCOUNT y VAPID_PRIVATE_KEY.
 import admin from 'firebase-admin';
 import webpush from 'web-push';

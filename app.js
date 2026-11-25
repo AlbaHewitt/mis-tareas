@@ -38,6 +38,8 @@ const SECTIONS = [
   ['diario', 'Diario', 'En Notas y un botón en Hoy'],
 ];
 const on = id => !(extra.prefs?.off || []).includes(id);
+// Lo de juego empieza apagado en las cuentas nuevas (se enciende en ⋯ → Personalizar → Qué se ve)
+const GAME_OFF = ['jardin', 'recompensas', 'logros'];
 let dayOffset = 0, monthOffset = 0, calSel = null, sinfechaMode = 'sinfecha', activeFilter = null;
 let loaded = false;
 let view = 'hoy';
@@ -52,7 +54,7 @@ let selectedDay = null;
 let formFlag = false, formCd = false;
 let editingId = null, formCat = 'personal', formDays = [], formParts = [], formNoDate = false, splitDays = [1, 2, 3, 4, 5], formSomeday = false, formTonight = false;
 
-document.documentElement.dataset.v = '31';
+document.documentElement.dataset.v = '33';
 // ---------- Registro de errores (se ve en ⋯ → Ayuda) ----------
 const EKEY = 'mis-tareas-errores';
 function logError(msg, where) {
@@ -200,14 +202,17 @@ const cleanGoal = g => ({ title: String(g.title || '').slice(0, 120), kind: ['ma
   unit: String(g.unit || '').slice(0, 20), cur: Math.max(0, Math.min(1e7, Number(g.cur) || 0)), ref: String(g.ref || '').slice(0, 80), projects: (Array.isArray(g.projects) ? g.projects : []).map(String).slice(0, 30),
   year: Number(g.year) || new Date().getFullYear(), order: Number(g.order) || Date.now() });
 const ROWS = { projects: [() => projects, v => { projects = v; }, cleanProject], shop: [() => shop, v => { shop = v; }, cleanShop], notes: [() => notes, v => { notes = v; }, cleanNote], trash: [() => trash, v => { trash = v; }, cleanTrash], goals: [() => goals, v => { goals = v; }, cleanGoal] };
+// La compra, si está compartida, vive en shared/<código>/shop en vez de en tu cuenta
+let shopCode = null;
+const rowRef = (coll, id) => coll === 'shop' && shopCode ? store.fb.doc(store.fb.db, 'shared', shopCode, 'shop', id) : store.ref(coll, id);
 function saveRow(coll, row) {
   const [get, , cl] = ROWS[coll], l = get(), i = l.findIndex(x => x.id === row.id), { id, ...rest } = row, clean = { id, ...cl(rest) };
   if (i >= 0) l[i] = clean; else l.push(clean);
-  (store.fb ? store.fb.setDoc(store.ref(coll, id), cl(rest)) : Promise.resolve(local('mis-tareas-' + coll, l))).catch(writeFailed);
+  (store.fb ? store.fb.setDoc(rowRef(coll, id), cl(rest)) : Promise.resolve(local('mis-tareas-' + coll, l))).catch(writeFailed);
 }
 function dropRow(coll, id) {
   const [get, set] = ROWS[coll]; set(get().filter(x => x.id !== id));
-  (store.fb ? store.fb.deleteDoc(store.ref(coll, id)) : Promise.resolve(local('mis-tareas-' + coll, get()))).catch(writeFailed);
+  (store.fb ? store.fb.deleteDoc(rowRef(coll, id)) : Promise.resolve(local('mis-tareas-' + coll, get()))).catch(writeFailed);
 }
 const normTemplates = l => (Array.isArray(l) ? l : []).filter(x => x && x.name && x.task).slice(0, 50);
 const normRewards = r => ({
@@ -284,6 +289,7 @@ async function initStore() {
     extra = { mood: get('mis-tareas-mood', {}), filters: get('mis-tareas-filters', []), garden: get('mis-tareas-garden', []), prefs: get('mis-tareas-prefs', {}) };
     for (const k in ROWS) ROWS[k][1](get('mis-tareas-' + k, []).map(r => ({ id: r.id, ...ROWS[k][2](r) })));
     loaded = true;
+    if (!extra.prefs.off && !tasks.length && !habits.length) { extra.prefs = { ...extra.prefs, off: GAME_OFF }; store.saveExtra('prefs').catch(() => {}); }
     setSync('warn', 'Solo en este dispositivo');
     $('#accountInfo').textContent = 'La sincronización no está configurada. Las tareas se guardan solo en este dispositivo.';
     document.querySelectorAll('[data-cloud]').forEach(b => b.hidden = true);
@@ -306,7 +312,7 @@ async function initStore() {
   auth.onAuthStateChanged(a, user => {
     unsubs.forEach(u => u()); unsubs = [];
     if (!user) {
-      store.fb = null; store.user = null; tasks = []; for (const k in shelf) shelf[k].items = []; cats = DEFAULT_CATS; habits = []; stats = { goal: 100, days: {}, focus: {} }; rewards = { list: [], redeemed: [] }; extra = { mood: {}, filters: [], garden: [], prefs: {} }; projects = []; shop = []; notes = []; trash = []; goals = []; trashChecked = false; fileCache.clear(); loaded = false;
+      store.fb = null; store.user = null; tasks = []; salud = {}; for (const k in shelf) shelf[k].items = []; cats = DEFAULT_CATS; habits = []; stats = { goal: 100, days: {}, focus: {} }; rewards = { list: [], redeemed: [] }; extra = { mood: {}, filters: [], garden: [], prefs: {} }; projects = []; shop = []; notes = []; trash = []; goals = []; trashChecked = false; fileCache.clear(); loaded = false;
       $('#login').hidden = false; $('#logoutBtn').hidden = true;
       render(); return;
     }
@@ -353,7 +359,20 @@ async function initStore() {
       shelf[k].items = snap.docs.map(d => ({ id: d.id, ...cleanItem(k, d.data()) }));
       if (!$(SHELF[k].sheet).hidden && !document.activeElement?.closest?.(SHELF[k].sheet)) renderShelf(k);
     }, () => {}));
-    for (const k in ROWS) unsubs.push(fs.onSnapshot(fs.collection(db, 'users', user.uid, k), snap => {
+    // La compra se escucha aparte: cambia de sitio al compartirla o al dejar de hacerlo
+    const subShop = () => {
+      shopUnsub?.(); shop = [];
+      const col = shopCode ? fs.collection(db, 'shared', shopCode, 'shop') : fs.collection(db, 'users', user.uid, 'shop');
+      shopUnsub = fs.onSnapshot(col, snap => { shop = snap.docs.map(d => ({ id: d.id, ...cleanShop(d.data()) })); render(); }, e => { logError(e.message, 'compra compartida'); if (shopCode) setSync('warn', 'No se pudo abrir la compra compartida'); });
+    };
+    unsubs.push(() => { shopUnsub?.(); shopUnsub = null; shopCode = null; });
+    unsubs.push(fs.onSnapshot(store.ref('settings', 'shopshare'), snap => {
+      const c = snap.exists() ? snap.data().code || null : null;
+      if (c !== shopCode || !shopUnsub) { shopCode = c; subShop(); }
+      if (!$('#shareSheet').hidden) renderShare();
+      if (pendingJoin && !snap.metadata.fromCache) { view = 'sinfecha'; listSel = 'compra'; render(); renderShare(pendingJoin); openSheet('#shareSheet'); pendingJoin = null; }
+    }, () => {}));
+    for (const k in ROWS) if (k !== 'shop') unsubs.push(fs.onSnapshot(fs.collection(db, 'users', user.uid, k), snap => {
       ROWS[k][1](snap.docs.map(d => ({ id: d.id, ...ROWS[k][2](d.data()) })));
       if (k === 'trash' && !snap.metadata.fromCache) autoPurge();
       if (k !== 'notes' || !$('#noteSheet').classList.contains('show')) render();
@@ -367,6 +386,7 @@ async function initStore() {
       if (!$('#rewardSheet').hidden) renderRewards();
     }, () => {}));
     unsubs.push(fs.onSnapshot(store.ref('settings', 'siri'), snap => { siriKey = snap.exists() ? snap.data().key : null; renderSiri(); }, () => {}));
+    unsubs.push(fs.onSnapshot(fs.collection(db, 'users', user.uid, 'salud'), snap => { salud = Object.fromEntries(snap.docs.map(d => [d.id, cleanSalud(d.data())])); render(); }, () => {}));
   });
   $('#logoutBtn').addEventListener('click', () => { closeSheets(); auth.signOut(a); });
 }
@@ -533,6 +553,37 @@ function setupAccount() {
   });
 }
 
+// ---------- Salud: pasos y sueño que manda un atajo desde la app Salud ----------
+// Cada día es un documento users/<uid>/salud/<AAAA-MM-DD> con textos: pasos, acostarse y levantarse.
+let salud = {};
+function numSalud(v) {
+  v = String(v ?? '').trim();
+  v = /^\d{1,3}([.,]\d{3})+$/.test(v) ? v.replace(/[.,]/g, '') : v.replace(',', '.'); // 8.234 (miles) u 8234,0
+  const n = Math.round(parseFloat(v)); return Number.isFinite(n) && n >= 0 ? n : null;
+}
+const hmSalud = v => { const m = String(v ?? '').trim().match(/^(\d{1,2})[:.h](\d{2})/); return m && +m[1] < 24 ? pad(+m[1]) + ':' + m[2] : ''; };
+const cleanSalud = d => ({ pasos: numSalud(d.pasos), bed: hmSalud(d.acostarse), wake: hmSalud(d.levantarse) });
+// Lo de hoy se apunta solo: los hábitos de pasos y la noche de la rutina de sueño (si aún no la apuntaste)
+function applySalud() {
+  const d = todayISO(), s = salud[d]; if (!s || !loaded || !habits.length) return;
+  const sig = d + JSON.stringify(s); if (lsGet('salud-hecho') === sig) return; lsSet('salud-hecho', sig);
+  if (s.pasos !== null) habits.filter(h => h.kind === 'build' && /paso/i.test(`${h.name} ${h.unit || ''}`)).forEach(h => {
+    if (h.qty) { if (s.pasos > countOf(h)) setCount(h.id, s.pasos); return; }
+    const goal = Number((String(h.name).match(/\d[\d.]*/)?.[0] || '').replace(/\./g, '')) || 10000;
+    if (s.pasos >= goal && h.log[d] !== 1) setHabit(h.id, 1);
+  });
+  const sl = habits.find(h => h.kind === 'sleep');
+  if (sl && s.bed && s.wake && !sl.nights?.[d] && sl.log[d] === undefined) saveSleep(sl.id, s.bed, s.wake);
+}
+// En Progreso: los pasos de los últimos 7 días (solo si llegan datos)
+function saludHTML() {
+  const today = todayISO(), days = [...Array(7)].map((_, i) => addDays(today, i - 6)), v = days.map(d => salud[d]?.pasos ?? null), have = v.filter(x => x !== null);
+  if (!have.length) return '';
+  const max = Math.max(1, ...have), avg = Math.round(have.reduce((a, b) => a + b, 0) / have.length), k = n => n >= 1000 ? (n / 1000).toFixed(1).replace('.', ',') + 'k' : String(n);
+  return `<section class="summary"><div class="rato-head"><h2>👟 Pasos</h2><span class="hint">${avg.toLocaleString('es-ES')} al día de media</span></div>
+    <div class="weekbars">${days.map((d, i) => `<div class="wb ${d === today ? 'today' : ''}"><span class="v">${v[i] === null ? '' : k(v[i])}</span><div class="col"><i style="height:${(v[i] || 0) / max * 100}%"></i></div><span>${DAY_LETTER[parseISO(d).getDay()]}</span></div>`).join('')}</div></section>`;
+}
+
 // ---------- Siri ----------
 let siriKey = null;
 function setupSiri() {
@@ -588,6 +639,8 @@ function renderSiri() {
   publishSummary();
   $('#siriUrl').textContent = `https://firestore.googleapis.com/v1/projects/${firebaseConfig.projectId}/databases/(default)/documents/users/${store.uid}/tasks?key=${firebaseConfig.apiKey}`;
   $('#siriBody').textContent = `{"fields":{"title":{"stringValue":"DICTADO"},"siriKey":{"stringValue":"${siriKey}"}}}`;
+  $('#saludUrl').textContent = `https://firestore.googleapis.com/v1/projects/${firebaseConfig.projectId}/databases/(default)/documents/users/${store.uid}/salud/FECHA?key=${firebaseConfig.apiKey}`;
+  $('#saludBody').textContent = `{"fields":{"pasos":{"stringValue":"PASOS"},"acostarse":{"stringValue":"ACOSTARSE"},"levantarse":{"stringValue":"LEVANTARSE"},"siriKey":{"stringValue":"${siriKey}"}}}`;
 }
 
 // ---------- Hojas ----------
@@ -754,12 +807,43 @@ function renderDetected() {
   if (p.date) bits.push(friendlyDate(p.date));
   if (p.time) bits.push(p.time + (p.endTime ? '–' + p.endTime : ''));
   if (p.cat) bits.push('#' + catOf(p.cat).name);
-  else if (!formCatTouched && guessCat(p.title || '')) bits.push('#' + catOf(guessCat(p.title)).name);
+  else if (!formCatTouched && guessCat(p.title || '') && $('#taskSheet').classList.contains('qmode')) bits.push('#' + catOf(guessCat(p.title)).name);
   if (p.prio) bits.push('🚩');
   (p.tags || []).forEach(t => bits.push('@' + t));
   if (p.repeat) bits.push('↻ ' + repeatLabel({ ...p, date: p.date || $('#date').value }));
-  $('#detected').innerHTML = bits.map(b => `<span>${esc(b)}</span>`).join('');
-  $('#detected').hidden = !bits.length;
+  const html = bits.map(b => `<span>${esc(b)}</span>`);
+  // En el modo rápido, también la categoría que se pondrá si no escribes ninguna (en gris)
+  if ($('#taskSheet').classList.contains('qmode') && !p.cat && !(!formCatTouched && guessCat(p.title || '')) && formCat) html.push(`<span class="soft">#${esc(catOf(formCat).name)}</span>`);
+  $('#detected').innerHTML = html.join('');
+  $('#detected').hidden = !html.length;
+  renderQuickRow(p);
+}
+// Botones del modo rápido: marcan lo que se va a guardar (si escribes una fecha, gana lo escrito)
+function renderQuickRow(p = parseQuick($('#title').value, cats)) {
+  const d = p.date || (formNoDate ? '' : $('#date').value), today = todayISO();
+  const sel = { hoy: d === today, manana: d === addDays(today, 1), none: !d, flag: formFlag || !!p.prio };
+  document.querySelectorAll('#quickRow [data-q]').forEach(b => { if (b.dataset.q in sel) b.setAttribute('aria-pressed', sel[b.dataset.q]); });
+}
+$('#quickRow').addEventListener('click', e => {
+  const q = e.target.closest('[data-q]')?.dataset.q; if (!q) return;
+  if (q === 'flag') formFlag = !formFlag;
+  else if (q === 'none') formNoDate = true;
+  else if (q === 'hoy' || q === 'manana') { formNoDate = false; $('#date').value = q === 'hoy' ? todayISO() : addDays(todayISO(), 1); }
+  else if (q === 'more') return showFullForm();
+  renderCatChips(); renderWhen(); renderDetected(); $('#title').focus();
+});
+// Al pedir más detalles, lo que habías escrito ("mañana a las 8…") pasa a los campos para que no se contradigan
+function showFullForm() {
+  const p = parseQuick($('#title').value, cats);
+  if (p.title) $('#title').value = p.title;
+  if (p.date) { $('#date').value = p.date; formNoDate = false; }
+  if (p.time) { $('#time').value = p.time; $('#endTime').value = p.endTime || hhmm(toMin(p.time) + 60); if (formNoDate) { formNoDate = false; $('#date').value = todayISO(); } }
+  if (p.cat) { formCat = p.cat; formCatTouched = true; } else if (!formCatTouched && guessCat(p.title || '')) formCat = guessCat(p.title);
+  if (p.prio) formFlag = true;
+  if (p.tags?.length) $('#tags').value = [...new Set([...readTags(), ...p.tags.map(normTag)])].join(', ');
+  if (p.repeat) { $('#repeat').value = p.repeat; formDays = p.days || []; $('#every').value = p.every || 1; if (p.nth) { formMonthMode = 'nth'; $('#nth').value = String(p.nth); $('#nthDay').value = String(p.nthDay); } }
+  $('#taskSheet').classList.remove('qmode');
+  renderMonthDay(); renderCatChips(); renderWhen(); renderDetected(); renderTagSugs(); renderMoreSum();
 }
 let formCatTouched = false;
 // Si no eliges categoría, se adivina por las palabras (gym → Entreno, estudiar → Estudio, limpiar → Casa…)
@@ -938,6 +1022,7 @@ function openForm(id, preset) {
   formPrevStart = t ? (t.time || '') : '';
   $('#partsField').hidden = !!(t && t.parentId);
   $('#splitFrom').value = ''; $('#splitTo').value = ''; $('#splitName').value = ''; $('#splitBox').open = false; $('#partNew').value = '';
+  $('#taskSheet').classList.toggle('qmode', !t);
   $('#sheetTitle').textContent = t ? (t.parentId ? 'Editar parte' : 'Editar tarea') : 'Nueva tarea';
   $('#submitBtn').textContent = t ? 'Guardar' : 'Añadir';
   $('#deleteBtn').hidden = !t;
@@ -1000,9 +1085,15 @@ $('#taskSheet').addEventListener('submit', e => {
   let t;
   if (editingId) { t = tasks.find(x => x.id === editingId); if (!t) return closeSheets(); Object.assign(t, data); }
   else { t = { id: uid(), done: false, created: Date.now(), ...data }; tasks.push(t); }
+  const isNew = !editingId;
   store.put(t).catch(writeFailed);
   saveParts(t);
-  closeSheets(); render();
+  closeSheets();
+  if (isNew) {
+    const when = t.date ? `${friendlyDate(t.date).toLowerCase()}${t.time ? ', ' + t.time : ''}` : 'sin fecha, en Listas';
+    showToast(`Añadida: ${when}`, () => { const gone = [t, ...children(t.id)]; tasks = tasks.filter(x => !gone.includes(x)); gone.forEach(g => store.remove(g.id).catch(writeFailed)); });
+  }
+  render();
 });
 // Guarda las partes como tareas propias, ligadas a la tarea principal
 function saveParts(parent) {
@@ -1829,6 +1920,7 @@ const PCARDS = [
   ['progreso', 'Tu progreso (año, mes y semanas)', null, p => progCalHTML(p)],
   ['animo', '¿Qué tal hoy?', 'animo', () => moodProgHTML()],
   ['sueno', 'Rutina de sueño', null, () => habits.filter(h => h.kind === 'sleep').map(sleepProgHTML).join('')],
+  ['pasos', 'Pasos (de la app Salud)', null, () => saludHTML()],
   ['estimado', 'Estimado vs real', 'estimado', () => estimateHTML()],
   ['jardin', 'Tu jardín', 'jardin', () => gardenHTML()],
   ['apartados', 'Por apartado', null, p => areasHTML(p)],
@@ -1846,6 +1938,8 @@ function progOrder() {
 }
 const cardOn = c => !progPrefs().off.includes(c[0]) && (!c[2] || on(c[2]));
 function saveProg(p) { extra.prefs = { ...extra.prefs, prog: p }; store.saveExtra('prefs').catch(writeFailed); render(); if (!$('#progSheet').hidden) renderProgSheet(); }
+// ¿Hay algo que contar? (si no, Progreso no enseña paneles llenos de ceros)
+const hasProgress = () => Object.keys(salud).length > 0 || tasks.some(t => t.done) || habits.some(h => Object.keys(h.log || {}).length) || Object.values(stats.days || {}).some(v => v > 0) || Object.keys(extra.mood || {}).length > 0 || goals.length > 0;
 function progresoHTML() {
   const P = progPrefs(), p = buildProgress();
   return progOrder().filter(cardOn).map(c => {
@@ -2156,6 +2250,7 @@ let welcomeChecked = false;
 function maybeWelcome(isNew) {
   if (welcomeChecked || extra.prefs.welcomed) return; welcomeChecked = true;
   if (!isNew || tasks.length > 3) { extra.prefs = { ...extra.prefs, welcomed: true }; store.saveExtra('prefs').catch(writeFailed); return; }
+  if (!extra.prefs.off) { extra.prefs = { ...extra.prefs, off: GAME_OFF }; store.saveExtra('prefs').catch(writeFailed); render(); }
   setTimeout(() => { if (!document.querySelector('.sheet.show')) openSheet('#welcomeSheet'); }, 800);
 }
 
@@ -2993,7 +3088,7 @@ function hoyItems(edit) {
   units.forEach((ms, k) => {
     const t = ms[0], par = t.parentId ? tasks.find(p => p.id === t.parentId) : null, multi = ms.length > 1;
     const it = { key: 'h' + k, ids: ms.map(x => x.id), id: t.id, members: ms, multi, color: colorVar(catOf(t.cat).color),
-      title: par ? par.title : t.title, sub: par ? (multi ? `${ms.filter(x => x.done).length}/${ms.length} partes` : t.title) : '', done: ms.every(x => x.done) };
+      title: par ? par.title : t.title, sub: par ? (multi ? `${ms.filter(x => x.done).length}/${ms.length} partes` : t.title) : '', done: ms.every(x => x.done), flag: ms.some(x => x.flag || par?.flag) };
     if (!t.time) { extras.push(it); return; }
     const s = toMin(t.time); let e = t.endTime ? toMin(t.endTime) : s + 60; if (e <= s) e += 1440;
     items.push({ ...it, s, e });
@@ -3007,7 +3102,7 @@ function hoyItems(edit) {
   return { items: items.sort((a, b) => a.s - b.s || a.e - b.e), extras, late: tasks.filter(t => isLate(t) && !children(t.id).length).sort(sortTasks) };
 }
 const ckBtn = it => `<button class="ck${it.done ? ' on' : ''}" style="--c:${it.color}" ${it.routine ? `data-act="rall" data-id="${it.routine}"` : `data-act="gtoggle" data-ids="${it.ids.join(',')}"`} aria-label="${it.done ? 'Marcar como pendiente' : 'Completar'}: ${esc(it.title)}">${TICK('var(--surface)')}</button>`;
-const itemText = it => `<b>${esc(it.title)}${it.sub ? `<small class="tsub">${esc(it.sub)}</small>` : ''}</b>`;
+const itemText = it => `<b>${it.flag && !it.done ? '<span class="flagmark" aria-label="Con bandera">🚩</span>' : ''}${esc(it.title)}${it.sub ? `<small class="tsub">${esc(it.sub)}</small>` : ''}</b>`;
 function hoyHTML() {
   const now = toMin(nowHM()), { items, extras, late } = hoyItems(hoyEdit);
   const w = wxOf(todayISO());
@@ -3018,10 +3113,12 @@ function hoyHTML() {
   const habLeft = habits.filter(h => (h.kind === 'quit' || (h.kind === 'build' && h.freq === 'daily')) && !habitDoneToday(h));
   if (habLeft.length) { const names = habLeft.slice(0, 2).map(h => h.name).join(', ') + (habLeft.length > 2 ? ` y ${habLeft.length - 2} más` : '');
     html += `<button class="hableft" data-act="gohabits"><span>🔥</span><span><b>${habLeft.length} ${habLeft.length === 1 ? 'hábito' : 'hábitos'} por hacer hoy</b><small>${esc(names)}</small></span><span class="go">›</span></button>`; }
-  let side = '';
-  html += `<div class="hoygrid"><div class="hoymain"><div class="hoyhead"><span>${pending ? `${pending} por hacer` : items.length + extras.length ? '¡Todo hecho! 🎉' : 'Nada para hoy'}</span><span class="hoyacts"><button class="btn small" data-act="organize">✨ Organizar</button><button class="btn small" data-act="hoyedit">✏️ Editar</button></span></div>%%PLEGADOS%%`;
+  const any = items.length + extras.length, xPendN = extras.filter(i => !i.done).length;
+  // Organizar solo sirve si hay algo sin hora por colocar; Editar, si hay algo en el día
+  const acts = any ? `<span class="hoyacts">${xPendN ? '<button class="btn small" data-act="organize">✨ Organizar</button>' : ''}<button class="btn small" data-act="hoyedit">✏️ Editar</button></span>` : '';
+  html += `<div class="hoygrid"><div class="hoymain">${any || late.length ? `<div class="hoyhead"><span>${pending ? `${pending} por hacer` : any ? '¡Todo hecho! 🎉' : ''}</span>${acts}</div>` : ''}%%PLEGADOS%%`;
   if (items.length) html += timelineHTML(items, now, false);
-  else html += `<p class="hint" style="margin:8px 2px">${extras.length ? 'No tienes nada con hora hoy. Tus tareas están en “Tareas sin hora”; con ✨ Organizar les busco hueco.' : 'Nada apuntado para hoy. Pulsa + para añadir algo.'}</p>`;
+  else if (!any) html += `<div class="empty"><strong>Nada para hoy</strong><span>Pulsa + y escríbelo como lo dirías: “mañana a las 8 correr” o “llamar al médico el lunes”.</span></div>`;
   const row = (it, cls) => {
     const open = it.multi && openGroups.has(it.key);
     return `<div class="xrow ${cls}">${ckBtn(it)}<span class="xb" data-act="${it.multi ? 'gopen' : 'details'}" data-id="${it.id}" data-key="${it.key || ''}">${itemText(it)}</span>${it.multi ? `<button class="chev${open ? ' open' : ''}" data-act="gopen" data-key="${it.key}" aria-label="Ver las partes" aria-expanded="${open}">›</button>` : ''}</div>
@@ -3031,8 +3128,11 @@ function hoyHTML() {
   const fold = (k, icon, label, n, cls, inner) => { const op = lsGet('hoy-' + k) === '1';
     return `<button class="xtoggle ${cls}${op ? ' open' : ''}" data-act="xtog" data-k="${k}" aria-expanded="${op}"><span>${icon} ${label}</span><b>${n}</b><span class="chev">›</span></button>${op ? inner : ''}`; };
   let plegados = '';
-  const xl = extras.sort((a, b) => a.done - b.done), xPend = xl.filter(x => !x.done).length;
-  if (xl.length) plegados += fold('x', '📋', 'Tareas sin hora', xPend ? xPend : '✓', '', `<div class="xlist">${xl.map(x => row(x, x.done ? 'done' : '')).join('')}</div>`);
+  // Lo que lleva bandera no se esconde nunca; el resto sin hora se pliega solo si también hay línea de horas
+  const flagged = extras.filter(x => x.flag && !x.done), xl = extras.filter(x => !flagged.includes(x)).sort((a, b) => a.done - b.done), xPend = xl.filter(x => !x.done).length;
+  if (flagged.length) plegados += `<div class="xlist flagged">${flagged.map(x => row(x, '')).join('')}</div>`;
+  if (xl.length && items.length) plegados += fold('x', '📋', 'Tareas sin hora', xPend ? xPend : '✓', '', `<div class="xlist">${xl.map(x => row(x, x.done ? 'done' : '')).join('')}</div>`);
+  else if (xl.length) plegados += `<div class="xlist">${xl.map(x => row(x, x.done ? 'done' : '')).join('')}</div>`;
   if (late.length) plegados += fold('late', '⏳', 'De otros días', late.length, 'late', `<div class="latebar"><button class="chip" data-act="mvlate" data-to="hoy">Todas a hoy</button><button class="chip" data-act="mvlate" data-to="manana">A mañana</button><button class="chip" data-act="mvlate" data-to="none">Sin fecha</button></div><div class="xlist">${late.map(t => { const par = t.parentId ? tasks.find(p => p.id === t.parentId) : null; return row({ ids: [t.id], id: t.id, title: par ? par.title : t.title, sub: `${par ? t.title + ' · ' : ''}${friendlyDate(t.date).toLowerCase()}`, color: colorVar(catOf(t.cat).color), done: false }, 'late'); }).join('')}</div>`);
   html = html.replace('%%PLEGADOS%%', plegados) + '</div><div class="hoyside">';
   return html + '</div></div>';
@@ -3599,7 +3699,7 @@ const shopRowHTML = s => `<div class="shoprow${s.done ? ' done' : ''}" style="--
   + (shopEdit === s.id ? `<div class="shopedit"><span class="label">¿En qué sección va?</span><div class="chips wrap">${SHOP_SECS.map(([k, i, n]) => `<button type="button" class="chip ${s.sec === k ? 'on' : ''}" data-act="shopsec" data-id="${s.id}" data-sec="${k}">${i} ${n}</button>`).join('')}</div><button type="button" class="btn danger small" data-act="shopdel" data-id="${s.id}">Quitar de la lista</button></div>` : '');
 function shopHTML() {
   const pend = shop.filter(s => !s.done), done = shop.filter(s => s.done);
-  let h = `<div class="chips" style="margin:0 0 8px"><button class="chip" data-act="shopfrom">📋 Añadir desde una lista de Notas</button></div><form class="quick" id="shopForm"><input class="inp" type="text" id="shopInput" placeholder="Añadir… (varias con comas: leche, pan, huevos)" aria-label="Añadir a la compra" autocomplete="off" enterkeyhint="done"><button class="btn primary" type="submit">+</button></form>`;
+  let h = `<div class="chips" style="margin:0 0 8px"><button class="chip" data-act="shopfrom">📋 Añadir desde una lista de Notas</button>${store.fb ? `<button class="chip" data-act="shopshare" aria-pressed="${!!shopCode}">👥 ${shopCode ? 'Compartida' : 'Compartir'}</button>` : ''}</div><form class="quick" id="shopForm"><input class="inp" type="text" id="shopInput" placeholder="Añadir… (varias con comas: leche, pan, huevos)" aria-label="Añadir a la compra" autocomplete="off" enterkeyhint="done"><button class="btn primary" type="submit">+</button></form>`;
   if (!shop.length) return h + '<div class="empty"><strong>La lista está vacía</strong><span>Escribe lo que necesitas y lo ordeno por secciones del súper. Toca una cosa para cambiarla de sección.</span></div>';
   SHOP_SECS.forEach(([sec, icon, name]) => {
     const l = pend.filter(s => s.sec === sec).sort((a, b) => a.order - b.order); if (!l.length) return;
@@ -3622,6 +3722,72 @@ document.addEventListener('submit', e => {
   });
   $('#shopInput').value = ''; if (!added) showToast('Ya estaba en la lista');
   render(); $('#shopInput')?.focus();
+});
+
+// ---------- Compartir la compra ----------
+// Un código secreto (como el de Siri) es la lista: quien lo tiene puede unirse. Cada uno sigue con su cuenta.
+let shopUnsub = null, pendingJoin = (() => { try { const c = new URLSearchParams(location.search).get('compra'); if (c) history.replaceState(null, '', location.pathname); return c && /^[a-z0-9]{20,40}$/.test(c) ? c : null; } catch { return null; } })();
+let leaveArmed = null;
+const shareLink = () => `${location.origin}${location.pathname}?compra=${shopCode}`;
+function renderShare(prefill = '') {
+  const b = $('#shareBody');
+  if (shopCode) {
+    b.innerHTML = `<p class="hint">Esta lista de la compra está <b>compartida</b>: lo que añade o marca cualquiera lo veis todos al momento.</p>
+      <button class="btn primary block" type="button" data-sh="send">Invitar a alguien</button>
+      <div class="copyrow"><span class="label">Código de la lista</span><div class="code" id="shareCode">${esc(shopCode)}</div><button class="btn small" type="button" data-sh="copy">Copiar enlace</button></div>
+      <p class="hint">Quien abra el enlace (con su propia cuenta de Mis Tareas) se une a la lista. No ve nada más tuyo.</p>
+      <button class="btn danger block" type="button" data-sh="leave">${leaveArmed ? 'Toca otra vez: te quedas con una copia y sales' : 'Dejar de compartir'}</button>
+      <p class="okmsg" id="shareMsg" hidden></p>`;
+  } else {
+    b.innerHTML = `<p class="hint">Comparte la compra con quien la hace contigo: los dos veis la misma lista y, cuando uno marca algo, al otro le sale en el carro.</p>
+      <button class="btn primary block" type="button" data-sh="new">Compartir mi lista</button>
+      <h4>¿Te han invitado?</h4>
+      <div class="partadd"><input class="inp" type="text" id="shareJoin" placeholder="Pega el código o el enlace" value="${esc(prefill)}" autocomplete="off" aria-label="Código de la lista"><button class="btn" type="button" data-sh="join">Unirme</button></div>
+      <p class="hint">Lo que ya tengas en tu lista se pasa a la compartida.</p>
+      <p class="okmsg" id="shareMsg" hidden></p>`;
+  }
+}
+const shareMsg = t => { const m = $('#shareMsg'); if (m) { m.textContent = t; m.hidden = false; } };
+// Pasa las cosas de la lista actual a otra (la compartida o la tuya)
+async function moveShopTo(items, ref) { for (const it of items) { const { id, ...rest } = it; await store.fb.setDoc(ref(id), cleanShop(rest)); } }
+async function useShop(code, items) {
+  const fs = store.fb, mine = id => fs.doc(fs.db, 'users', store.uid, 'shop', id), shared = id => fs.doc(fs.db, 'shared', code, 'shop', id);
+  await moveShopTo(items, shared);
+  await fs.setDoc(store.ref('settings', 'shopshare'), { code });
+  for (const it of items) await fs.deleteDoc(mine(it.id)).catch(() => {});
+}
+$('#shareBody').addEventListener('click', async e => {
+  const a = e.target.closest('[data-sh]')?.dataset.sh; if (!a || !store.fb) return;
+  const fs = store.fb;
+  try {
+    if (a === 'new') {
+      const r = new Uint8Array(18); crypto.getRandomValues(r); const code = [...r].map(x => x.toString(36).padStart(2, '0')).join('').slice(0, 24);
+      await fs.setDoc(fs.doc(fs.db, 'shared', code), { owner: store.uid, members: [store.uid], creada: new Date().toISOString() });
+      await useShop(code, shop.slice());
+      showToast('Lista compartida: ahora invita a alguien');
+    } else if (a === 'join') {
+      const raw = $('#shareJoin').value.trim(), code = (raw.match(/compra=([a-z0-9]+)/) || [, raw])[1].toLowerCase();
+      if (!/^[a-z0-9]{20,40}$/.test(code)) return shareMsg('Ese código no parece correcto. Pega el enlace entero que te pasaron.');
+      await fs.updateDoc(fs.doc(fs.db, 'shared', code), { members: fs.arrayUnion(store.uid) });
+      await useShop(code, shop.filter(s => !s.done));
+      showToast('¡Ya compartís la lista de la compra!');
+    } else if (a === 'copy' || a === 'send') {
+      const text = `Únete a mi lista de la compra en Mis Tareas: ${shareLink()}`;
+      if (a === 'send' && navigator.share) { try { await navigator.share({ title: 'Lista de la compra', text }); } catch {} return; }
+      try { await navigator.clipboard.writeText(shareLink()); shareMsg('Enlace copiado. Pásaselo por WhatsApp o por donde quieras.'); } catch { shareMsg(shareLink()); }
+    } else if (a === 'leave') {
+      if (!leaveArmed) { leaveArmed = setTimeout(() => { leaveArmed = null; renderShare(); }, 4000); return renderShare(); }
+      clearTimeout(leaveArmed); leaveArmed = null;
+      const code = shopCode, items = shop.slice();
+      await moveShopTo(items, id => fs.doc(fs.db, 'users', store.uid, 'shop', id));
+      await fs.deleteDoc(store.ref('settings', 'shopshare'));
+      await fs.updateDoc(fs.doc(fs.db, 'shared', code), { members: fs.arrayRemove(store.uid) }).catch(() => {});
+      showToast('Ya no compartes la compra. Te has quedado con una copia.');
+    }
+  } catch (err) {
+    logError(err.message, 'compartir compra');
+    shareMsg(a === 'join' ? 'No encuentro esa lista. Revisa el código o pide que te lo vuelvan a pasar.' : 'No se pudo hacer. Comprueba la conexión y vuelve a intentarlo.');
+  }
 });
 
 // ---------- Tarjeta de nota (en Notas y en los proyectos) ----------
@@ -4800,7 +4966,7 @@ function renderMain() {
   const byCat = x => catFilter === null || (x.cat || '') === catFilter;
   document.querySelectorAll('#tabs button').forEach(b => {
     const v = b.dataset.view; b.setAttribute('aria-selected', !query && v === view);
-    const badge = b.querySelector('.badge'), n = v === 'hoy' ? tasks.filter(x => inView(x, 'hoy')).length : 0;
+    const badge = b.querySelector('.badge'), n = v === 'hoy' && view !== 'hoy' ? tasks.filter(x => inView(x, 'hoy')).length : 0;
     badge.hidden = !n; badge.textContent = n;
   });
   const hasOrphans = tasks.some(t => !cats.some(c => c.id === t.cat));
@@ -4844,7 +5010,8 @@ function renderMain() {
     const list = tasks.filter(x => byCat(x) && inView(x, v) && v !== 'hechas').sort(sortTasks);
     const done = tasks.filter(x => byCat(x) && doneInView(x, v)).sort((a, b) => (b.doneAt || 0) - (a.doneAt || 0));
     count = list.length; doneCount = v === 'proximas' ? 0 : done.length;
-    if (v === 'hechas') html += `<button class="hableft" data-act="monthsum"><span>📅</span><span><b>Resumen del mes</b><small>Puntos, tiempo, hábitos, libros… y como imagen</small></span><span class="go">›</span></button>` + progresoHTML();
+    if (v === 'hechas' && !hasProgress()) html += `<div class="empty"><strong>Aquí verás tu progreso</strong><span>Cuando completes tareas y hábitos aparecerán tus semanas, tus meses y tus rachas. Mientras, puedes ponerte metas para el año.</span></div><div class="pcard">${goalsHTML()}</div>`;
+    else if (v === 'hechas') html += `<button class="hableft" data-act="monthsum"><span>📅</span><span><b>Resumen del mes</b><small>Puntos, tiempo, hábitos, libros… y como imagen</small></span><span class="go">›</span></button>` + progresoHTML();
     if (v !== 'hechas') {
       if (!list.length) { const [h, p] = EMPTY[v]; html += `<div class="empty"><strong>${h}</strong><span>${p}</span></div>`; }
       else html += v === 'sinfecha' || v === 'someday' ? `<ul class="list">${listItemsHTML(list)}</ul>` : groupedHTML(list);
@@ -4868,7 +5035,7 @@ function renderMain() {
   if (!tipSeen && count && view !== 'habitos' && view !== 'notas') { const f = Number(lsGet('tip-first')) || 0; if (!f) lsSet('tip-first', String(Date.now())); else if (Date.now() - f > 864e5) { lsSet('tip-swipe', '1'); tipSeen = true; } }
   $('#tip').hidden = tipSeen || !count || view === 'habitos' || view === 'notas';
   if (!clearArmed) $('#clearDone').textContent = 'Borrar las hechas';
-  checkAchievements(); publishSummary(); autoGcal();
+  checkAchievements(); publishSummary(); autoGcal(); applySalud();
 }
 $('#showDoneBtn').addEventListener('click', () => { showDone = !showDone; render(); });
 // Las horas del registro de sueño se ven en el botón al elegirlas
@@ -4960,6 +5127,7 @@ $('#list').addEventListener('click', e => {
   else if (act === 'trange') { timeRange = el.dataset.v; render(); }
   else if (act === 'hcount') { const h = habits.find(x => x.id === id); if (h) setCount(id, countOf(h) + Number(el.dataset.d)); }
   else if (act === 'shopfrom') { renderShopFrom(); openSheet('#shopFromSheet'); }
+  else if (act === 'shopshare') { leaveArmed = null; renderShare(); openSheet('#shareSheet'); }
   else if (act === 'journal') openJournal(el.dataset.d || todayISO());
 });
 function searchTag(tag) {

@@ -208,6 +208,13 @@
   .inp.title { font-size: 18px; font-weight: 700; }
   textarea.inp { resize: none; min-height: 70px; }
   .detected { display: flex; gap: 6px; flex-wrap: wrap; margin-top: -6px; }
+  #taskSheet.qmode #formFull, #taskSheet:not(.qmode) #quickRow { display: none; }
+  #quickRow { flex-wrap: wrap; overflow: visible; }
+  #quickRow .chip { flex-shrink: 0; }
+  #quickRow .more { color: var(--accent); }
+  .detected span.soft { background: var(--sunken); color: var(--muted); }
+  .flagmark { margin-right: 4px; }
+  .xlist.flagged { margin-bottom: 8px; }
   .detected span { font-size: 13px; background: var(--accent-soft); color: var(--accent); border-radius: 8px; padding: 3px 8px; font-weight: 700; }
   .days { display: grid; grid-template-columns: repeat(7, 1fr); gap: 6px; }
   .days .chip { justify-content: center; padding: 8px 0; }
@@ -1154,6 +1161,8 @@
     <div class="chips" id="tplChips" hidden></div>
     <input class="inp title" type="text" id="title" placeholder="p. ej. mañana a las 8 correr #entreno" aria-label="Tarea" enterkeyhint="done">
     <div class="detected" id="detected" hidden></div>
+    <div class="chips quickrow" id="quickRow"><button type="button" class="chip" data-q="hoy">Hoy</button><button type="button" class="chip" data-q="manana">Mañana</button><button type="button" class="chip" data-q="none">Sin fecha</button><button type="button" class="chip flagchip" data-q="flag" aria-label="Con bandera">🚩</button><button type="button" class="chip more" data-q="more">Más detalles…</button></div>
+    <div id="formFull">
     <div class="field"><span class="label">Categoría</span><div class="chips" id="catChips"></div>
       <div class="chips"><button type="button" class="chip flagchip" id="flagBtn" aria-pressed="false">🚩 Con bandera</button></div></div>
     <label class="field" id="bornField" hidden><span class="label">Año de nacimiento (para saber cuántos cumple)</span><input class="inp" type="number" id="born" inputmode="numeric" min="1900" max="2100" placeholder="p. ej. 1996"></label>
@@ -1230,6 +1239,7 @@
         <label class="field"><span class="label">Nombre de cada parte</span><input class="inp" type="text" id="splitName" placeholder="p. ej. Tema"></label>
         <button type="button" class="btn primary" id="splitGo">Crear partes</button>
       </details>
+    </div>
     </div>
     <button class="btn primary block" type="submit" id="submitBtn">Añadir</button>
     <div class="field" id="calRow" hidden>
@@ -1410,7 +1420,7 @@
     <span class="label" style="margin-top:6px">Conectado con</span>
     <div class="menu">
       <button type="button" id="openGcal" data-cloud><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="5" width="18" height="16" rx="3"/><path d="M3 10h18M8 3v4M16 3v4M9 15l2 2 4-4"/></svg>Google Calendar<span class="go">›</span></button>
-      <button type="button" id="openSiri" data-cloud><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5 11a7 7 0 0 0 14 0M12 18v3"/></svg>Siri y Atajos<span class="go">›</span></button>
+      <button type="button" id="openSiri" data-cloud><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5 11a7 7 0 0 0 14 0M12 18v3"/></svg>Siri, Atajos y Salud<span class="go">›</span></button>
     </div>
   </div>
 </div>
@@ -1569,8 +1579,8 @@
       <div><span>☀️</span><p><b>Hoy</b> es tu día en una línea de horas. Toca el círculo para completar algo y la tarea para ver sus detalles.</p></div>
       <div><span>🔥</span><p><b>Hábitos</b> para cumplir, para dejar, tu sueño y tus rutinas, con rachas.</p></div>
       <div><span>📋</span><p><b>Listas</b> (sin fecha, con bandera 🚩, la compra y tus proyectos) y <b>Notas</b> con casillas, fotos y dibujos. Mantén pulsada una tarea para ver más opciones.</p></div>
-      <div><span>⭐</span><p>Cada cosa que haces da <b>puntos</b>: subes de nivel y puedes canjearlos por premios.</p></div>
-      <div><span>⚙️</span><p>En <b>⋯ → Personalizar → Secciones</b> puedes apagar lo que no uses.</p></div>
+      <div><span>⭐</span><p>Cada cosa que haces da <b>puntos</b> y en <b>Progreso</b> ves tus semanas y tus rachas.</p></div>
+      <div><span>⚙️</span><p>¿Te motiva jugar? En <b>⋯ → Personalizar → Qué se ve</b> enciendes niveles, logros, premios y el jardín. Y apagas lo que no uses.</p></div>
     </div>
     <button class="btn primary block" type="button" id="welcomeDone">Empezar</button>
   </div>
@@ -1631,7 +1641,7 @@
 <div class="sheet" id="siriSheet" hidden>
   <div class="grab"></div>
   <div class="inner">
-    <div class="sheet-head"><h3>Siri y Atajos</h3><button type="button" class="btn ghost" data-back="#accountSheet">Atrás</button></div>
+    <div class="sheet-head"><h3>Siri, Atajos y Salud</h3><button type="button" class="btn ghost" data-back="#accountSheet">Atrás</button></div>
     <p class="hint">Di <b>“Oye Siri, añade tarea”</b>, dicta lo que sea (“mañana a las 8 correr #entreno”) y se guarda sin abrir la app. Se configura una sola vez en la app Atajos del iPhone.</p>
     <div id="siriOff">
       <button class="btn primary block" type="button" id="siriOn">Activar Siri</button>
@@ -1659,9 +1669,32 @@
       </ol>
       <div class="copyrow"><span class="label">Texto 3 · URL del resumen</span><div class="code" id="siriReadUrl"></div><button class="btn small" type="button" data-copy="siriReadUrl">Copiar URL</button></div>
       <p class="hint">Si cambias <b>hoy</b> por <b>manana</b> en el paso 3, te lee lo de mañana.</p>
-      <p class="hint">Estos textos llevan tu clave de Siri: con ella se pueden <b>añadir</b> tareas y <b>oír el resumen del día</b>, pero no ver ni cambiar nada más. Si la pierdes o la compartes sin querer, cámbiala aquí y actualiza los atajos.</p>
+      <h4>Atajo 3 · Pasos y sueño desde Salud</h4>
+      <p class="hint">Manda a la app tus pasos y a qué hora te acostaste y te levantaste (del iPhone o de cualquier reloj que guarde en Salud). Con eso se marcan solos tus hábitos de pasos y la rutina de sueño, y en Progreso ves tus pasos de la semana.</p>
+      <ol class="steps">
+        <li>En Atajos, crea un atajo llamado <b>Salud a Mis Tareas</b>.</li>
+        <li><b>Pasos:</b> añade <b>Buscar muestras de salud</b> (Tipo: Pasos · Fecha de inicio: es hoy), luego <b>Calcular estadísticas</b> (Suma) y <b>Redondear número</b>.</li>
+        <li><b>Sueño:</b> añade otra <b>Buscar muestras de salud</b> (Tipo: Análisis del sueño · Fecha de fin: es hoy · Ordenar por fecha de inicio, de la más antigua). Con <b>Obtener elemento de la lista</b> coge el <b>primero</b> y con <b>Obtener detalles de muestras de salud</b> su <b>Fecha de inicio</b>; <b>Formatear fecha</b> con el formato personalizado <b>HH:mm</b>. Haz lo mismo con el <b>último</b> elemento y su <b>Fecha de fin</b>.</li>
+        <li><b>Fecha:</b> añade <b>Fecha actual</b> y <b>Formatear fecha</b> con el formato personalizado <b>yyyy-MM-dd</b>.</li>
+        <li>Añade <b>Texto</b>, pega el <b>texto 5</b> y cambia <b>PASOS</b>, <b>ACOSTARSE</b> y <b>LEVANTARSE</b> por sus resultados.</li>
+        <li>Añade <b>Obtener contenido de URL</b>: pega el <b>texto 4</b> y cambia <b>FECHA</b> por la fecha formateada. Método <b>PATCH</b>, encabezado <b>Content-Type</b> = <b>application/json</b>, cuerpo <b>Archivo</b> → <b>Texto</b>.</li>
+        <li>En la pestaña <b>Automatización</b>, crea dos de <b>Hora del día</b> (por ejemplo a las 10:00 y a las 22:00, cada día, <b>Ejecutar inmediatamente</b>) que ejecuten este atajo.</li>
+      </ol>
+      <div class="copyrow"><span class="label">Texto 4 · URL de Salud</span><div class="code" id="saludUrl"></div><button class="btn small" type="button" data-copy="saludUrl">Copiar URL</button></div>
+      <div class="copyrow"><span class="label">Texto 5 · Cuerpo de Salud</span><div class="code" id="saludBody"></div><button class="btn small" type="button" data-copy="saludBody">Copiar texto</button></div>
+      <p class="hint">Si una siesta te despista la hora de levantarte, la cambias en Progreso → Rutina de sueño con el lápiz.</p>
+      <p class="hint">Estos textos llevan tu clave de Siri: con ella se pueden <b>añadir</b> tareas, <b>mandar</b> tus pasos y tu sueño y <b>oír el resumen del día</b>, pero no ver ni cambiar nada más. Si la pierdes o la compartes sin querer, cámbiala aquí y actualiza los atajos.</p>
       <button class="btn danger" type="button" id="siriRotate">Cambiar clave</button>
     </div>
+  </div>
+</div>
+
+<!-- Hoja: compartir la compra -->
+<div class="sheet" id="shareSheet" hidden>
+  <div class="grab"></div>
+  <div class="inner">
+    <div class="sheet-head"><h3>Compartir la compra</h3><button type="button" class="btn ghost" data-close>Cerrar</button></div>
+    <div id="shareBody" style="display:grid;gap:12px"></div>
   </div>
 </div>
 

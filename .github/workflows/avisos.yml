@@ -1,5 +1,7 @@
-# Cada 5 minutos mira qué avisos tocan y los manda a los móviles que los tienen activados.
-# GitHub puede retrasar unos minutos estas ejecuciones; por eso los avisos se mandan aunque lleguen algo tarde.
+# Mira qué avisos tocan y los manda a los móviles que los tienen activados.
+# Lo lanza cada 5 minutos el despertador de Cloudflare (tools/despertador), porque el cron de GitHub
+# a veces tarda horas. El cron de aquí abajo queda de reserva por si el despertador fallara.
+# Si dos ejecuciones coinciden, la segunda no repite avisos: lo enviado se apunta en pushlog.
 name: Avisos
 
 on:

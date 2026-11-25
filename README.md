@@ -38,6 +38,16 @@ Los avisos los manda GitHub cada 5 minutos (`.github/workflows/avisos.yml` y `to
 1. `FIREBASE_SERVICE_ACCOUNT`: en la consola de Firebase → ⚙️ Configuración del proyecto → Cuentas de servicio → “Generar nueva clave privada”. Pega el contenido entero del archivo .json que se descarga (y después borra ese archivo).
 2. `VAPID_PRIVATE_KEY`: el texto de `claves-privadas/VAPID_PRIVATE_KEY.txt` (esa carpeta no se sube a GitHub). La clave pública ya está en `config.js`.
 
+### Que lleguen a su hora (despertador en Cloudflare)
+
+GitHub no cumple el “cada 5 minutos”: a veces pasa horas sin ejecutar el workflow. Por eso un Worker de Cloudflare (`tools/despertador/`) le pide a GitHub cada 5 minutos que lo ejecute ya. Se configura una vez:
+
+1. En GitHub → tu foto → Settings → Developer settings → Personal access tokens → **Fine-grained tokens** → Generate new token. Repositorio: solo `mis-tareas`. Permiso: **Actions: Read and write**. Copia el token.
+2. En la carpeta `tools/despertador`: `npx wrangler deploy` y después `npx wrangler secret put GITHUB_TOKEN` (pega el token).
+3. Comprueba en la pestaña Actions de GitHub que “Avisos” se ejecuta cada 5 minutos.
+
+El cron de GitHub sigue de reserva; si coinciden dos ejecuciones no se repiten avisos.
+
 Luego, en el iPhone, abre la app desde su icono de la pantalla de inicio → ⋯ → Avisos → Activar. GitHub pausa las tareas programadas si el repositorio pasa 60 días sin cambios; si dejan de llegar, en la pestaña Actions → Avisos → “Enable workflow”.
 
 ## Funciones
@@ -77,6 +87,9 @@ Luego, en el iPhone, abre la app desde su icono de la pantalla de inicio → ⋯
 - **Enlaces**: una tarea o una nota se puede enlazar con notas, tareas, proyectos, libros o películas; en cada cosa se ve también lo que la enlaza.
 - **Organizar mi día**: en Hoy, ✨ Organizar coloca lo que no tiene hora en tus huecos libres (primero lo que lleva 🚩 y lo atrasado), sin pisar lo que ya tiene hora ni las rutinas. Si ya es tarde, organiza mañana desde que te levantas. Lo que no cabe puede pasar al día siguiente.
 - **Cerrar el día**: por la noche (o con 🌙 en Hoy): lo que has hecho, lo que queda (hecha, mañana, otro día o sin fecha), los hábitos que faltan, el ánimo y el diario.
+- **Pasos y sueño desde Salud**: un atajo de Atajos (⋯ → Cuenta → Siri, Atajos y Salud) manda cada día tus pasos y a qué hora te acostaste y te levantaste. Se marcan solos los hábitos de pasos y la rutina de sueño, y en Progreso salen tus pasos de la semana.
+- **Compra compartida**: en Listas → Compra → 👥 Compartir. Quien abra el enlace con su cuenta ve y marca la misma lista al momento.
+- **Para empezar**: al añadir una tarea sale solo la línea de texto (con Hoy, Mañana, Sin fecha y 🚩); “Más detalles…” abre el resto con lo escrito ya colocado. Niveles, logros, premios y jardín empiezan apagados (⋯ → Personalizar → Qué se ve).
 - **Papelera**: ⋯ → Borrado recientemente. Las tareas, notas, proyectos y hábitos borrados se guardan 30 días.
 - **Hábitos que se cuentan**: “Cuántos al día” (8 vasos, 10.000 pasos…) con + y −, o escribiendo el número; se cumple al llegar.
 - **Metas del año**: en Progreso. A mano (con + y −) o automáticas: libros leídos, películas vistas, días de un hábito, tareas con una etiqueta o proyectos terminados. La rayita marca dónde deberías ir.
