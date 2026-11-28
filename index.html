@@ -245,8 +245,8 @@
   .swatch { width: 34px; height: 34px; border-radius: 50%; border: 3px solid var(--surface); box-shadow: 0 0 0 1px var(--border); }
   .catrow .inp { min-height: 42px; padding: 9px 10px; }
   .catrow .x.confirm { width: auto; padding: 0 8px; color: var(--danger); font-weight: 700; font-size: 13px; }
-  ol.steps { margin: 0; padding-left: 22px; display: grid; gap: 8px; color: var(--text); font-size: 15px; }
-  ol.steps b { font-weight: 700; }
+  ol.steps, ul.steps { margin: 0; padding-left: 22px; display: grid; gap: 8px; color: var(--text); font-size: 15px; }
+  ol.steps b, ul.steps b { font-weight: 700; }
   .code { font: 13px/1.4 ui-monospace, Menlo, monospace; background: var(--sunken); border-radius: 10px; padding: 10px; word-break: break-all; -webkit-user-select: all; user-select: all; }
   .copyrow { display: grid; gap: 6px; }
 
@@ -1642,7 +1642,7 @@
   <div class="grab"></div>
   <div class="inner">
     <div class="sheet-head"><h3>Siri, Atajos y Salud</h3><button type="button" class="btn ghost" data-back="#accountSheet">Atrás</button></div>
-    <p class="hint">Di <b>“Oye Siri, añade tarea”</b>, dicta lo que sea (“mañana a las 8 correr #entreno”) y se guarda sin abrir la app. Se configura una sola vez en la app Atajos del iPhone.</p>
+    <p class="hint">Di <b>“Oye Siri, añade tarea”</b>, dicta lo que sea (“mañana a las 8 correr #entreno”) y se guarda sin abrir la app. Se configura una sola vez en la app Atajos del iPhone. Más abajo: añadir desde Compartir, widget y botones, y Salud.</p>
     <div id="siriOff">
       <button class="btn primary block" type="button" id="siriOn">Activar Siri</button>
     </div>
@@ -1669,19 +1669,35 @@
       </ol>
       <div class="copyrow"><span class="label">Texto 3 · URL del resumen</span><div class="code" id="siriReadUrl"></div><button class="btn small" type="button" data-copy="siriReadUrl">Copiar URL</button></div>
       <p class="hint">Si cambias <b>hoy</b> por <b>manana</b> en el paso 3, te lee lo de mañana.</p>
-      <h4>Atajo 3 · Pasos y sueño desde Salud</h4>
+      <h4>Atajo 3 · Añadir desde el botón Compartir</h4>
+      <p class="hint">Desde Safari, Mail, WhatsApp… pulsas <b>Compartir → Añadir a Mis Tareas</b>, escribes qué hay que hacer (“mañana leer esto”) y se guarda con el enlace en sus notas.</p>
+      <ol class="steps">
+        <li>En Atajos, crea un atajo llamado <b>Añadir a Mis Tareas</b>. Toca <b>ⓘ</b> y activa <b>Mostrar en hoja de compartir</b> (tipos: URL, Texto y Páginas de Safari).</li>
+        <li>Añade <b>Solicitar entrada</b> (Texto) con la pregunta “¿Qué hay que hacer?”.</li>
+        <li>Añade <b>Texto</b>, pega el <b>texto 4</b> y cambia <b>QUE</b> por <b>Entrada proporcionada</b> y <b>ENLACE</b> por <b>Entrada del atajo</b>.</li>
+        <li>Añade <b>Obtener contenido de URL</b> igual que en el atajo 1: el <b>texto 1</b>, método <b>POST</b>, encabezado <b>Content-Type</b> = <b>application/json</b>, cuerpo <b>Archivo</b> → <b>Texto</b>.</li>
+        <li>(Opcional) <b>Mostrar notificación</b> con “Añadida”.</li>
+      </ol>
+      <div class="copyrow"><span class="label">Texto 4 · Cuerpo para Compartir</span><div class="code" id="siriShareBody"></div><button class="btn small" type="button" data-copy="siriShareBody">Copiar texto</button></div>
+      <h4>Sin abrir la app: widget y botones</h4>
+      <ul class="steps">
+        <li><b>Widget en la pantalla de inicio:</b> mantén pulsada la pantalla → <b>Editar</b> → <b>Añadir widget</b> → <b>Atajos</b>, y elige <b>Añade tarea</b> y <b>Qué tengo hoy</b>. Un toque y te pregunta la tarea o te lee el día.</li>
+        <li><b>Centro de control o pantalla bloqueada:</b> <b>Editar</b> → <b>Añadir un control</b> → <b>Atajos</b> → <b>Añade tarea</b>.</li>
+        <li><b>Botón de Acción</b> (iPhone 15 Pro y posteriores): Ajustes → Botón de Acción → <b>Atajo</b> → <b>Añade tarea</b>.</li>
+      </ul>
+      <h4>Atajo 4 · Pasos y sueño desde Salud</h4>
       <p class="hint">Manda a la app tus pasos y a qué hora te acostaste y te levantaste (del iPhone o de cualquier reloj que guarde en Salud). Con eso se marcan solos tus hábitos de pasos y la rutina de sueño, y en Progreso ves tus pasos de la semana.</p>
       <ol class="steps">
         <li>En Atajos, crea un atajo llamado <b>Salud a Mis Tareas</b>.</li>
         <li><b>Pasos:</b> añade <b>Buscar muestras de salud</b> (Tipo: Pasos · Fecha de inicio: es hoy), luego <b>Calcular estadísticas</b> (Suma) y <b>Redondear número</b>.</li>
         <li><b>Sueño:</b> añade otra <b>Buscar muestras de salud</b> (Tipo: Análisis del sueño · Fecha de fin: es hoy · Ordenar por fecha de inicio, de la más antigua). Con <b>Obtener elemento de la lista</b> coge el <b>primero</b> y con <b>Obtener detalles de muestras de salud</b> su <b>Fecha de inicio</b>; <b>Formatear fecha</b> con el formato personalizado <b>HH:mm</b>. Haz lo mismo con el <b>último</b> elemento y su <b>Fecha de fin</b>.</li>
         <li><b>Fecha:</b> añade <b>Fecha actual</b> y <b>Formatear fecha</b> con el formato personalizado <b>yyyy-MM-dd</b>.</li>
-        <li>Añade <b>Texto</b>, pega el <b>texto 5</b> y cambia <b>PASOS</b>, <b>ACOSTARSE</b> y <b>LEVANTARSE</b> por sus resultados.</li>
-        <li>Añade <b>Obtener contenido de URL</b>: pega el <b>texto 4</b> y cambia <b>FECHA</b> por la fecha formateada. Método <b>PATCH</b>, encabezado <b>Content-Type</b> = <b>application/json</b>, cuerpo <b>Archivo</b> → <b>Texto</b>.</li>
+        <li>Añade <b>Texto</b>, pega el <b>texto 6</b> y cambia <b>PASOS</b>, <b>ACOSTARSE</b> y <b>LEVANTARSE</b> por sus resultados.</li>
+        <li>Añade <b>Obtener contenido de URL</b>: pega el <b>texto 5</b> y cambia <b>FECHA</b> por la fecha formateada. Método <b>PATCH</b>, encabezado <b>Content-Type</b> = <b>application/json</b>, cuerpo <b>Archivo</b> → <b>Texto</b>.</li>
         <li>En la pestaña <b>Automatización</b>, crea dos de <b>Hora del día</b> (por ejemplo a las 10:00 y a las 22:00, cada día, <b>Ejecutar inmediatamente</b>) que ejecuten este atajo.</li>
       </ol>
-      <div class="copyrow"><span class="label">Texto 4 · URL de Salud</span><div class="code" id="saludUrl"></div><button class="btn small" type="button" data-copy="saludUrl">Copiar URL</button></div>
-      <div class="copyrow"><span class="label">Texto 5 · Cuerpo de Salud</span><div class="code" id="saludBody"></div><button class="btn small" type="button" data-copy="saludBody">Copiar texto</button></div>
+      <div class="copyrow"><span class="label">Texto 5 · URL de Salud</span><div class="code" id="saludUrl"></div><button class="btn small" type="button" data-copy="saludUrl">Copiar URL</button></div>
+      <div class="copyrow"><span class="label">Texto 6 · Cuerpo de Salud</span><div class="code" id="saludBody"></div><button class="btn small" type="button" data-copy="saludBody">Copiar texto</button></div>
       <p class="hint">Si una siesta te despista la hora de levantarte, la cambias en Progreso → Rutina de sueño con el lápiz.</p>
       <p class="hint">Estos textos llevan tu clave de Siri: con ella se pueden <b>añadir</b> tareas, <b>mandar</b> tus pasos y tu sueño y <b>oír el resumen del día</b>, pero no ver ni cambiar nada más. Si la pierdes o la compartes sin querer, cámbiala aquí y actualiza los atajos.</p>
       <button class="btn danger" type="button" id="siriRotate">Cambiar clave</button>

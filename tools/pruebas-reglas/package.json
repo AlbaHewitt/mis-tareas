@@ -1,0 +1,8 @@
+{
+  "name": "mis-tareas-pruebas-reglas",
+  "private": true,
+  "type": "module",
+  "description": "Prueba firestore.rules en el emulador de Firebase (necesita Java). Desde la raíz: npm run test:reglas",
+  "scripts": { "test": "firebase emulators:exec --only firestore --project demo-tareas 'node reglas.test.mjs'" },
+  "devDependencies": { "@firebase/rules-unit-testing": "4.0.1", "firebase": "11.10.0", "firebase-tools": "13.35.1" }
+}

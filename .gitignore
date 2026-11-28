@@ -6,3 +6,9 @@ mis-tareas-*.json
 # Claves privadas (nunca se suben)
 claves-privadas/
 tools/avisos/node_modules/
+node_modules/
+test-results/
+playwright-report/
+.wrangler/
+tools/pruebas-reglas/node_modules/
+*.log

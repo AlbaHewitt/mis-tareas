@@ -10,8 +10,10 @@ service cloud.firestore {
       allow create, update: if owner(userId)
         && (!('title' in request.resource.data) || (request.resource.data.title is string && request.resource.data.title.size() <= 300));
       // Siri (Atajos) puede AÑADIR tareas sin iniciar sesión si trae la clave personal correcta.
+      // Desde "Compartir" puede traer también una nota (p. ej. el enlace de la página).
       allow create: if request.auth == null
-        && request.resource.data.keys().hasOnly(['title', 'siriKey'])
+        && request.resource.data.keys().hasOnly(['title', 'siriKey', 'notes'])
+        && (!('notes' in request.resource.data) || (request.resource.data.notes is string && request.resource.data.notes.size() <= 2000))
         && request.resource.data.title is string
         && request.resource.data.title.size() > 0
         && request.resource.data.title.size() < 500

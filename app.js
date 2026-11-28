@@ -2,7 +2,7 @@ import { firebaseConfig } from './config.js';
 import { parseQuick, fold } from './parse.js';
 import { toICS, googleURL } from './cal.js';
 import { parseICS, parseCSV, rowsToTasks, linesToTitles, toCSV } from './io.js';
-import { DAY_ORDER, DAY_LETTER, MONTHS_SHORT, normTag, pad, isoDate, todayISO, parseISO, addDays, dim, mondayOf, toMin, uid, esc, cap, monthDate, stepDate, nextDate, alignStart, friendlyDate, longDate, repeatLabel, durationMin, autoPoints, taskPoints, isLate, habitPoints, habitOK, weekCount, PERIODIC, periodStart, periodCount, prevPeriod, applies, WD_NAME, habitStreak, habitBest, wakeTarget, bedMin, fmtDur, judgeSleep, nowHM, LEVEL_NAMES, levelStart, levelOf, isoWeek, SHOP_SECS, shopSection, shopKey } from './logic.js';
+import { DAY_ORDER, DAY_LETTER, MONTHS_SHORT, normTag, pad, isoDate, todayISO, parseISO, addDays, dim, mondayOf, toMin, uid, esc, cap, monthDate, stepDate, nextDate, alignStart, friendlyDate, longDate, repeatLabel, durationMin, autoPoints, taskPoints, isLate, habitPoints, habitOK, PERIODIC, periodStart, periodCount, prevPeriod, applies, habitStreak, habitBest, wakeTarget, fmtDur, judgeSleep, nowHM, LEVEL_NAMES, levelStart, levelOf, isoWeek, SHOP_SECS, shopSection, shopKey } from './logic.js';
 
 const FB = 'https://www.gstatic.com/firebasejs/10.12.2/';
 const COLORS = ['violeta', 'naranja', 'verde', 'azul', 'gris', 'rosa', 'rojo', 'amarillo', 'turquesa', 'marron'];
@@ -40,11 +40,9 @@ const SECTIONS = [
 const on = id => !(extra.prefs?.off || []).includes(id);
 // Lo de juego empieza apagado en las cuentas nuevas (se enciende en ⋯ → Personalizar → Qué se ve)
 const GAME_OFF = ['jardin', 'recompensas', 'logros'];
-let dayOffset = 0, monthOffset = 0, calSel = null, sinfechaMode = 'sinfecha', activeFilter = null;
+let monthOffset = 0, calSel = null, sinfechaMode = 'sinfecha', activeFilter = null;
 let loaded = false;
 let view = 'hoy';
-let agendaMode = 'semana';
-let weekOffset = 0;
 let catFilter = null;
 let query = '';
 let showDone = false;
@@ -54,7 +52,7 @@ let selectedDay = null;
 let formFlag = false, formCd = false;
 let editingId = null, formCat = 'personal', formDays = [], formParts = [], formNoDate = false, splitDays = [1, 2, 3, 4, 5], formSomeday = false, formTonight = false;
 
-document.documentElement.dataset.v = '33';
+document.documentElement.dataset.v = '34';
 // ---------- Registro de errores (se ve en ⋯ → Ayuda) ----------
 const EKEY = 'mis-tareas-errores';
 function logError(msg, where) {
@@ -398,7 +396,7 @@ function adoptSiriTasks() {
     adopting.add(t.id);
     const p = parseQuick(t.title, cats);
     const full = { id: t.id, title: p.title, cat: p.cat || guessCat(p.title) || (cats[0]?.id ?? ''), flag: !!p.prio, date: p.date ?? todayISO(), time: p.time || '', endTime: p.endTime || '',
-      prio: p.prio || 'normal', repeat: p.repeat || '', days: p.days || [], every: p.every || 1, nth: p.nth || null, nthDay: p.nthDay ?? null, notes: '', done: false, created: Date.now() };
+      prio: p.prio || 'normal', repeat: p.repeat || '', days: p.days || [], every: p.every || 1, nth: p.nth || null, nthDay: p.nthDay ?? null, notes: typeof t.notes === 'string' ? t.notes.slice(0, 2000) : '', done: false, created: Date.now() };
     alignStart(full);
     Object.keys(t).forEach(k => delete t[k]); Object.assign(t, full);
     store.put(full).catch(writeFailed);
@@ -639,6 +637,7 @@ function renderSiri() {
   publishSummary();
   $('#siriUrl').textContent = `https://firestore.googleapis.com/v1/projects/${firebaseConfig.projectId}/databases/(default)/documents/users/${store.uid}/tasks?key=${firebaseConfig.apiKey}`;
   $('#siriBody').textContent = `{"fields":{"title":{"stringValue":"DICTADO"},"siriKey":{"stringValue":"${siriKey}"}}}`;
+  $('#siriShareBody').textContent = `{"fields":{"title":{"stringValue":"QUE"},"notes":{"stringValue":"ENLACE"},"siriKey":{"stringValue":"${siriKey}"}}}`;
   $('#saludUrl').textContent = `https://firestore.googleapis.com/v1/projects/${firebaseConfig.projectId}/databases/(default)/documents/users/${store.uid}/salud/FECHA?key=${firebaseConfig.apiKey}`;
   $('#saludBody').textContent = `{"fields":{"pasos":{"stringValue":"PASOS"},"acostarse":{"stringValue":"ACOSTARSE"},"levantarse":{"stringValue":"LEVANTARSE"},"siriKey":{"stringValue":"${siriKey}"}}}`;
 }
@@ -1610,23 +1609,6 @@ function routineRowHTML(h) {
       }).join('')}</ul></details>` : '<p class="hint">Hoy no toca.</p>'}
     </div></div>`;
 }
-// --- Ahora toca: lo que está pasando según las horas, y lo siguiente ---
-function nowItems() {
-  const today = todayISO(), items = [];
-  tasks.filter(t => !t.done && t.date === today && t.time).forEach(t => {
-    const s = toMin(t.time); let e = t.endTime ? toMin(t.endTime) : s + 60; if (e <= s) e += 1440;
-    items.push({ s, e, title: t.title, sub: `${t.time}${t.endTime ? '–' + t.endTime : ''} · ${catOf(t.cat).name}`, act: `<button class="check" style="--c:${colorVar(catOf(t.cat).color)}" data-act="nowdone" data-id="${t.id}" aria-label="Hecha: ${esc(t.title)}">${TICK('var(--surface)')}</button>`, timer: t.id });
-  });
-  habits.filter(h => h.kind === 'routine' && applies(h, today)).forEach(h => {
-    const done = new Set(stepsToday(h));
-    h.steps.forEach((st, i) => {
-      if (done.has(st.id)) return;
-      const n = h.steps[i + 1], s = toMin(st.time), e = n ? toMin(n.time) : s + 30;
-      items.push({ s, e, title: st.text, sub: `${st.time}${n ? '–' + n.time : ''} · ${h.name}`, act: `<button class="check" style="--c:var(--accent)" data-act="rstep" data-id="${h.id}" data-step="${st.id}" aria-label="Hecho: ${esc(st.text)}">${TICK('var(--surface)')}</button>` });
-    });
-  });
-  return items.sort((a, b) => a.s - b.s);
-}
 // Mientras miras Hoy, se actualiza cada minuto
 setInterval(() => {
   if (view === 'hoy' && !query && !document.querySelector('.sheet.show') && $('#timer').hidden && !document.activeElement?.matches?.('input, textarea')) {
@@ -2052,7 +2034,7 @@ function moodProgHTML() {
   const fmt = v => `${MOODS[Math.round(v) - 1]} ${v.toFixed(1)}`;
   let detail = 'Toca un cuadrado para ver ese día.';
   if (moodSel) { const x = m[moodSel] || {}; detail = `${cap(parseISO(moodSel).toLocaleDateString('es-ES', { weekday: 'long', day: 'numeric', month: 'long' }))}: ${x.m ? `${MOODS[x.m - 1]} ${MOOD_TXT[x.m - 1]}` : 'sin apuntar'}${x.e ? ` · energía ${x.e}/5` : ''}${x.n ? ` · “${esc(x.n)}”` : ''}`; }
-  const sleepH = habits.find(h => h.kind === 'sleep'), p = buildProgress();
+  const sleepH = habits.find(h => h.kind === 'sleep');
   const trained = d => tasks.some(t => t.done && t.cat === 'entreno' && ((t.doneAt && isoDate(new Date(t.doneAt)) === d) || t.date === d));
   const pairs = days.length < 3 ? [] : [
     ['Durmiendo bien', sleepH ? d => sleepH.log[d] === 1 : null],
@@ -2614,22 +2596,6 @@ function ghostsIn(byCat, from, to) {
     while (n++ < 400) { d = stepDate(t, d); if (d > to || (t.until && d > t.until)) break; if (d >= from) (g[d] ||= []).push(t); }
   });
   return g;
-}
-// --- Línea del día ---
-function dayItems(byCat, d) {
-  const items = [];
-  const reals = tasks.filter(t => byCat(t) && t.date === d && (!t.done || showDone));
-  const gh = (ghostsIn(byCat, d, d)[d] || []);
-  [...reals, ...gh.map(t => ({ ...t, ghost: true }))].forEach(t => {
-    if (!t.time) return;
-    const s = toMin(t.time); let e = t.endTime ? toMin(t.endTime) : s + (Number(t.minutes) || 60); if (e <= s) e += 1440;
-    items.push({ s, e, title: t.title, color: colorVar(catOf(t.cat).color), id: t.id, done: t.done, ghost: t.ghost, act: 'edit' });
-  });
-  habits.filter(h => h.kind === 'routine' && applies(h, d)).forEach(h => {
-    const done = new Set(h.stepsDone[d] || []);
-    h.steps.forEach((st, i) => { const n = h.steps[i + 1], s = toMin(st.time); items.push({ s, e: n ? toMin(n.time) : s + 30, title: st.text, color: 'var(--accent)', id: h.id, step: st.id, done: done.has(st.id), act: d === todayISO() ? 'rstep' : 'hedit', routine: h.name }); });
-  });
-  return { items: items.sort((a, b) => a.s - b.s), untimed: reals.filter(t => !t.time) };
 }
 // --- Calendario del mes ---
 // ---------- Calendario: día, varios días, mes, año y lista (como un calendario de verdad) ----------
@@ -4212,7 +4178,7 @@ function orgStart(day) {
   return s ? Math.ceil((toMin(we ? s.wakeWe : s.wakeWk) + 30) / 15) * 15 : 8 * 60;
 }
 function buildOrg(day) {
-  const today = todayISO(), start = orgStart(day), end = bedLimit();
+  const start = orgStart(day), end = bedLimit();
   const busy = calDayItems(() => true, day).timed.map(i => [i.s, i.e]).sort((a, b) => a[0] - b[0]);
   const cands = tasks.filter(t => !t.done && !t.time && !children(t.id).length && ((t.date && t.date <= day) || orgExtra.has(t.id)))
     .sort((a, b) => (b.flag ? 1 : 0) - (a.flag ? 1 : 0) || (a.date && a.date < day ? 0 : 1) - (b.date && b.date < day ? 0 : 1) || (a.created || 0) - (b.created || 0));
@@ -5052,11 +5018,6 @@ $('#list').addEventListener('click', e => {
   else if (act === 'rdetails') openRoutineDetails(id);
   else if (act === 'hoyedit') { hoyEdit = true; $('#scroller').scrollTop = 0; render(); }
   else if (act === 'hoysave') { hoyEdit = false; $('#scroller').scrollTop = 0; render(); }
-  else if (act === 'wprev' || act === 'wnext') { weekOffset += act === 'wnext' ? 1 : -1; render(); }
-  else if (act === 'wtoday') { weekOffset = 0; render(); }
-  else if (act === 'dprev' || act === 'dnext') { dayOffset += act === 'dnext' ? 1 : -1; render(); }
-  else if (act === 'dtoday') { dayOffset = 0; render(); }
-  else if (act === 'plan') openOrg();
   else if (act === 'pmonth') { progYM = el.dataset.ym; selectedDay = null; const y = $('#scroller').scrollTop; render(); $('#scroller').scrollTop = y; }
   else if (act === 'pyear') { const ym = progYM || todayISO().slice(0, 7), y = Number(ym.slice(0, 4)) + Number(el.dataset.d), now = todayISO().slice(0, 7); progYM = `${y}-12` > now && y === Number(now.slice(0, 4)) ? now : `${y}-${y < Number(now.slice(0, 4)) ? '12' : ym.slice(5)}`; selectedDay = null; render(); }
   else if (act === 'shelf') { const k = el.dataset.k; shelf[k].open = null; shelf[k].adding = false; renderShelf(k); openSheet(SHELF[k].sheet); }
@@ -5067,7 +5028,6 @@ $('#list').addEventListener('click', e => {
   else if (act === 'mprev' || act === 'mnext') { monthOffset += act === 'mnext' ? 1 : -1; calSel = null; render(); }
   else if (act === 'calday') { calSel = el.dataset.d; const y = $('#scroller').scrollTop; render(); $('#scroller').scrollTop = y; }
   else if (act === 'someday') { const t = tasks.find(x => x.id === id); if (t) { const s = snapshot([t]); t.someday = true; t.date = ''; store.put(t).catch(writeFailed); showToast(`“${t.title}” → Algún día`, () => restore(s)); render(); } }
-  else if (act === 'amode') { agendaMode = el.dataset.m; render(); }
   else if (act === 'hok') setHabit(id, 1);
   else if (act === 'hbad') setHabit(id, -1);
   else if (act === 'hedit') openHabit(id);
@@ -5075,7 +5035,6 @@ $('#list').addEventListener('click', e => {
   else if (act === 'hseed') seedHabits();
   else if (act === 'rstep') toggleStep(id, el.dataset.step);
   else if (act === 'backup') exportBackup();
-  else if (act === 'nowdone') toggle(id);
   else if (act === 'hsleep') { const h = { id: 'h' + uid(), ...cleanHabit({ ...SLEEP_DEFAULT, order: Date.now() }) }; habits.push(h); store.putHabit(h).catch(writeFailed); render(); }
   else if (act === 'slsave') { const box = el.closest('.sleeplog'); saveSleep(id, box.querySelector('[data-sl=bed]').value, box.querySelector('[data-sl=wake]').value); }
   else if (act === 'slclear') clearSleep(id);

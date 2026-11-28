@@ -5,6 +5,11 @@
   "description": "App de tareas, hábitos y progreso (PWA con Firebase).",
   "scripts": {
     "test": "node --test tests/",
-    "check": "node --check app.js && node --check logic.js && node --check parse.js && node --check cal.js && node --check io.js && node --check sw.js"
+    "check": "node --check app.js && node --check logic.js && node --check parse.js && node --check cal.js && node --check io.js && node --check sw.js",
+    "test:pantallas": "playwright test",
+    "test:reglas": "cd tools/pruebas-reglas && npm install --no-audit --no-fund --silent && npm test"
+  },
+  "devDependencies": {
+    "@playwright/test": "1.65.1"
   }
 }

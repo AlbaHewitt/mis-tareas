@@ -11,6 +11,14 @@ App de tareas para iPhone y ordenador: eventos, entrenos, casa, estudio… Se in
 - `firestore.rules`: reglas de seguridad (cada persona solo ve sus tareas).
 - `mis-tareas-importar.json`: tus tareas de la versión anterior. No se sube a GitHub.
 
+## Pruebas
+
+- `npm test`: los cálculos (fechas, repeticiones, puntos, avisos…).
+- `npm run test:pantallas`: la app en un navegador como el del iPhone, sin cuenta: añadir, completar, Agenda, Progreso, Hábitos y Compra. La primera vez: `npm install` y `npx playwright install webkit`.
+- `npm run test:reglas`: las reglas de `firestore.rules` en el emulador de Firebase (necesita Java). Pásalas siempre antes de publicar reglas nuevas en la consola.
+
+GitHub pasa las dos primeras antes de publicar; si fallan, no se publica.
+
 ## Configurar Firebase (una vez)
 
 1. Entra en <https://console.firebase.google.com> → **Crear un proyecto** → nombre `mis-tareas` → desactiva Google Analytics → Crear.
@@ -88,6 +96,7 @@ Luego, en el iPhone, abre la app desde su icono de la pantalla de inicio → ⋯
 - **Organizar mi día**: en Hoy, ✨ Organizar coloca lo que no tiene hora en tus huecos libres (primero lo que lleva 🚩 y lo atrasado), sin pisar lo que ya tiene hora ni las rutinas. Si ya es tarde, organiza mañana desde que te levantas. Lo que no cabe puede pasar al día siguiente.
 - **Cerrar el día**: por la noche (o con 🌙 en Hoy): lo que has hecho, lo que queda (hecha, mañana, otro día o sin fecha), los hábitos que faltan, el ánimo y el diario.
 - **Pasos y sueño desde Salud**: un atajo de Atajos (⋯ → Cuenta → Siri, Atajos y Salud) manda cada día tus pasos y a qué hora te acostaste y te levantaste. Se marcan solos los hábitos de pasos y la rutina de sueño, y en Progreso salen tus pasos de la semana.
+- **Sin abrir la app**: atajo para añadir desde el botón Compartir (con el enlace en las notas), y widget, Centro de control y botón de Acción con los atajos de Siri. Las instrucciones están en ⋯ → Cuenta → Siri, Atajos y Salud.
 - **Compra compartida**: en Listas → Compra → 👥 Compartir. Quien abra el enlace con su cuenta ve y marca la misma lista al momento.
 - **Para empezar**: al añadir una tarea sale solo la línea de texto (con Hoy, Mañana, Sin fecha y 🚩); “Más detalles…” abre el resto con lo escrito ya colocado. Niveles, logros, premios y jardín empiezan apagados (⋯ → Personalizar → Qué se ve).
 - **Papelera**: ⋯ → Borrado recientemente. Las tareas, notas, proyectos y hábitos borrados se guardan 30 días.

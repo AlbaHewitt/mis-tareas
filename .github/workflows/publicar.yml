@@ -26,6 +26,10 @@ jobs:
           node-version: 20
       - run: npm run check
       - run: npm test
+      # Pruebas de pantallas: la app en un navegador como el del iPhone (WebKit)
+      - run: npm ci --no-audit --no-fund
+      - run: npx playwright install --with-deps webkit
+      - run: npm run test:pantallas
 
   publicar:
     needs: pruebas
